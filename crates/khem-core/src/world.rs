@@ -5,7 +5,7 @@
 //! BondId - no per-atom heap allocation, no pointers, cache-friendly,
 //! partitionable by region for V2/V3 scaling.
 //!
-//! Spec: docs/specs/05-runtime-spec.md, section 4 (core data
+//! Spec: docs/specs/runtime-spec.md, section 4 (core data
 //! structures).
 
 // Phase 1 implementation lands here.

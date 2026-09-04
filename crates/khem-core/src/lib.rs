@@ -6,7 +6,7 @@
 //! parsing arrive in phase 3 as the khem-lang crate. The crate
 //! boundary enforces runtime guarantee G01: no concept above the
 //! atom/bond level exists in the engine (see ARCHITECTURE.md and
-//! docs/specs/05-runtime-spec.md).
+//! docs/specs/runtime-spec.md).
 //!
 //! Module decomposition follows the runtime spec's systems. Phase 1
 //! work (PLAN.md, K1-K5 gates) lands in these modules.

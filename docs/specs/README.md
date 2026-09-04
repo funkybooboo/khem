@@ -1,77 +1,65 @@
-# khem spec drafts - provenance, status, and naming decisions
+# khem specifications
 
-Everything in this directory is extracted verbatim (then normalized to
-ASCII) from initial-idea.md, the founding conversation. These are
-historical drafts, not the canonical spec. The canonical spec gets
-rewritten in this directory only after phase 1 validates the substrate
-(see PLAN.md).
+This directory holds the canonical, current-state specifications:
+khem as it is defined now, not the path the founding conversation
+took to get here.
 
-## Extraction map
+- language-spec.md - the khem language: .kem files, the six
+  declarations (elements, struct, chain, body, world, run), syntax,
+  units, validation codes, reserved words
+- runtime-spec.md - the khem runtime: CLI, NDJSON event schema, core
+  data structures, tick execution, physics and chemistry systems,
+  energy and observer systems, scalability, configuration,
+  guarantees, performance targets
 
-Line numbers refer to initial-idea.md.
+The specs are drafts until validated: phase 1 (PLAN.md) tests whether
+the substrate produces living dynamics before the parser is built,
+and both documents are revised against kernel reality at that point
+(ADR-0006).
 
-| File | Source lines | What it is | Status |
-|---|---|---|---|
-| 01-bdl-language-spec.md | 3207-3744 | language spec v0.1, named BDL; extensions .elem/.mol/.org/.world/.sim | superseded by 04 + 06 |
-| 02-biosim-runtime-spec.md | 3745-4399 | runtime spec v0.1 (Rust); tick order, physics/chemistry, guarantees G01-G10 | superseded by 05 |
-| 03-naming-and-ndjson-rationale.md | 4439-4887 | naming rationale (runtime "cerne" from Latin cernere), reporting philosophy, NDJSON draft, tool ecosystem | philosophy stands; names superseded |
-| 04-weave-language-spec.md | 5008-5597 | round-2 language spec: all files .weave, declarations inside files, V-codes | superseded by 06 |
-| 05-runtime-spec.md | 5598-6407 | round-2 runtime spec: CLI, NDJSON event schema, data structures, tick order, physics/chemistry equations, V1-V3 scalability, guarantees G01-G14, performance targets | CURRENT runtime draft; apply renames from 06 and the table below |
-| 06-terminology-and-final-naming.md | 6413-7243 | final founding-conversation terminology: mol->struct, org->body, layers->region, connect->wire, sim->run; .crn extension; language named Cerne | AUTHORITATIVE deltas over 04 + 05 |
+## History and provenance
 
-## Naming decisions
+- initial-idea.md (repo root) - the founding conversation, verbatim.
+  It is a chat transcript: the end state can only be reconstructed by
+  reading it top to bottom, because names and terminology changed
+  mid-conversation.
+- docs/history/spec-drafts/ - the six verbatim spec extractions from
+  that conversation, each written in the terminology of the moment it
+  was drafted. Superseded. Do not implement from these.
+- docs/adr/ - the decisions behind everything, including the naming
+  sweep (ADR-0007).
 
-In-conversation rounds:
+## Conversation-era to canonical rename map
 
-1. Runtime "cerne" (Latin cernere, to sift/discern), language "BDL",
-   then "Weave", extensions .elem/.mol/.org/.world/.sim
-2. All files .weave, language Weave, runtime cerne
-3. Final terminology keywords; files .crn; language renamed Cerne
-   (language Cerne / files .crn / runtime cerne)
+Readers of the history drafts translate with this table:
 
-Project-level round 4 (2026-09-04): after a collision sweep, the
-language, files, and runtime were renamed khem. Reasons: "cerne" is one
-letter from CERN and invites permanent confusion; "khem" (pronounced
-"kem") is the root of the word "chemistry" per a leading etymology
-(Egyptian kemet, the fertile black land; etymology contested); it had
-the cleanest uniqueness sweep of roughly 40 candidates - crates.io
-name verified free, no direct project/company/term collisions.
-Rejected with recorded causes: cerne (CERN), ylem (three small
-projects; pronunciation ambiguity), zyme (small dormant JS repo),
-weft/veld/loam (crates.io taken; veld claimed 2026-09-03), grex
-(major Rust regex CLI, 176k downloads), sinter (Trail of Bits tool +
-crate + SinterCast AB), keld (.kld collides with FreeBSD kernel
-modules), galatea (meaning runs backwards: life by divine gift, not
-emergence), golem (crypto network; runs-amok connotation), valence
-(the Val language owns .val), chemoton/hypercycle (naming after a
-theory invites precision attacks), soup/pond (tone), LUCA (Pixar),
-petri (Petri nets), agar (agar.io), genesis/prometheus (taken),
-alloy (MIT Alloy), alembic (SQLAlchemy), substrate (generic).
+| Conversation-era | Canonical |
+|---|---|
+| BDL, BIOSIM, Weave, Cerne (language and runtime names) | khem |
+| .elem, .mol, .org, .world, .sim, .weave, .crn (extensions) | .kem for all files |
+| file wrapper: weave "0.1" | khem "0.1" |
+| mol declaration | struct |
+| org declaration | body |
+| sim declaration | run |
+| layers | regions |
+| energy_sources | sources |
+| import | use |
+| connect | wire |
+| chain_bond | link |
+| placement keyword in | inside |
+| --validate | --check |
+| event field sim_name | run_name |
+| validation codes V-MOL-xx, V-ORG-xx, V-SIM-xx | V-STRUCT-xx, V-BODY-xx, V-RUN-xx (plus new V-CHAIN-xx for chains) |
+| stdlib search paths ~/.cerne/stdlib/ and ./weave/ | ~/.khem/stdlib/ and ./khem/ |
+| sequence: [A U G C] | sequence: A U G C (bare, space-separated) |
 
-Current canonical identity:
+Gaps the canonical spec closes (the conversation left them
+dangling):
 
-    language   khem          (the way C is C)
-    files      .kem          (the way .c is .c)
-    runtime    khem          (the way rustc reads .rs)
-    tools      khem-view, khem-check, khem-log
-    usage      khem experiment_1.kem > run_001.ndjson
-
-Rename mapping when reading the drafts below (conversation-era ->
-current):
-
-    Cerne, Weave, BDL   ->  khem     (language and runtime name)
-    .crn, .weave        ->  .kem     (file extension)
-    cerne-view, cerne-check, cerne-log  ->  khem-view, khem-check, khem-log
-
-Keyword decisions from 06 are final as written (element, struct,
-chain, body, world, run; use, place, wire, port, link, inside,
-scatter, count, at, as; region, source; wrap/wall/open).
-
-## Normalization notes
-
-Extracted content is verbatim except: box-drawing characters converted
-to ASCII (+ - | =), arrows to -> and <-, degree signs to "deg",
-angstroms to "A", triple-bond glyphs to "#", superscripts to ^2/^3,
-and similar. Internal inconsistencies and later-abandoned ideas are
-preserved on purpose; these are history, not truth. initial-idea.md at
-the repo root is the unnormalized original.
+- The file wrapper keyword was never explicitly renamed after the
+  language was renamed; the canonical spec applies the rename
+  consistently (wrapper = language name = khem).
+- The final conversation round's example used inside where the
+  round-2 grammar said in; the canonical keyword is inside.
+- Obvious typos in conversation-era examples are corrected in
+  canonical examples.

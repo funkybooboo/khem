@@ -40,7 +40,7 @@ The kernel lives in the khem-core lib; the khem bin stays a thin entry
 point (see ARCHITECTURE.md). Everything is hardcoded:
 
 - element table (the 10 elements with real values, from the idea file)
-- the tick loop from the runtime spec draft (05-runtime-spec.md):
+- the tick loop from the runtime spec (docs/specs/runtime-spec.md):
   energy -> velocities -> positions -> boundary -> spatial index ->
   bond breaking -> bond formation -> observe
 - a hardcoded primordial pond + one hardcoded minimal cell
@@ -77,8 +77,7 @@ disposable; the answer to the K-gates is not.
 - save/load world state (a resumed run is identical to an uninterrupted
   one)
 - observer: molecule detection via union-find on the bond graph, watch
-  conditions, NDJSON schema per 05-runtime-spec.md with the renames
-  from 06 applied
+  conditions, NDJSON schema per docs/specs/runtime-spec.md
 - performance: meet the spec targets (10k atoms at >500 t/s on a
   laptop)
 - unit tests per system + golden-tick regression tests
@@ -86,9 +85,11 @@ disposable; the answer to the K-gates is not.
 ## Phase 3 - the khem language (only what the kernel needs)
 
 - .kem parser for the declarations: element / struct / chain / body /
-  world / run (grammar from docs/specs/, revised against Kappa lessons
-  and phase-1 reality; the drafts are drafts, not scripture)
-- validation rules (V01-V15 from the specs) become tests
+  world / run (grammar from docs/specs/language-spec.md, revised
+  against Kappa lessons and phase-1 reality; specs are drafts until
+  validated, not scripture)
+- validation rules (V-STRUCT/V-CHAIN/V-BODY/V-WORLD/V-RUN codes from
+  language-spec.md) become tests
 - stdlib of primitive .kem files: water, phosphate, ribose, bases,
   nucleotides, lipid, vesicle, rna strand, minimal cell, primordial
   pond

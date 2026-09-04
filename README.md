@@ -62,7 +62,7 @@ docs/specs/README.md.
 - Not a game. No objectives, no balancing, no scripted organisms.
 - Not a faithful chemistry or physics simulator. No quantum mechanics,
   no femtosecond molecular dynamics. The dynamics are phenomenological:
-  a physics-flavored artificial chemistry. The spec drafts in docs/specs/
+  a physics-flavored artificial chemistry. The specs in docs/specs/
   use real constants and real equations where cheap, and honest
   simplifications everywhere else.
 - Not a claim of abiogenesis. Life is seeded by hand. The open question
@@ -121,8 +121,10 @@ How khem builds on prior work, compressed:
     |-- ARCHITECTURE.md      target crate map, dependency rules, scaling plan
     |-- initial-idea.md      the founding conversation (verbatim import)
     |-- docs/
-    |   |-- specs/           spec drafts extracted from initial-idea.md
-    |   |   `-- README.md    extraction index + naming decisions
+    |   |-- adr/             architecture decision records (the WHY)
+    |   |-- specs/           canonical language + runtime specs
+    |   |   `-- README.md    spec index + conversation-era rename map
+    |   |-- history/         conversation-era drafts (superseded)
     |   `-- research/
     |       `-- references.md  papers + projects, mapped to design choices
     `-- crates/

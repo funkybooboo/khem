@@ -3,7 +3,8 @@
 The target crate layout and the rules that keep it honest. The Cargo
 workspace holds any number of library and binary crates; a new crate
 joins by adding a directory under crates/ and a line in the root
-Cargo.toml members list.
+Cargo.toml members list. The WHY behind each decision lives in
+docs/adr/; this file describes the shape they produced.
 
 ## Crate map (target)
 
