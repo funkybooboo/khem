@@ -1,0 +1,11 @@
+[package]
+name = "khem"
+description = "Runtime for the khem artificial-chemistry simulation language (scaffold)"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
