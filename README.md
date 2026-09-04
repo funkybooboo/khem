@@ -19,10 +19,12 @@ executes ticks, and streams newline-delimited JSON events to stdout.
 
 ## Status
 
-Pre-prototype. The founding conversation, extracted spec drafts, a
-build plan, a research reading list, and a hello-world runtime scaffold
-exist. No simulation code yet. Read PLAN.md before writing any - the
-build order is kernel first, language later.
+Pre-prototype. Canonical specs, architecture decision records, a
+build plan, a research reading list, and a runtime scaffold exist.
+The simulation engine is a data-model skeleton; the systems are the
+plan's phase 1. Read PLAN.md before writing any - the build order is
+kernel first, language later. The founding conversation is preserved
+in git history only (ADR-0010).
 
 ## The name
 
@@ -31,7 +33,8 @@ one of the leading etymologies, al-kimiya (Arabic alchemy) descends from
 Egyptian kemet, "the black land" - the fertile mud of the Nile, where
 water, soil, and sun made things grow. A chemistry language named after
 the fertile black mud. The etymology is contested; the name is not the
-claim. Naming decisions and the rejected-alternatives record live in
+claim. The naming decision and the rejected-candidates record live in
+docs/adr/0007-name-khem.md; the conversation-era rename map lives in
 docs/specs/README.md.
 
 ## What this project is
@@ -119,18 +122,16 @@ How khem builds on prior work, compressed:
     |-- README.md            this file: identity, prior work, is / is not
     |-- PLAN.md              build order: kernel first, language later
     |-- ARCHITECTURE.md      target crate map, dependency rules, scaling plan
-    |-- initial-idea.md      the founding conversation (verbatim import)
     |-- docs/
     |   |-- adr/             architecture decision records (the WHY)
     |   |-- specs/           canonical language + runtime specs
     |   |   `-- README.md    spec index + conversation-era rename map
-    |   |-- history/         conversation-era drafts (superseded)
     |   `-- research/
     |       `-- references.md  papers + projects, mapped to design choices
     `-- crates/
         |-- khem-core/       lib: the simulation engine (phase 1 lands here)
         `-- khem/            bin: the runtime CLI (scaffold)
 
-initial-idea.md is a verbatim import of the founding conversation and
-keeps its original non-ASCII formatting; everything else in this repo
-is ASCII.
+Everything in the repo is ASCII. The founding conversation and the
+conversation-era spec drafts are preserved in git history only
+(ADR-0010).

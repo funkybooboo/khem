@@ -37,9 +37,11 @@ uses, what prior work supports it and what it simplifies away.
 ## Phase 1 - physics/chemistry kernel (NO DSL)
 
 The kernel lives in the khem-core lib; the khem bin stays a thin entry
-point (see ARCHITECTURE.md). Everything is hardcoded:
+point (see ARCHITECTURE.md). Crate setup has already landed the data
+model, element table, deterministic RNG, spatial index, physics
+constants, and the CLI skeleton; phase 1 is the systems themselves.
+Everything is hardcoded:
 
-- element table (the 10 elements with real values, from the idea file)
 - the tick loop from the runtime spec (docs/specs/runtime-spec.md):
   energy -> velocities -> positions -> boundary -> spatial index ->
   bond breaking -> bond formation -> observe

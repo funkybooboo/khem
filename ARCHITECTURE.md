@@ -67,8 +67,9 @@ docs/adr/; this file describes the shape they produced.
 
 ## Exists today vs later
 
-    today    khem-core (module skeleton, phase 1 landing zone)
-             khem (bin scaffold)
+    today    khem-core (data model, element table, config, RNG,
+             spatial index; the systems are phase 1)
+             khem (bin: CLI skeleton, runtime spec section 2)
     phase 3  khem-lang (after the K1-K5 gates pass)
     later    khem-view, khem-log (once there is an event stream worth
              watching)
