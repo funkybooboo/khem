@@ -1,9 +1,13 @@
-//! khem - runtime for the khem artificial-chemistry language.
+//! khem - the runtime CLI for the khem artificial-chemistry language.
 //!
-//! Scaffold only: this binary exists to prove the toolchain and hold
-//! the project layout described in README.md and PLAN.md. No
-//! simulation code yet. Build order: kernel first (PLAN.md phase 1),
-//! language later.
+//! Scaffold only: proves the toolchain and workspace wiring. Phase 1
+//! (PLAN.md) replaces the body with a call into khem-core: build the
+//! hardcoded primordial pond, run the tick loop, stream NDJSON
+//! events. Loading .kem definitions arrives in phase 3 via the
+//! khem-lang crate.
+//!
+//! The binary stays thin forever: parse args, construct a world, run,
+//! stream (see ARCHITECTURE.md).
 
 fn main() {
     println!("khem 0.0.1 (scaffold)");

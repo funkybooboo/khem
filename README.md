@@ -118,14 +118,16 @@ How khem builds on prior work, compressed:
     khem/
     |-- README.md            this file: identity, prior work, is / is not
     |-- PLAN.md              build order: kernel first, language later
-    |-- initial-idea.md       the founding conversation (verbatim import)
+    |-- ARCHITECTURE.md      target crate map, dependency rules, scaling plan
+    |-- initial-idea.md      the founding conversation (verbatim import)
     |-- docs/
     |   |-- specs/           spec drafts extracted from initial-idea.md
     |   |   `-- README.md    extraction index + naming decisions
     |   `-- research/
     |       `-- references.md  papers + projects, mapped to design choices
     `-- crates/
-        `-- khem/            the runtime binary (hello-world scaffold)
+        |-- khem-core/       lib: the simulation engine (phase 1 lands here)
+        `-- khem/            bin: the runtime CLI (scaffold)
 
 initial-idea.md is a verbatim import of the founding conversation and
 keeps its original non-ASCII formatting; everything else in this repo

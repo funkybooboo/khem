@@ -1,10 +1,13 @@
 [workspace]
 resolver = "3"
-members = ["crates/khem"]
+members = ["crates/khem", "crates/khem-core"]
 
 [workspace.package]
 version = "0.0.1"
 edition = "2024"
+
+[workspace.dependencies]
+khem-core = { path = "crates/khem-core" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

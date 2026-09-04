@@ -36,7 +36,8 @@ uses, what prior work supports it and what it simplifies away.
 
 ## Phase 1 - physics/chemistry kernel (NO DSL)
 
-A single Rust binary with everything hardcoded:
+The kernel lives in the khem-core lib; the khem bin stays a thin entry
+point (see ARCHITECTURE.md). Everything is hardcoded:
 
 - element table (the 10 elements with real values, from the idea file)
 - the tick loop from the runtime spec draft (05-runtime-spec.md):
@@ -140,5 +141,5 @@ literature-review skeleton is docs/research/references.md.
 - [ ] remote hosting (github vs codeberg) - repo is local-only for now
 - [ ] first world file name: primordial_pond.kem ("warm little pond"
       is Darwin's phrase for the setting)
-- [ ] whether phase 1 prototype lives on a branch or in this repo
-      behind a temporary binary
+- [x] phase 1 placement: RESOLVED 2026-09-04 - kernel code lands in
+      the khem-core lib, driven by the khem bin on main (ARCHITECTURE.md)

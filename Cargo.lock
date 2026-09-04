@@ -5,3 +5,10 @@ version = 4
 [[package]]
 name = "khem"
 version = "0.0.1"
+dependencies = [
+ "khem-core",
+]
+
+[[package]]
+name = "khem-core"
+version = "0.0.1"
