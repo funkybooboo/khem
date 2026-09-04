@@ -3,9 +3,9 @@
 Runtime version: 0.1 (emits output schema v:1)
 Status: canonical as of 2026-09-04. Drafts until validated (ADR-0006):
 revised against phase-1 kernel reality before the parser is built.
-Provenance: reconciled from the founding conversation
-(initial-idea.md) with the final terminology applied (ADR-0007,
-ADR-0009).
+Provenance: reconciled from the founding conversation (preserved in
+git history, ADR-0010) with the final terminology applied
+(ADR-0007, ADR-0009).
 
 ## 1. Overview
 

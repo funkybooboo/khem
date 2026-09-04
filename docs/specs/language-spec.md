@@ -4,9 +4,9 @@ Language version: 0.1 (the version string "0.1" inside .kem files)
 Status: canonical as of 2026-09-04. Drafts until validated: phase 1
 (PLAN.md) tests the substrate before the parser is built, and this
 document is revised against kernel reality at that point (ADR-0006).
-Provenance: reconciled from the founding conversation
-(initial-idea.md) with the final terminology applied (ADR-0007,
-ADR-0009). Conversation-era drafts: docs/history/spec-drafts/.
+Provenance: reconciled from the founding conversation (preserved in
+git history, ADR-0010) with the final terminology applied
+(ADR-0007, ADR-0009).
 
 ## 1. What khem is
 

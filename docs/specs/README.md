@@ -19,15 +19,19 @@ and both documents are revised against kernel reality at that point
 
 ## History and provenance
 
-- initial-idea.md (repo root) - the founding conversation, verbatim.
-  It is a chat transcript: the end state can only be reconstructed by
-  reading it top to bottom, because names and terminology changed
-  mid-conversation.
-- docs/history/spec-drafts/ - the six verbatim spec extractions from
-  that conversation, each written in the terminology of the moment it
-  was drafted. Superseded. Do not implement from these.
-- docs/adr/ - the decisions behind everything, including the naming
-  sweep (ADR-0007).
+The founding conversation and its verbatim spec drafts are not kept
+in the working tree; git history is the archive (ADR-0010):
+
+- the founding conversation, verbatim: commit d8205f1
+  (git show d8205f1:initial-idea.md)
+- the six conversation-era spec extractions: commits 83a2688 and
+  fefc4b9
+
+The conversation is a chat transcript: its end state can only be
+reconstructed by reading it top to bottom, because names and
+terminology changed mid-conversation. The rename map below
+translates its terminology. The decisions behind everything live in
+docs/adr/, including the naming sweep (ADR-0007).
 
 ## Conversation-era to canonical rename map
 

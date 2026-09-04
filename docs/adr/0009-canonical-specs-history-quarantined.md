@@ -1,7 +1,7 @@
 # ADR-0009: Canonical specs; history quarantined
 
 Date: 2026-09-04
-Status: Accepted
+Status: Accepted; amended by ADR-0010 (quarantine became removal)
 
 ## Context
 
