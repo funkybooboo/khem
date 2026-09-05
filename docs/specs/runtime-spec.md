@@ -3,6 +3,10 @@
 Runtime version: 0.1 (emits output schema v:1)
 Status: canonical as of 2026-09-04. Drafts until validated (ADR-0006):
 revised against phase-1 kernel reality before the parser is built.
+Sync policy (owner decision 2026-09-05): the implementation and
+this spec must agree; any divergence is fixed in both in the same
+commit. Synced 2026-09-05 against khem-core post-F10. Items marked
+[phase 2] / [phase 3] are designed but not yet implemented.
 Provenance: reconciled from the founding conversation (preserved in
 git history, ADR-0010) with the final terminology applied
 (ADR-0007, ADR-0009).
@@ -30,25 +34,32 @@ there.
 
     --seed <integer>   override the seed from the run declaration
                        khem --seed 42 experiment_1.kem
-    --check            parse and validate all files; report errors and
-                       warnings; do not run. Exit 0 if valid, 1 if not.
+    --check            [phase 3] parse and validate all files; report
+                       errors and warnings; do not run. Exit 0 if
+                       valid, 1 if not.
                        khem --check primordial_pond.kem
-    --test             run a single struct or body in isolation in a
-                       minimal world for a default test duration.
+    --test             [phase 3] run a single struct or body in
+                       isolation in a minimal world for a default
+                       test duration.
                        khem --test minimal_cell.kem
-    --info             parse a .kem file and print its structure: atom
-                       count, bond count, port list, import tree. Does
-                       not run.
+    --info             [phase 3] parse a .kem file and print its
+                       structure: atom count, bond count, port list,
+                       import tree. Does not run.
                        khem --info nucleotide_A.kem
     --version
     --help
+
+Phase 1: the binary runs the hardcoded primordial pond; a file
+argument is accepted but not read (the parser is phase 3), and
+--seed is the only behavioral option (default 42).
 
 ### 2.3 Exit codes
 
     0   success (simulation completed, or --check passed)
     1   validation error (bad .kem files)
     2   runtime error (crash during simulation)
-    3   user interrupt (SIGINT / ctrl-c)
+    3   user interrupt (SIGINT / ctrl-c)  [phase 2: v0.1 phase-1
+        builds do not trap signals; ctrl-c kills the process]
 
 ### 2.4 Streams
 
@@ -88,7 +99,8 @@ START - first line, emitted once:
      "seed":42,"atom_count":4821,"bond_count":341,
      "world_width":200.0,"world_height":200.0}
 
-TICK - every tick_interval ticks:
+TICK - every tick_interval ticks (timing fields are wall-clock
+and excluded from reproducibility, see G02):
 
     {"v":1,"type":"tick","tick":1000,"elapsed_ms":124,
      "ticks_per_sec":8064,"atom_count":4821,"bond_count":2341,
@@ -109,8 +121,8 @@ BOND_BROKEN - when output.bond_events is true:
      "elem_a":"C","elem_b":"O","energy_released":399.5,
      "x":45.3,"y":123.8}
 
-NOTABLE - when a watch condition triggers; always emitted regardless
-of output settings:
+NOTABLE - [phase 2] when a watch condition triggers; always
+emitted regardless of output settings:
 
     {"v":1,"type":"notable","tick":1247900,"event":"largest_molecule",
      "data":{"atom_count":47,"first_seen_tick":891000}}
@@ -123,7 +135,7 @@ Event vocabulary:
     population_crash     population drop above threshold
     bond_type_first      bond type seen for the first time
 
-SAVE - when state is saved:
+SAVE - [phase 2] when state is saved:
 
     {"v":1,"type":"save","tick":1000000,"path":"./saves/tick_1000000.state"}
 
@@ -171,7 +183,13 @@ Fixed-size struct, no heap allocation:
         y:          f32
         vx:         f32            // angstroms per tick
         vy:         f32
-        bonds:      [BondId; 6]    // covers every element's max_bonds
+        bonds:      [Option<BondId>; 6]  // first bond_count slots
+                                         // are Some; empty slots
+                                         // are None (an empty slot
+                                         // must be representable;
+                                         // raw-array deviation
+                                         // from the founding draft,
+                                         // synced 2026-09-05)
         bond_count: u8
         alive:      bool
     }
@@ -264,12 +282,13 @@ system's writes within the same tick.
     8.  ObserverSystem::sample
     9.  EventQueue::flush_to_output
 
-### 5.2 Dead atom and bond cleanup
+### 5.2 Dead atom and bond cleanup [phase 2]
 
 Atoms and bonds are flagged dead, not removed. Compaction runs every
 compaction_interval ticks (default 10,000): dead entries removed, IDs
 remapped, spatial index rebuilt, compaction noted on stderr (never
-stdout).
+stdout). Not yet implemented: phase 1 flags and skips dead entries;
+nothing compacts, so long runs accumulate dead-slot memory.
 
 ### 5.3 Determinism
 
@@ -278,24 +297,42 @@ byte-identical forever (G02, G14). Requirements: fixed tick order
 (5.1); one deterministic seeded RNG with per-tick state; no
 thread-local state in v0.1; iteration over atoms always by AtomId.
 
+RNG draw discipline (pinned by the phase-1 kernel, ADR-0005): the
+physics system draws first - exactly two normal draws per live atom
+in AtomId order (dead atoms draw nothing; zero-temperature atoms
+draw no-op samples). Bond breaking draws exactly one uniform per
+live bond per tick, in BondId order. Formation draws exactly one
+uniform per eligible pair, in iterating-AtomId order with candidates
+in spatial scan order; ineligible pairs draw nothing.
+
 ## 6. Physics system
 
 ### 6.1 Temperature and velocity
 
-Temperature at a grid cell = mean kinetic energy of atoms in that
-cell, scaled to celsius by the scale factors in physics.cfg.
-
-    KE(atom) = 0.5 * element.mass * (vx^2 + vy^2)
+The temperature field is the thermal bath: initialized by the world
+definition, perturbed by energy sources (8) and bond events
+(7.1, 7.2), and smoothed by diffusion (6.2). Atoms do NOT return
+kinetic energy to the field in v0.1; a thermostat (Langevin
+coupling, damping toward the local field temperature) is the open
+substrate decision that would close that loop.
 
 Thermal perturbation per tick (Maxwell-Boltzmann):
 
-    sigma = sqrt(kB * T / mass)
+    sigma = sqrt(thermal_kick_scale * T / mass)
     vx += rng.normal(0, sigma)
     vy += rng.normal(0, sigma)
 
+T <= 0 gives sigma 0 (no kick; the draws still happen, keeping the
+RNG stream uniform). thermal_kick_scale is separate from the
+breaking kB (7.1): one physical constant set two incompatible sim
+scales (finding F8's analysis), so they decouple.
+
 ### 6.2 Temperature diffusion
 
-Per cell, 4-connected neighbors:
+Executes at the start of PhysicsSystem::update_velocities, before
+the kicks sample the field (5.1 names no slot for it; the kernel
+pinned this one). Per cell, 4-connected neighbors, wrapped at the
+grid edges (grids wrap like the Wrap boundary, 4.8):
 
     T_new = T * (1 - diffusion_rate) + mean(T_neighbors) * diffusion_rate
 
@@ -309,8 +346,17 @@ Hooke's law toward equilibrium distance (sum of covalent radii):
     F       = spring_k * (r - r_eq)
     spring_k = bond.energy * spring_energy_scale
 
-Applied to both atoms along the bond axis. Strong repulsion when
-r < 0.5 * r_eq: F = -strong_repulsion / r^2.
+Applied to both atoms along the bond axis, equal and opposite.
+Strong repulsion when r < 0.5 * r_eq: F = -strong_repulsion / r^2.
+Coincident atoms (r ~ 0) have no defined axis; the force is skipped
+and the next kick separates them.
+
+In Wrap worlds every pair displacement uses the minimum-image
+convention (the shortest vector between the atoms, crossing the
+seam when shorter): raw deltas read a seam-adjacent pair as
+width - 1 angstroms apart and the spring shreds it (finding F10,
+found by test 2026-09-05, fixed the same day). All pair rules
+(springs, chemistry distance checks, bond midpoints) use it.
 
 ### 6.4 Pressure force
 
@@ -335,37 +381,54 @@ scaled by pressure_sensitivity.
 
 ### 7.1 Bond breaking
 
-Per alive bond:
+Per alive bond, in BondId order:
 
-    T       = temperature at the bond midpoint
-    p_break = exp(-bond.energy / (kB * T))     // Boltzmann/Arrhenius
+    T       = temperature at the bond midpoint (minimum-image)
+    p_break = exp(-bond.energy / (kb_scaled * T))   // Boltzmann
 
-If rng < p_break: flag the bond dead, decrement both atoms'
-bond_count, release bond.energy * release_fraction into the local
-temperature field.
+T <= 0 gives p_break 0. UV photolysis (8.2) is folded into the same
+per-bond roll as one combined probability; if rng < p: flag the bond
+dead, decrement both atoms' bond_count, release bond.energy *
+release_fraction into the local temperature field at the midpoint.
 
 ### 7.2 Bond formation
 
-For each atom A with available valence, candidates within
+For each atom A with available bond slots, candidates within
 bond_search_radius (default 4.0 angstroms) via the spatial index:
+each unordered pair is attempted at most once per tick, from the
+iteration of the lower AtomId (A is the geometry anchor; a small
+documented asymmetry). Eligibility (alive, capacity on both sides,
+minimum-image distance, not already bonded) is checked before the
+RNG draw.
 
     p_form = base_formation_rate
            * geometry_factor(A, B)
            * temperature_factor(T, elem_a, elem_b)
            * (1.0 + |EN_a - EN_b| * en_bonus)
 
-- geometry_factor scores how well B fits A's existing VSEPR angles,
-  from 0.0 (geometrically impossible) to 1.0 (perfect), using the
-  angle table (7.4).
-- temperature_factor is a gaussian peaked at an optimal temperature
-  for the element pair: too cold for atoms to meet, too hot for bonds
-  to hold.
-- bond order: prefer double when both atoms have 2+ available valence
-  and geometry allows; otherwise single.
+- geometry_factor (v0.1 semantics, pinned by the kernel): an atom
+  with no existing bonds is unconstrained (1.0), as are H, Na, Cl.
+  Otherwise the ideal adjacent-bond angle comes from the 7.4 table
+  for the atom's coordination state (doubles shift carbon to
+  120/180, nitrogen to 120); the candidate is scored against each
+  existing bond's direction, ideal angle to either side, by a
+  gaussian in angular deviation with sigma = geometry_sigma; the
+  best-scoring existing bond anchors the factor. The 3D table
+  values are scoring ideals, not enforced angles - 109.5 cannot
+  exist four ways in 2D - and effective geometry emerges from the
+  competition (water's 104.5 fits and matters most).
+- temperature_factor: gaussian in T around the pair's optimum
+  t_opt = t_opt_scale * bond_energy (stronger bonds tolerate
+  hotter formation), width t_width.
+- bond order: 2 when both atoms have 2+ free bond slots
+  (max_bonds - bond_count), else 1. Triples are never formed in
+  v0.1; they exist only if seeded into the initial world.
 
 If rng < p_form: create a BondState with energy from the table (7.3),
 increment both bond_counts, absorb bond.energy * formation_fraction
-from the local temperature field.
+from the local temperature field at the minimum-image midpoint. The
+field may go negative; kicks clamp at zero T and diffusion smooths
+(formation refrigerates a source-less pond - finding F6, measured).
 
 ### 7.3 Bond energy table (kJ/mol, real values)
 
@@ -380,8 +443,16 @@ from the local temperature field.
     Si-O 452      Si-Si 222
     Fe-O ~390 (variable)
 
-Unknown pairs use the geometric mean of single-bond energies. The
-table lives in physics.cfg, modifiable without recompilation.
+Unknown pairs use the geometric mean of the elements' single-bond
+reference energies (each element's own single bond where the table
+has one; Na 77 and Cl 243 fill the two element gaps; note N's
+reference is its genuinely weak 163). An unknown order for a known
+pair scales the pair's single-bond energy by order (v0.1 fallbacks,
+pinned by the kernel and test-locked).
+
+Phase 1 hardcodes this table in khem-core/src/chemistry.rs, with a
+test transcribing every row against this section; physics.cfg
+loading arrives in phase 3 with the language.
 
 ### 7.4 Bond angle table (VSEPR, degrees)
 
@@ -400,7 +471,17 @@ table lives in physics.cfg, modifiable without recompilation.
     Na   1 bond: no constraint
     Cl   1 bond: no constraint
 
-Also in physics.cfg, not source code.
+Also in physics.cfg, not source code. [phase 3; phase 1 hardcodes
+this in khem-core/src/chemistry.rs with test-locked values]
+
+Semantics (v0.1, pinned by the kernel): the angles are scoring
+ideals for the 7.2 geometry factor, not enforced constraints -
+the 3D values cannot all exist in 2D (109.5 four ways exceeds the
+plane), so effective geometry emerges from gaussian competition.
+Elements with no listed constraint score 1.0 always. Carbon's
+coordination states: 109.5 with only single bonds, 120 when one
+double is involved, 180 with two. Phosphorus switches to 90 for
+its fifth bond.
 
 ## 8. Energy system
 
@@ -415,22 +496,26 @@ Atoms in radius get upward velocity: vy += convection_rate * falloff.
 
 ### 8.2 Solar UV
 
-Per tick, for surface cells (y > surface_threshold * height):
+Per tick, the energy system writes the UV field: surface cells (y
+above surface_threshold * height) carry the source intensity, all
+other cells zero. The field is per-tick state, rebuilt wholesale.
 
-    uv_field[cell] = intensity
-
-Per bond in UV-exposed cells:
+UV bond breaking executes in ChemistrySystem::break_bonds (5.1
+gives chemistry the only bond-mutating steps; one place breaks
+bonds, and one RNG roll per bond combines thermal and UV - 7.1):
 
     p_uv_break = uv_field[cell] * uv_sensitivity[bond_type]
-    if rng < p_uv_break: break the bond
 
 uv_sensitivity defaults per bond order: single 0.0001, double
 0.0003, triple 0.0002.
 
 ### 8.3 Energy tracking
 
-Total kinetic, bond potential, and field energy are tracked and
-emitted in TICK events. Not enforced; used for debugging and analysis.
+Total kinetic, bond potential, and field energy are computed as
+diagnostics by the K1 harness (tests/k1_stability.rs) for
+stability-gate measurement. They are NOT fields in the v:1 NDJSON
+schema (3.3 has none); adding them would be an additive schema
+change, made when a consumer needs them.
 
 ## 9. Observer system
 
@@ -494,25 +579,51 @@ load dynamic libraries implementing the traits.
 All tunable constants live in physics.cfg - separate from .kem
 definitions, in the project root or a system default path, modifiable
 without recompilation. Tuning affects behavior and stability; it never
-changes what chemistry is possible.
+changes what chemistry is possible. [Phase 1: these are the defaults
+in khem-core/src/config.rs, test-locked; physics.cfg loading arrives
+in phase 3.]
 
-    kb_scaled               0.008314   // Boltzmann constant, sim units
+Values below are the phase-1 tuned set (2026-09-05); the founding
+draft's literals are recorded in git history and in
+docs/research/abstraction-notes.md (findings F1, F2, F7) with the
+measurements that changed them:
+
+    kb_scaled               0.45     // Boltzmann for BREAKING (7.1);
+                                     // literal 0.008314 gave zero
+                                     // breaks at pond temps (F1)
+    thermal_kick_scale      0.008314 // kick sigma scale (6.1); split
+                                     // from kb_scaled - one physical
+                                     // constant set two
+                                     // incompatible sim scales
     diffusion_rate          0.1
     pressure_sensitivity    0.01
-    spring_energy_scale     0.01
+    spring_energy_scale     0.002    // literal 0.01 put every bond
+                                     // over the symplectic bound
+                                     // dt*sqrt(k) < 2 (F2)
     strong_repulsion        1000.0
     convection_rate         0.001
+    vent_heat_rate          0.1      // used by 8.1's formula; was
+                                     // missing from this block
 
-    bond_search_radius      4.0        // angstroms
-    base_formation_rate     0.001       // per eligible pair per tick
-    release_fraction        0.5
+    bond_search_radius      4.0      // angstroms
+    base_formation_rate     0.001    // per eligible pair per tick
+    release_fraction        0.3      // == formation_fraction; the
+                                     // literal 0.5 vs 0.3 minted
+                                     // 0.2*E per form+break cycle
+                                     // (F7)
     formation_fraction      0.3
     en_bonus                0.1
+    geometry_sigma          30.0     // degrees; 7.2 geometry-factor
+                                     // tolerance (new)
+    t_opt_scale             0.1      // T_opt = t_opt_scale * bond
+                                     // energy; 7.2 temperature
+                                     // factor (new)
+    t_width                 20.0     // degrees (new)
 
-    spatial_cell_size       5.0        // angstroms
-    field_cell_size         10.0       // angstroms
-    compaction_interval     10000       // ticks
-    surface_threshold       0.9         // fraction of world height
+    spatial_cell_size       5.0      // angstroms
+    field_cell_size         10.0     // angstroms
+    compaction_interval     10000    // ticks [phase 2]
+    surface_threshold       0.9      // fraction of world height
 
     bond_energy { ... }    // the section 7.3 table
     bond_angles { ... }    // the section 7.4 table
@@ -522,7 +633,9 @@ changes what chemistry is possible.
 
     G01  No concept above the atom/bond level exists in the runtime
     G02  Given the same .kem files and seed, the output stream is
-         byte-identical
+         byte-identical, modulo the wall-clock fields elapsed_ms and
+         ticks_per_sec (timing is excluded; the rest is bit-for-bit
+         reproducible)
     G03  The observer never modifies WorldState
     G04  Bond formation never exceeds an element's max_bonds
     G05  Boundary conditions are applied every tick without exception
@@ -531,7 +644,7 @@ changes what chemistry is possible.
          start of ChemistrySystem::update each tick
     G08  All validation errors are reported before tick 0
     G09  Save state is complete: a loaded run produces the identical
-         future as an uninterrupted run
+         future as an uninterrupted run [phase 2]
     G10  stdout contains only NDJSON events
     G11  stderr contains only human-readable diagnostics
     G12  Exit codes follow section 2.3

@@ -33,6 +33,30 @@ constants; numbers in the tuning commit):
       A/tick in a single tick, and with no dissipation that energy
       circulates forever. Measured mean bond length after 2000
       ticks: 63 A (equilibrium ~1.2).
+- F10 No minimum-image convention: a bonded pair 1 A apart across
+      the Wrap seam reads as width-1 apart, and the spring shreds
+      it (measured: +-103 A/tick on a 1 A pair). Found 2026-09-05
+      by the seam test written BEFORE the fix - the exact testing
+      gap the owner asked about. Fixed same day (WorldState::delta,
+      spec 6.3/7.1/7.2 synced). Post-fix round 3: mean bond length
+      58.5 A (from 63) - real but minor; F8/F9 dominate K1's
+      failure. Known related gap (F11): the spatial index does not
+      wrap, so formation candidates across the seam are suppressed
+      (no dynamics corruption; phase 2 with K2/K3).
+
+## Spec sync policy
+
+Owner decision 2026-09-05: the implementation and the canonical
+spec must agree; every divergence is fixed in both in the same
+commit (piecemeal, not a later consolidated revision). The
+2026-09-05 sync folded: section 11 constants (the tuned set above),
+6.1 bath authority + thermal_kick_scale split, 6.3 minimum-image,
+7.1/7.2 mechanics and v0 semantics, 7.3/7.4 fallbacks and
+semantics, 8.2 UV placement, 8.3 diagnostics-not-schema, the G02
+timing carve-out, and [phase 2]/[phase 3] markers on designed-but-
+unbuilt items (CLI modes, signals, compaction, save, watch
+conditions). Findings pending decisions (thermostat, F4) are NOT
+in the spec yet - they land when decided.
 
 ## Findings first analyzed before measurement
 

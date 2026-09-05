@@ -188,6 +188,11 @@ All of this is enabled by choices already fixed (runtime spec section
 
 - The WHY of every decision lives in docs/adr/ (Nygard format;
   immutable once accepted - change means a new ADR).
+- The implementation and the specs must AGREE (owner decision
+  2026-09-05): any divergence between code and
+  docs/specs/runtime-spec.md is fixed in both in the same commit,
+  piecemeal. Designed-but-unbuilt items are marked [phase 2] /
+  [phase 3] in the spec rather than allowed to drift.
 - The WHAT lives in docs/specs/ (canonical, current-state specs,
   edited in commits and revised against phase-1 reality per ADR-0006)
   and ARCHITECTURE.md (crate map).
