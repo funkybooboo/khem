@@ -308,6 +308,26 @@ impl WorldState {
         &mut self.bonds[id.0 as usize]
     }
 
+    /// Shortest displacement from (ax, ay) to (bx, by), honoring
+    /// the boundary: the minimum-image convention (standard for
+    /// periodic MD) for Wrap - a pair 1 A apart across the seam
+    /// reads as 1 A, not width-1 - and the raw delta for Wall and
+    /// Open, where positions never wrap and opposite walls really
+    /// are far apart. Every pairwise rule (spring forces,
+    /// chemistry distance checks, bond midpoints) must use this;
+    /// using raw deltas in a Wrap world shreds seam-crossing
+    /// molecules (finding F10).
+    pub fn delta(&self, ax: f32, ay: f32, bx: f32, by: f32) -> (f32, f32) {
+        let (dx, dy) = (bx - ax, by - ay);
+        if self.boundary != BoundaryType::Wrap {
+            return (dx, dy);
+        }
+        (
+            dx - self.width * (dx / self.width).round(),
+            dy - self.height * (dy / self.height).round(),
+        )
+    }
+
     /// Whether two atoms share a live bond.
     pub fn is_bonded(&self, a: AtomId, b: AtomId) -> bool {
         let atom = self.atom(a);

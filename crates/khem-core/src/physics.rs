@@ -150,8 +150,7 @@ impl Physics {
             if !a.alive || !b.alive {
                 continue;
             }
-            let dx = b.x - a.x;
-            let dy = b.y - a.y;
+            let (dx, dy) = world.delta(a.x, a.y, b.x, b.y);
             let r2 = dx * dx + dy * dy;
             if r2 < f32::EPSILON {
                 continue;
@@ -344,6 +343,25 @@ mod tests {
         physics().update_positions(&mut w);
         let d = w.atom(b).x - w.atom(a).x;
         assert!(d < 2.0, "distance {d} should shrink");
+    }
+
+    #[test]
+    fn bonded_pair_across_wrap_seam_is_not_shredded() {
+        // Minimum-image convention: two atoms 1 A apart ACROSS the
+        // wrap seam must feel the spring for 1 A, not 119 A. The
+        // pond starts with seam-straddling waters (lattice at 0.75
+        // A plus 1.19 A bond length), so this law is load-bearing
+        // for K1, not a corner case.
+        let mut w = world(1, BoundaryType::Wrap);
+        let a = w.spawn_atom(ElementId(0), 0.3, 50.0);
+        let b = w.spawn_atom(ElementId(0), 99.7, 50.0); // 1 A apart across the seam
+        w.form_bond(a, b, 1, 436.0);
+        physics().update_velocities(&mut w);
+        let (va, vb) = (w.atom(a).vx, w.atom(b).vx);
+        assert!(
+            va.abs() < 1.0 && vb.abs() < 1.0,
+            "seam pair must feel a 1 A spring, got velocities {va} / {vb}"
+        );
     }
 
     #[test]

@@ -330,6 +330,22 @@ mod tests {
     }
 
     #[test]
+    fn molecule_sizes_handles_cycles() {
+        // A ring is one molecule: union-find must not double-count
+        // or split when bonds close a cycle.
+        let mut w = world(1);
+        let ring: Vec<AtomId> = (0..6)
+            .map(|i| w.spawn_atom(ElementId(1), i as f32, 0.0))
+            .collect();
+        for i in 0..6 {
+            w.form_bond(ring[i], ring[(i + 1) % 6], 1, 346.0);
+        }
+        let sizes = Observer::molecule_sizes(&w);
+        let nonzero: Vec<u32> = sizes.into_iter().filter(|s| *s > 0).collect();
+        assert_eq!(nonzero, vec![6], "the ring is a single 6-molecule");
+    }
+
+    #[test]
     fn molecule_sizes_ignores_dead() {
         let mut w = world(1);
         let a = w.spawn_atom(ElementId(1), 0.0, 0.0);

@@ -189,6 +189,51 @@ impl Chemistry {
         Self { config }
     }
 
+    /// The bond a pair would form and its per-tick formation
+    /// probability (spec 7.2): (order, energy, probability,
+    /// midpoint_x, midpoint_y). Callers have already checked
+    /// eligibility (alive, capacity, distance, not bonded); this
+    /// computes the chemistry and the midpoint for heat exchange.
+    /// Extracted as its own method so the probability LAWS are
+    /// directly testable (order preference, temperature optimum,
+    /// electronegativity bonus, geometry gate) without statistical
+    /// sampling - the RNG draw stays in the caller (RNG
+    /// discipline).
+    fn pair_probability(
+        &self,
+        world: &WorldState,
+        a: AtomId,
+        b: AtomId,
+    ) -> (u8, f32, f32, f32, f32) {
+        let atom_a = world.atom(a);
+        let atom_b = world.atom(b);
+        let (a_el, b_el) = (atom_a.element, atom_b.element);
+        let (a_free, b_free) = (
+            world.element(a_el).max_bonds - atom_a.bond_count,
+            world.element(b_el).max_bonds - atom_b.bond_count,
+        );
+        // Spec 7.2: double when both have 2+ free slots.
+        let order: u8 = if a_free >= 2 && b_free >= 2 { 2 } else { 1 };
+        let energy = bond_energy(a_el, b_el, order);
+        // Midpoint via minimum-image delta (F10); field reads wrap,
+        // so the midpoint may fall outside [0, width) harmlessly.
+        let (dx, dy) = world.delta(atom_a.x, atom_a.y, atom_b.x, atom_b.y);
+        let (mx, my) = (atom_a.x + dx * 0.5, atom_a.y + dy * 0.5);
+        // Temperature factor: gaussian around the pair's optimal
+        // temperature (module doc: v0 fill).
+        let t = world.temp_field.get(mx, my).max(0.0);
+        let t_opt = self.config.t_opt_scale * energy;
+        let dt = t - t_opt;
+        let t_factor = (-dt * dt / (2.0 * self.config.t_width * self.config.t_width)).exp();
+        let en =
+            (world.element(a_el).electronegativity - world.element(b_el).electronegativity).abs();
+        let p = self.config.base_formation_rate
+            * self.geometry_factor(world, a, dy.atan2(dx), order)
+            * t_factor
+            * (1.0 + en * self.config.en_bonus);
+        (order, energy, p, mx, my)
+    }
+
     /// Spec 7.2 geometry factor, 0.0-1.0: how well the candidate
     /// direction fits the atom's VSEPR ideals. Unconstrained atoms
     /// score 1.0. Otherwise the best-scoring existing bond anchors
@@ -244,10 +289,12 @@ impl ChemistrySystem for Chemistry {
             if !alive {
                 continue;
             }
-            let (mx, my) = (
-                (world.atom(a).x + world.atom(b).x) * 0.5,
-                (world.atom(a).y + world.atom(b).y) * 0.5,
-            );
+            // Midpoint through the minimum-image delta: a seam pair
+            // samples the field where the bond actually is, not
+            // across the world (finding F10).
+            let (ax, ay) = (world.atom(a).x, world.atom(a).y);
+            let (dxb, dyb) = world.delta(ax, ay, world.atom(b).x, world.atom(b).y);
+            let (mx, my) = (ax + dxb * 0.5, ay + dyb * 0.5);
             // Spec 7.1. Non-positive temperatures give p_break 0
             // (clamped field reads; exp(-inf) guard).
             let t = world.temp_field.get(mx, my).max(0.0);
@@ -316,42 +363,20 @@ impl ChemistrySystem for Chemistry {
                 if !b_alive || b_count >= b_max {
                     continue;
                 }
-                let (dx, dy) = (bx - ax, by - ay);
+                let (dx, dy) = world.delta(ax, ay, bx, by);
                 if dx * dx + dy * dy > radius2 {
                     continue;
                 }
                 if world.is_bonded(a_id, b_id) {
                     continue;
                 }
-                // Spec 7.2: double when both have 2+ free slots.
-                let order: u8 = if a_max - a_count >= 2 && b_max - b_count >= 2 {
-                    2
-                } else {
-                    1
-                };
-                let energy = bond_energy(a_el, b_el, order);
-                // Temperature factor: gaussian around the pair's
-                // optimal temperature (module doc: v0 fill).
-                let t = world
-                    .temp_field
-                    .get((ax + bx) * 0.5, (ay + by) * 0.5)
-                    .max(0.0);
-                let t_opt = self.config.t_opt_scale * energy;
-                let dt = t - t_opt;
-                let t_factor = (-dt * dt / (2.0 * self.config.t_width * self.config.t_width)).exp();
-                let en = (world.element(a_el).electronegativity
-                    - world.element(b_el).electronegativity)
-                    .abs();
-                let p = self.config.base_formation_rate
-                    * self.geometry_factor(world, a_id, dy.atan2(dx), order)
-                    * t_factor
-                    * (1.0 + en * self.config.en_bonus);
+                let (order, energy, p, mx, my) = self.pair_probability(world, a_id, b_id);
                 if world.rng.f01() < p as f64
                     && let Some(bond_id) = world.form_bond(a_id, b_id, order, energy)
                 {
-                    // Spec 7.2: formation absorbs heat. May go
+                    // Spec 7.2: formation absorbs heat at the bond's
+                    // midpoint (minimum-image; F10). May go
                     // negative; see break_bonds.
-                    let (mx, my) = ((ax + bx) * 0.5, (ay + by) * 0.5);
                     world
                         .temp_field
                         .add(mx, my, -energy * self.config.formation_fraction);
@@ -677,5 +702,226 @@ mod tests {
         assert!(w.atom(c).bond_count > 0, "carbon should gain bonds");
         assert!(w.atom(c).bond_count <= 4, "carbon max_bonds is 4");
         let _ = MAX_BONDS;
+    }
+
+    // ---- Rule-law tests: the fundamental rules must hold as
+    // LAWS, not just execute. These would have caught findings
+    // F7 (energy minting) and F10 (seam shredding) before the
+    // harness did.
+
+    #[test]
+    fn form_break_cycle_conserves_field_energy() {
+        // F7 regression: a form+break cycle must return the
+        // temperature field to where it started, because
+        // release_fraction == formation_fraction (equal-fraction
+        // conservation).
+        let config = PhysicsConfig {
+            base_formation_rate: 1.0,
+            ..PhysicsConfig::default()
+        };
+        let mut w = world(9);
+        let a = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0);
+        let b = w.spawn_atom(element_id("H").unwrap(), 51.0, 50.0);
+        for v in w.temp_field.data.iter_mut() {
+            *v = 20.0;
+        }
+        w.temp_field.set(50.5, 50.0, 43.6); // H-H optimum
+        let before: f32 = w.temp_field.data.iter().sum();
+        rebuild_index(&mut w);
+        chemistry(config).form_bonds(&mut w);
+        assert_eq!(w.bonds.len(), 1);
+        let after_form: f32 = w.temp_field.data.iter().sum();
+        let absorbed = before - after_form;
+        let expected = 436.0 * config.formation_fraction;
+        assert!((absorbed - expected).abs() < 1e-2, "absorbed {absorbed}");
+        // Now break it thermally: T so hot that p ~ 1. The set()
+        // changes the field sum too, so measure from after it.
+        w.temp_field.set(50.5, 50.0, 10_000.0);
+        let after_set: f32 = w.temp_field.data.iter().sum();
+        chemistry(config).break_bonds(&mut w);
+        assert!(!w.bond(BondId(0)).alive);
+        let after_break: f32 = w.temp_field.data.iter().sum();
+        // The cycle returns exactly the absorbed heat (F7 law:
+        // release_fraction == formation_fraction).
+        let released = after_break - after_set;
+        let expected_release = 436.0 * config.release_fraction;
+        assert!(
+            (released - expected_release).abs() < 1e-2,
+            "released {released}"
+        );
+        assert_eq!(config.release_fraction, config.formation_fraction);
+        let _ = (a, b);
+    }
+
+    #[test]
+    fn boltzmann_law_hotter_and_weaker_breaks_more() {
+        // Law: p_break = exp(-E/(kB*T)) is monotone in T and inverse
+        // in E. Statistical check with a fixed seed: 200 weak O-O
+        // bonds at vent temperature break in the expected band;
+        // the same bonds at 35 C break ~none.
+        let mut hot = world(21);
+        for i in 0..200u32 {
+            let y = 10.0 + (i / 20) as f32;
+            let x = 10.0 + (i % 20) as f32 * 2.5;
+            let a = hot.spawn_atom(element_id("O").unwrap(), x, y);
+            let b = hot.spawn_atom(element_id("O").unwrap(), x + 1.0, y);
+            hot.form_bond(a, b, 1, 146.0);
+        }
+        for v in hot.temp_field.data.iter_mut() {
+            *v = 847.0;
+        }
+        let expected = (-(146.0f32 / (0.45 * 847.0))).exp();
+        chemistry(PhysicsConfig::default()).break_bonds(&mut hot);
+        let broken = hot.bonds.iter().filter(|b| !b.alive).count();
+        let predicted = expected * 200.0;
+        assert!(
+            (broken as f32 - predicted).abs() < 40.0,
+            "hot O-O: broke {broken}, predicted {predicted:.1}"
+        );
+
+        let mut cold = world(21);
+        for i in 0..200u32 {
+            let y = 10.0 + (i / 20) as f32;
+            let x = 10.0 + (i % 20) as f32 * 2.5;
+            let a = cold.spawn_atom(element_id("O").unwrap(), x, y);
+            let b = cold.spawn_atom(element_id("O").unwrap(), x + 1.0, y);
+            cold.form_bond(a, b, 1, 146.0);
+        }
+        for v in cold.temp_field.data.iter_mut() {
+            *v = 35.0;
+        }
+        chemistry(PhysicsConfig::default()).break_bonds(&mut cold);
+        let cold_broken = cold.bonds.iter().filter(|b| !b.alive).count();
+        assert!(
+            cold_broken <= 1,
+            "35 C must not break O-O, broke {cold_broken}"
+        );
+    }
+
+    #[test]
+    fn formation_laws_temperature_optimum_and_en_bonus() {
+        // Law tests on the extracted probability: no statistics,
+        // exact comparisons.
+        let config = PhysicsConfig::default();
+        let mut w = world(13);
+        let hh_a = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0);
+        let hh_b = w.spawn_atom(element_id("H").unwrap(), 51.0, 50.0);
+        let ho_a = w.spawn_atom(element_id("H").unwrap(), 60.0, 50.0);
+        let ho_b = w.spawn_atom(element_id("O").unwrap(), 61.0, 50.0);
+        // Same field temperature for all pairs.
+        for v in w.temp_field.data.iter_mut() {
+            *v = 43.6; // H-H optimum
+        }
+        let chem = chemistry(config);
+        let (_, hh_energy, p_hh, _, _) = chem.pair_probability(&w, hh_a, hh_b);
+        let (_, ho_energy, p_ho, _, _) = chem.pair_probability(&w, ho_a, ho_b);
+        assert_eq!(hh_energy, 436.0);
+        assert_eq!(ho_energy, 463.0);
+        // Electronegativity bonus: |3.44 - 2.20| = 1.24 vs 0 for
+        // H-H; H-O must be strictly more probable at the same
+        // temperature.
+        assert!(
+            p_ho > p_hh,
+            "EN bonus law: H-O {p_ho} should exceed H-H {p_hh}"
+        );
+        // Temperature gaussian: at the pair's optimum the
+        // probability is maximal; 60 degrees away it collapses.
+        let mut cold = world(13);
+        let a = cold.spawn_atom(element_id("H").unwrap(), 50.0, 50.0);
+        let b = cold.spawn_atom(element_id("H").unwrap(), 51.0, 50.0);
+        for v in cold.temp_field.data.iter_mut() {
+            *v = 43.6;
+        }
+        let chem = chemistry(config);
+        let (_, _, p_opt, _, _) = chem.pair_probability(&cold, a, b);
+        for v in cold.temp_field.data.iter_mut() {
+            *v = 103.6; // optimum + 60 (3 sigma)
+        }
+        let (_, _, p_far, _, _) = chem.pair_probability(&cold, a, b);
+        assert!(p_opt > p_far, "temperature optimum law: {p_opt} vs {p_far}");
+        assert!(p_far / p_opt < 0.05, "3 sigma off-peak must be tiny");
+    }
+
+    #[test]
+    fn bond_table_matches_spec_exactly() {
+        // Transcription check: every spec 7.3 row, as written in
+        // the spec text, with the table's element order. If the
+        // table and this test disagree, one of the two
+        // transcriptions is wrong.
+        let e = |s: &str| element_id(s).unwrap();
+        type Orders<'a> = &'a [(u8, f32)];
+        let rows: &[((&str, &str), Orders)] = &[
+            (("H", "H"), &[(1, 436.0)]),
+            (("H", "C"), &[(1, 413.0)]),
+            (("H", "N"), &[(1, 391.0)]),
+            (("H", "O"), &[(1, 463.0)]),
+            (("H", "S"), &[(1, 363.0)]),
+            (("C", "C"), &[(1, 346.0), (2, 614.0), (3, 839.0)]),
+            (("C", "N"), &[(1, 305.0), (2, 615.0), (3, 891.0)]),
+            (("C", "O"), &[(1, 358.0), (2, 799.0)]),
+            (("C", "S"), &[(1, 272.0)]),
+            (("C", "P"), &[(1, 264.0)]),
+            (("N", "N"), &[(1, 163.0), (2, 418.0), (3, 945.0)]),
+            (("N", "O"), &[(1, 201.0), (2, 607.0)]),
+            (("O", "O"), &[(1, 146.0), (2, 498.0)]),
+            (("O", "P"), &[(1, 335.0)]),
+            (("O", "S"), &[(1, 265.0)]),
+            (("P", "P"), &[(1, 201.0)]),
+            (("S", "S"), &[(1, 266.0)]),
+            (("Si", "O"), &[(1, 452.0)]),
+            (("Si", "Si"), &[(1, 222.0)]),
+            (("Fe", "O"), &[(1, 390.0)]),
+        ];
+        let mut count = 0;
+        for ((sa, sb), orders) in rows {
+            for (order, expected) in orders.iter() {
+                count += 1;
+                assert_eq!(
+                    bond_energy(e(sa), e(sb), *order),
+                    *expected,
+                    "{sa}-{sb} order {order}"
+                );
+            }
+        }
+        assert_eq!(count, 29, "the spec 7.3 table has 29 rows");
+    }
+
+    #[test]
+    fn angle_table_covers_every_element() {
+        // Spec 7.4, every element, one bond held:
+        let mut w = world(15);
+        let partner = w.spawn_atom(element_id("H").unwrap(), 90.0, 90.0);
+        let expect = [
+            ("H", None),
+            ("C", Some(109.5)),
+            ("N", Some(107.0)),
+            ("O", Some(104.5)),
+            ("P", Some(109.5)),
+            ("S", Some(103.0)),
+            ("Si", Some(109.5)),
+            ("Fe", Some(90.0)),
+            ("Na", None),
+            ("Cl", None),
+        ];
+        for (symbol, want) in expect {
+            let el = element_id(symbol).unwrap();
+            let a = w.spawn_atom(el, 50.0, 50.0);
+            w.form_bond(a, partner, 1, 200.0);
+            assert_eq!(
+                ideal_angle(&w, a, 1),
+                want,
+                "element {symbol} with one existing bond"
+            );
+            w.break_bond(BondId(w.bonds.len() as u32 - 1));
+        }
+        // Carbon coordination states: one double existing -> 120,
+        // two doubles -> 180.
+        let c = w.spawn_atom(element_id("C").unwrap(), 10.0, 10.0);
+        let o1 = w.spawn_atom(element_id("O").unwrap(), 11.0, 10.0);
+        let o2 = w.spawn_atom(element_id("O").unwrap(), 12.0, 10.0);
+        w.form_bond(c, o1, 2, 799.0);
+        assert_eq!(ideal_angle(&w, c, 1), Some(120.0));
+        w.form_bond(c, o2, 2, 799.0);
+        assert_eq!(ideal_angle(&w, c, 1), Some(180.0));
     }
 }

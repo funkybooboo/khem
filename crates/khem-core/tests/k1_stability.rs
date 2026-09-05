@@ -17,13 +17,17 @@
 //!   commits cite; its assertions encode K1 itself and are expected
 //!   to fail until the constants pass the gate.
 //!
-//! Expected at the literal spec-11 constants (analysis in
-//! docs/research/abstraction-notes.md, findings F1/F2): springs are
-//! marginally past the symplectic-stability limit (sqrt(463 * 0.01)
-//! = 2.15 > 2), so bond oscillations grow geometrically and f32
-//! range is eventually exceeded; thermal breaking is exp(-436 /
-//! (0.008314 * 35)) ~ 0, so nothing ever breaks. The diagnostics
-//! test documents exactly that.
+//! Post-tuning state (rounds 1-3 measured; constants are the
+//! spec-11 tuned set, findings F6-F10 in
+//! docs/research/abstraction-notes.md): springs are inside the
+//! symplectic bound and thermal breaking has a sane temperature
+//! profile, but the substrate still has NO dissipation channel,
+//! so additive kicks random-walk energy upward forever (F8) and
+//! strong_repulsion/r^2 fires cannon-shot impulses that never
+//! dissipate (F9). Expected failure signature: mean bond length
+//! far above equilibrium, KE huge, field refrigerated negative
+//! by formation (F6). The thermostat proposal (abstraction-notes
+//! section 10) is the pending owner decision that unblocks K1.
 
 use khem_core::config::PhysicsConfig;
 use khem_core::observer::{Event, Timing};
@@ -167,8 +171,9 @@ fn k1_diagnostics() {
     eprintln!("  bond len mean/p95:  {mean_len:.3} / {p95_len:.3} A (equilibrium ~1.2)");
     eprintln!("  all finite:         {finite}");
 
-    // K1 itself. Expected to fail at literal constants (F1/F2);
-    // the failure message states the gate, not a bug.
+    // K1 itself. Expected to fail until the structural findings
+    // (F8/F9) are resolved; the failure message states the gate,
+    // not a bug.
     assert!(
         intact as f64 / WATERS as f64 > 0.9,
         "K1 persistence: only {intact}/{WATERS} waters intact"

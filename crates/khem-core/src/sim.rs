@@ -131,6 +131,10 @@ mod tests {
     use crate::observer::ObserverConfig;
     use crate::world::{BoundaryType, ElementId};
 
+    /// Recorded 2026-09-05, after the minimum-image fix (F10). Update
+    /// ONLY with a justification in the commit message.
+    const GOLDEN_HASH: u64 = 0x9F89_64C7_66C5_07C3;
+
     fn observer(interval: u64) -> Observer {
         Observer::new(ObserverConfig {
             khem_version: "0.1.0",
@@ -230,6 +234,107 @@ mod tests {
         // Same seed: identical trajectories through the whole loop
         // (timing fields differ but are not part of the trajectory).
         assert_eq!(run(7), run(7));
+    }
+
+    /// Golden-tick regression: the exact world hash after a fixed
+    /// run. Any behavioral change - constants, tick order, RNG
+    /// discipline, force laws - changes this hash, and updating it
+    /// requires a justification in the commit that does so. This is
+    /// the net that catches accidental substrate drift.
+    #[test]
+    fn golden_tick_regression_hash_is_stable() {
+        fn fnv1a(world: &WorldState) -> u64 {
+            let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+            for atom in &world.atoms {
+                for v in [
+                    atom.x.to_bits() as u64,
+                    atom.y.to_bits() as u64,
+                    atom.vx.to_bits() as u64,
+                    atom.vy.to_bits() as u64,
+                    atom.bond_count as u64,
+                    u64::from(atom.alive),
+                    atom.element.0 as u64,
+                ] {
+                    h ^= v;
+                    h = h.wrapping_mul(0x0000_0100_0000_01b3);
+                }
+            }
+            for bond in &world.bonds {
+                for v in [
+                    bond.atom_a.0 as u64,
+                    bond.atom_b.0 as u64,
+                    bond.order as u64,
+                    u64::from(bond.alive),
+                ] {
+                    h ^= v;
+                    h = h.wrapping_mul(0x0000_0100_0000_01b3);
+                }
+            }
+            h
+        }
+        let config = PhysicsConfig::default();
+        let mut world = crate::pond::primordial_pond(99, config);
+        // A warm pond: chemistry is active, not frozen.
+        for v in world.temp_field.data.iter_mut() {
+            *v = 55.0;
+        }
+        let mut sim = Sim::new(config, observer(1000));
+        let _ = sim.start(&world);
+        for _ in 0..100 {
+            sim.tick(&mut world);
+        }
+        assert_eq!(
+            fnv1a(&world),
+            GOLDEN_HASH,
+            "substrate behavior changed; update this hash only with \
+             a justification in your commit"
+        );
+    }
+
+    #[test]
+    fn ndjson_stream_is_byte_identical_modulo_timing() {
+        // G02 in action: two runs, same seed, full event streams;
+        // equal after zeroing the two wall-clock fields (the
+        // documented carve-out) - everything else byte-identical.
+        fn normalize(event: &Event) -> Event {
+            let zero = Timing {
+                elapsed_ms: 0,
+                ticks_per_sec: 0.0,
+            };
+            match event {
+                Event::Tick { tick, stats, .. } => Event::Tick {
+                    tick: *tick,
+                    timing: zero,
+                    stats: *stats,
+                },
+                Event::End { tick, reason, .. } => Event::End {
+                    tick: *tick,
+                    timing: zero,
+                    reason,
+                },
+                other => other.clone(),
+            }
+        }
+        fn run() -> Vec<String> {
+            let config = PhysicsConfig::default();
+            let mut world = crate::pond::primordial_pond(5, config);
+            for v in world.temp_field.data.iter_mut() {
+                *v = 55.0;
+            }
+            let mut sim = Sim::new(config, observer(3));
+            let mut lines = vec![crate::ndjson::emit(&sim.start(&world))];
+            for _ in 0..10 {
+                for event in sim.tick(&mut world) {
+                    lines.push(crate::ndjson::emit(&normalize(&event)));
+                }
+            }
+            lines.push(crate::ndjson::emit(&normalize(&sim.end(&world))));
+            lines
+        }
+        let a = run();
+        let b = run();
+        assert_eq!(a, b, "byte-identical modulo timing fields");
+        assert!(a.len() > 3, "bond or tick events should have occurred");
     }
 
     #[test]
