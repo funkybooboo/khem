@@ -7,24 +7,63 @@ kernel has already measured against it. Written 2026-09-05, after the
 physics and energy systems landed and the first analytical stability
 findings were made (F1-F5 below).
 
-## Findings so far (kernel reality, pre-measurement)
+## Findings so far (kernel reality, measured)
+
+F1-F5 as first analyzed (below), plus the measured set from the K1
+harness runs (2026-09-05, 2000 ticks, seed 42, literal-then-retuned
+constants; numbers in the tuning commit):
+
+- F6  Formation refrigerates: forming a bond absorbs
+      formation_fraction * E from the local field (spec 7.2), and
+      with breaking frozen (F1) nothing ever returns it. Measured
+      average temperature: -16.7 C (literal) / -9.4 C (retuned)
+      from a 35 C start.
+- F7  The spec's release 0.5 / absorb 0.3 asymmetry created
+      energy: a form+break cycle deposited 0.2 * E into the field
+      from nowhere. Fixed in the tuning commit: both 0.3.
+- F8  No dissipation channel exists anywhere in the spec (checked:
+      springs conserve, wall boundaries reflect, kicks only add).
+      Additive thermal noise therefore random-walks velocities up
+      without bound; measured KE at 2000 ticks: 4.4e13 (literal,
+      spring-pumped) and 3.6e14 (retuned, kicks + repulsion
+      slingshots). K1 cannot pass at any constant setting: this is
+      structural, not tuning.
+- F9  strong_repulsion / r^2 applied directly to velocity (dt = 1)
+      is a cannon: one bonded overlap at r = 0.3 imparts v ~ 10^4
+      A/tick in a single tick, and with no dissipation that energy
+      circulates forever. Measured mean bond length after 2000
+      ticks: 63 A (equilibrium ~1.2).
+
+## Findings first analyzed before measurement
 
 - F1  Literal kB (0.008314) with pond temperatures (15-80 C) makes
       thermal bond breaking impossible: p_break for the weakest bond
       (O-O 146 kJ/mol) is exp(-146/0.66) ~ 0 at 35 C, ~1e-9 even at
       the spec's hottest example temperature. Literal constants give
-      a frozen world by construction.
-- F2  Explicit Euler with dt=1 diverges when sqrt(spring_k) > 2;
-      every bond above 400 kJ/mol qualifies (O-H 463, H-H 436, all
-      double/triple bonds). Literal constants give a numerically
-      exploding world.
+      a frozen world by construction. MEASURED: 0 breaks in 2000
+      ticks. Retuned to kb_scaled 0.45 (breaking only): weak bonds
+      (O-O) now break at 35 C every ~10k ticks, water's O-H
+      essentially never - real chemistry's answer too.
+- F2  The tick order (velocities, then positions) already IS
+      semi-implicit (symplectic) Euler - the first analysis wrongly
+      called it explicit. Symplectic Euler is stable for
+      dt * sqrt(k) < 2; at spring_energy_scale 0.01 every bond over
+      400 kJ/mol violated the bound (O-H: 2.15) and pumped energy
+      geometrically (measured KE 4.4e13). Retuned to 0.002: the
+      strongest tabulated bond (N#N 945) gives 1.375, inside the
+      bound. One physical kB set two incompatible sim scales
+      (breaking rate, kick magnitude) - split into kb_scaled
+      (breaking) and thermal_kick_scale (kicks).
 - F3  The language-spec pond (~70k atoms in 200x200 A) is ~20x
       liquid-water density and 7x the v0.1 performance target.
+      Pond built scaled-down per owner decision.
 - F4  The spec has no non-bonded interaction: unbonded atoms pass
       through each other. No excluded volume, no liquid structure.
+      Queued as a proposal before K2 (section 4 below).
 - F5  TICK events carry wall-clock fields (elapsed_ms,
       ticks_per_sec), so G02 (byte-identical output) needs a
-      documented carve-out for those two fields.
+      documented carve-out for those two fields. DONE in the
+      observer module doc, pending spec revision.
 
 These are expected: ADR-0006 treats the specs as drafts until
 validated against the kernel. The constants retune against harness
@@ -68,17 +107,14 @@ Hutton rejected mass-spring physics for Squirm3 as too costly and
 used random walks on a grid; all his emergent behavior came from
 chemistry rules, not physics. khem keeps springs because bond
 geometry and thermal escape (K3's "strands separate thermally")
-need forces, but the kernel already hit the classic wall: explicit
-Euler is energy-drifting and unstable for oscillators (textbook
-result; see the harmonic-oscillator finite-difference experiments
-and the symplectic-integrator literature - Verlet/leapfrog/velocity
-Verlet are the field's standard for "exceptional stability" at
-large steps).
-
-Lesson for the tuning commit: the fix is not only smaller
-spring_energy_scale; it is a symplectic or semi-implicit update
-(velocity update uses the NEW position forces). Decide with harness
-numbers, cite this section in the commit.
+need forces. The kernel hit the classic wall, corrected by
+measurement (findings F2/F8/F9): the tick order is already
+symplectic Euler (velocities before positions), which is stable for
+dt * sqrt(k) < 2 - but that bound is a necessary condition, not a
+thermostat. Without a dissipation channel, additive noise pumps
+energy forever regardless of integration scheme. The lesson stands:
+canonical-ensemble dynamics need a bath, not just a stable
+integrator (see section 10 below).
 
 ## 4. Non-bonded interactions (the F4 gap)
 
@@ -147,8 +183,35 @@ JohnnyVon (continuous 2D replicators): "much slower to run" -
 cited by Hutton as restricting evolutionary usefulness. khem's
 v0.1 target (10k atoms >500 t/s, continuous space, springs, spatial
 hash) is aggressive but the architecture's scaling hooks exist for
-exactly this reason. Measure against the target after the pond
-lands; do not optimize before.
+exactly this reason. Measured 2026-09-05: the 3422-atom pond runs
+~90 t/s in a debug build, ~2000 ticks in 22 s; the release-build
+number comes with the phase-2 perf pass. No optimization before
+the pond is behaviorally sane.
+
+## 10. Thermostats: the missing bath (finding F8, the K1 blocker)
+
+Every MD system that samples a temperature couples to a bath, not
+just a noise source: Langevin dynamics adds friction alongside
+the random force; the friction term is what makes the noise
+converge to a canonical distribution instead of random-walking
+energy upward. khem's spec 6.1 has noise only.
+
+The coherent fix uses parts the spec already gestures at: region
+declarations set environmental temperatures (the language spec's
+surface/ocean/seafloor regions are bath SETPOINTS), spec 6.1's
+first line says cell temperature IS mean kinetic energy (the
+atom-to-field return channel), and vents/bond events perturb the
+field locally. Proposed model (owner sign-off pending):
+
+    v <- v * (1 - damping) + normal(0, sigma(T_cell))
+
+a Langevin kick with damping toward the local field temperature:
+fast atoms relax toward the cell's temperature, the field diffuses
+and relaxes toward declared region values, energy bookkeeping
+stays closed except at the world boundary (which the spec pins as
+G06: sources only). One new knob (thermostat_damping), spec 6.1
+revision, harness-gated: K1's KE and bond-length metrics must go
+flat with it.
 
 ## What this means for the build order
 

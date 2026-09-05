@@ -111,7 +111,7 @@ impl Physics {
     /// negative absolute temperature is meaningless; sigma would be
     /// NaN).
     fn thermal_kicks(&mut self, world: &mut WorldState) {
-        let kb = self.config.kb_scaled;
+        let kb = self.config.thermal_kick_scale;
         self.kx.clear();
         self.ky.clear();
         for atom in &world.atoms {

@@ -1,14 +1,18 @@
 //! khem - the runtime CLI for the khem artificial-chemistry language.
 //!
-//! Scaffold: the CLI surface from runtime spec section 2 exists
-//! (usage, exit codes, stdout/stderr contract, --seed), but `run` is
-//! not implemented - phase 1 replaces its body with a call into
-//! khem-core: build the hardcoded primordial pond, run the tick
-//! loop, stream NDJSON events. Loading .kem definitions arrives in
-//! phase 3 via the khem-lang crate.
+//! Phase 1: the hardcoded primordial pond (PLAN.md). A file
+//! argument is accepted but not read - the .kem parser arrives in
+//! phase 3 via the khem-lang crate; until then the only knobs are
+//! --seed and the constants in khem-core's config. The binary stays
+//! thin forever: parse arguments, construct a world, run, stream
+//! (see ARCHITECTURE.md).
 //!
-//! The binary stays thin forever: parse arguments, construct a
-//! world, run, stream (see ARCHITECTURE.md).
+//! Streams (runtime spec 2.4, guarantees G10/G11): stdout carries
+//! only NDJSON events, stderr only human diagnostics. stdout is
+//! flushed per tick (spec 9.4) so pipe consumers receive data
+//! promptly. SIGINT handling (exit 3, END with user_interrupt)
+//! arrives with phase 2 hardening; in phase 1 ctrl-c simply kills
+//! the process.
 //!
 //! Argument parsing is hand-rolled std-only for now: phase 1 needs
 //! nothing beyond --seed, and keeping the engine dependency-free
@@ -16,13 +20,21 @@
 //! (--check/--test/--info) may adopt a parser crate; that decision
 //! gets an ADR when it is made.
 
+use std::io::Write;
 use std::process::ExitCode;
 
+use khem_core::ndjson;
+use khem_core::observer::{Observer, ObserverConfig};
+use khem_core::{PhysicsConfig, Sim, pond};
+
 const USAGE: &str = "\
-usage: khem [OPTIONS] <file.kem>
+usage: khem [OPTIONS] [<file.kem>]
+
+phase 1: runs the hardcoded primordial pond; a file argument is
+accepted but ignored (the .kem parser arrives in phase 3)
 
 options:
-  --seed <N>   override the seed from the run declaration
+  --seed <N>   set the run seed (default 42)
   --version    print version and exit
   --help       print this help and exit
 
@@ -31,6 +43,11 @@ exit codes (runtime spec section 2.3):
   1  validation error (bad .kem files)
   2  runtime error
   3  user interrupt";
+
+/// Phase-1 run length: hardcoded (no run declaration to read yet).
+const MAX_TICKS: u64 = 1_000_000;
+/// Tick event interval; the language-spec run example uses 1000.
+const TICK_INTERVAL: u64 = 1000;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -73,18 +90,56 @@ fn main() -> ExitCode {
         i += 1;
     }
 
-    match path {
-        Some(path) => run(path, seed),
-        None => {
-            eprintln!("{USAGE}");
-            ExitCode::from(1)
-        }
-    }
+    run(path, seed)
 }
 
-/// Runs a simulation. Phase 1 wires this into khem-core (see PLAN.md).
-fn run(path: &str, seed: Option<u64>) -> ExitCode {
-    eprintln!("khem: runtime not implemented yet (got {path:?}, seed {seed:?})");
-    eprintln!("khem: phase 1 wires run() into khem-core - see PLAN.md");
-    ExitCode::from(2)
+/// Runs the hardcoded primordial pond and streams NDJSON to stdout
+/// (runtime spec sections 2, 3, 5).
+fn run(path: Option<&str>, seed: Option<u64>) -> ExitCode {
+    if let Some(path) = path {
+        eprintln!(
+            "khem: phase 1: {path:?} not read - parser arrives in phase 3; \
+             running the hardcoded primordial pond"
+        );
+    }
+    let seed = seed.unwrap_or(42);
+    let config = PhysicsConfig::default();
+    let mut world = pond::primordial_pond(seed, config);
+    let observer = Observer::new(ObserverConfig {
+        khem_version: env!("CARGO_PKG_VERSION"),
+        run_name: "primordial_pond".to_string(),
+        world_name: "primordial_pond".to_string(),
+        seed,
+        tick_interval: TICK_INTERVAL,
+    });
+    let mut sim = Sim::new(config, observer);
+
+    let stdout = std::io::stdout();
+    let mut out = stdout.lock();
+    let start = sim.start(&world);
+    if write_event(&mut out, &start).is_err() {
+        return ExitCode::from(2);
+    }
+    for _ in 0..MAX_TICKS {
+        let events = sim.tick(&mut world);
+        let wrote = events
+            .iter()
+            .try_for_each(|event| write_event(&mut out, event));
+        if wrote.is_err() || out.flush().is_err() {
+            // A closed pipe (e.g. `khem ... | head`) surfaces here;
+            // phase-1 behavior: exit 2 with a stderr note (spec 2.3
+            // has no dedicated code; revisited with phase 2).
+            eprintln!("khem: stdout write failed; stopping");
+            return ExitCode::from(2);
+        }
+    }
+    let end = sim.end(&world);
+    if write_event(&mut out, &end).is_err() {
+        return ExitCode::from(2);
+    }
+    ExitCode::SUCCESS
+}
+
+fn write_event(out: &mut impl Write, event: &khem_core::Event) -> std::io::Result<()> {
+    writeln!(out, "{}", ndjson::emit(event))
 }

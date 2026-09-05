@@ -29,10 +29,32 @@ impl UvSensitivity {
 /// Every tunable constant from runtime spec section 11.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PhysicsConfig {
-    /// Boltzmann constant, scaled to sim units.
+    /// Boltzmann constant for THERMAL BREAKING (spec 7.1), scaled to
+    /// sim units. Retuned 2026-09-05 from the literal 0.008314: with
+    /// the physical kB, p_break = exp(-E/(kB*T)) is ~1e-76 for every
+    /// bond at pond temperatures - the measured K1 harness ran 2000
+    /// ticks with zero breaks (frozen inertness, finding F1). At
+    /// 0.45 the phenomenology straddles the table: weak bonds (O-O
+    /// 146) break at 35 C every ~10k ticks, water's O-H (463)
+    /// essentially never - which is real chemistry's answer too.
+    /// Note the split from thermal_kick_scale: one physical kB set
+    /// two incompatible sim scales (breaking rate and kick
+    /// magnitude), so they decouple as of the tuning commit.
     pub kb_scaled: f32,
+    /// Velocity-kick scale (spec 6.1: sigma = sqrt(k * T / mass)).
+    /// Kept at the literal Boltzmann value when kb_scaled retuned:
+    /// kicks must stay small against bond lengths, a different
+    /// constraint than breaking rates. Tuning knob.
+    pub thermal_kick_scale: f32,
     pub diffusion_rate: f32,
     pub pressure_sensitivity: f32,
+    /// Spring constant scale: k = bond.energy * scale (spec 6.3).
+    /// Retuned 2026-09-05 from 0.01: the tick integrator is
+    /// semi-implicit Euler, stable for dt * sqrt(k) < 2; at 0.01
+    /// every bond over 400 kJ/mol violated the bound (O-H 463:
+    /// 2.15) and the measured K1 harness KE reached 4.4e13 in 2000
+    /// ticks (finding F2). At 0.002 the strongest tabulated bond
+    /// (N#N 945) gives 1.375, inside the bound with margin.
     pub spring_energy_scale: f32,
     pub strong_repulsion: f32,
     pub convection_rate: f32,
@@ -44,6 +66,12 @@ pub struct PhysicsConfig {
     pub bond_search_radius: f32,
     /// Per eligible pair per tick.
     pub base_formation_rate: f32,
+    /// Fraction of bond energy released into the temperature field
+    /// on breaking (spec 7.1). Set equal to formation_fraction in
+    /// the 2026-09-05 tuning: the spec's 0.5/0.3 asymmetry created
+    /// energy - a form+break cycle deposited 0.2 * E into the field
+    /// from nowhere (finding F7). Equal fractions conserve through
+    /// the cycle; the field still differs because kinetics differ.
     pub release_fraction: f32,
     pub formation_fraction: f32,
     pub en_bonus: f32,
@@ -74,16 +102,17 @@ pub struct PhysicsConfig {
 impl Default for PhysicsConfig {
     fn default() -> Self {
         Self {
-            kb_scaled: 0.008314,
+            kb_scaled: 0.45,
+            thermal_kick_scale: 0.008314,
             diffusion_rate: 0.1,
             pressure_sensitivity: 0.01,
-            spring_energy_scale: 0.01,
+            spring_energy_scale: 0.002,
             strong_repulsion: 1000.0,
             convection_rate: 0.001,
             vent_heat_rate: 0.1,
             bond_search_radius: 4.0,
             base_formation_rate: 0.001,
-            release_fraction: 0.5,
+            release_fraction: 0.3,
             formation_fraction: 0.3,
             en_bonus: 0.1,
             geometry_sigma: 30.0,
@@ -109,7 +138,13 @@ mod tests {
     #[test]
     fn defaults_match_spec() {
         let c = PhysicsConfig::default();
-        assert_eq!(c.kb_scaled, 0.008314);
+        assert_eq!(c.kb_scaled, 0.45);
+        assert_eq!(c.thermal_kick_scale, 0.008314);
+        assert_eq!(c.spring_energy_scale, 0.002);
+        assert_eq!(
+            c.release_fraction, c.formation_fraction,
+            "cycle conservation"
+        );
         assert_eq!(c.diffusion_rate, 0.1);
         assert_eq!(c.bond_search_radius, 4.0);
         assert_eq!(c.formation_fraction, 0.3);
