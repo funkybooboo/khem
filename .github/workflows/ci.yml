@@ -1,0 +1,26 @@
+# Basic CI. The gate has a single source of truth: this workflow runs
+# `mise run check`, the same command a laptop runs, and the toolchain
+# comes from mise.toml via jdx/mise-action - no separately-pinned
+# rust version to drift out of sync.
+#
+# Dormant until the repo gets a remote (PLAN.md, open decisions).
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@v4
+      - uses: Swatinem/rust-cache@v2
+      - name: "gate: fmt --check, clippy -D warnings, test --locked"
+        run: mise run check

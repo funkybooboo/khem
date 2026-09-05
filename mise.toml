@@ -1,0 +1,43 @@
+# khem toolchain pin and task registry.
+#
+# One source of truth for the toolchain: mise installs exactly this
+# rust everywhere - laptops and CI alike (CI uses jdx/mise-action and
+# runs the same `mise run check` gate). G02 (byte-identical runs from
+# the same seed) is only meaningful against a pinned compiler, so the
+# pin is a determinism decision, not just convenience.
+#
+# profile = "default" pulls in clippy and rustfmt (mise's rust
+# backend otherwise defaults to minimal, which has neither). Known
+# mise quirk jdx/mise#10327: changes to rust profile/components can be
+# ignored by an existing cache - run `mise install --force` after
+# editing them.
+
+[tools]
+rust = { version = "1.98.0", profile = "default" }
+
+# CI mirror: `mise run check` is exactly what GitHub Actions runs
+# (.github/workflows/ci.yml).
+
+[tasks.build]
+description = "cargo build --workspace"
+run = "cargo build --workspace"
+
+[tasks.test]
+description = "cargo test --workspace (locked)"
+run = "cargo test --workspace --locked"
+
+[tasks.fmt]
+description = "format everything"
+run = "cargo fmt --all"
+
+[tasks.lint]
+description = "clippy across the workspace, warnings are errors"
+run = "cargo clippy --workspace --all-targets -- -D warnings"
+
+[tasks.check]
+description = "the CI gate, locally: fmt --check + clippy + test"
+run = [
+    "cargo fmt --all --check",
+    "cargo clippy --workspace --all-targets -- -D warnings",
+    "cargo test --workspace --locked",
+]

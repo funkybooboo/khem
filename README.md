@@ -122,6 +122,7 @@ How khem builds on prior work, compressed:
     |-- README.md            this file: identity, prior work, is / is not
     |-- PLAN.md              build order: kernel first, language later
     |-- ARCHITECTURE.md      target crate map, dependency rules, scaling plan
+    |-- mise.toml            toolchain pin + tasks (mise run check = the CI gate)
     |-- docs/
     |   |-- adr/             architecture decision records (the WHY)
     |   |-- specs/           canonical language + runtime specs
@@ -135,3 +136,16 @@ How khem builds on prior work, compressed:
 Everything in the repo is ASCII. The founding conversation and the
 conversation-era spec drafts are preserved in git history only
 (ADR-0010).
+
+## Development
+
+    mise install          # pinned toolchain (rust 1.98.0, from mise.toml)
+    mise run build        # cargo build --workspace
+    mise run test         # cargo test --workspace --locked
+    mise run fmt           # format
+    mise run lint          # clippy, warnings are errors
+    mise run check         # the CI gate, locally
+
+CI (.github/workflows/ci.yml) runs `mise run check` on every push and
+pull request, using the same mise-pinned toolchain. It goes live when
+the repo gets a remote hosting decision (PLAN.md, open decisions).
