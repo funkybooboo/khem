@@ -13,18 +13,29 @@ So the build order is deliberately backwards from the founding
 conversation: kernel before language, physics before parsers, evidence
 before specs.
 
-## Where this repo stands (2026-09-05)
+## Where this repo stands (2026-09-05, end of the phase-1 kernel session)
 
 Handoff snapshot; the phases below are the plan, this is the state:
 
-- canonical specs (docs/specs/) and eleven ADRs (docs/adr/); the
+- canonical specs (docs/specs/) and twelve ADRs (docs/adr/); the
   founding conversation is preserved in git history only (ADR-0010)
-- khem-core: data model, element table, physics constants,
-  deterministic RNG, and spatial index landed; the systems are
-  documented stubs (phase 1 work)
-- khem bin: CLI skeleton (usage, exit codes, --seed); run() is a stub
+- the phase-1 kernel is BUILT and runs end to end: physics,
+  chemistry (spec 7.3/7.4 tables + Boltzmann/UV breaking,
+  geometry/temperature/EN-gated formation), energy, observer with
+  union-find molecule detection, hand-rolled NDJSON v:1 emitter,
+  the Sim nine-step tick loop, the hardcoded pond, and the khem bin
+  streaming real output (release: ~680 t/s at 3.4k atoms)
+- the K1 harness measured the substrate twice (literal constants,
+  then tuning round 1); all findings live in
+  docs/research/abstraction-notes.md (F1-F9)
+- K1 IS NOT PASSED. Measured structural blocker: the spec has no
+  dissipation channel, so additive thermal kicks random-walk energy
+  up forever (KE 3.6e14, mean bond length 63 A after 2000 ticks);
+  strong_repulsion/r^2 compounds it (v ~ 1e4 per overlap). Constants
+  cannot fix this; the Langevin thermostat proposal
+  (abstraction-notes section 10) awaits the owner decision below
 - toolchain pinned in mise.toml; `mise run check` green locally
-  (fmt, clippy, 20 tests) and identical in CI
+  (fmt, clippy, 70 tests) and identical in CI
 - hosted at github.com/funkybooboo/khem, public (ADR-0011)
 
 ## Phase 0 - literature grounding (in progress)
@@ -188,11 +199,19 @@ All of this is enabled by choices already fixed (runtime spec section
 
 ## Open decisions (owner: nate)
 
+- [ ] thermostat: Langevin-style damping toward the local field
+      temperature (abstraction-notes section 10) - the measured K1
+      blocker. Proposal: v <- v*(1-damping) + normal(0, sigma(T));
+      region declarations become bath setpoints. One knob,
+      spec-6.1 revision, harness-gated (KE and bond length must go
+      flat)
+- [ ] non-bonded soft repulsion (finding F4): drafted before K2
+      work, lands only with harness evidence, as its own commit
+- [ ] first world file name: primordial_pond.kem ("warm little pond"
+      is Darwin's phrase for the setting)
 - [x] license: RESOLVED 2026-09-05 - MIT (LICENSE at root, SPDX MIT in
       crate metadata; ADR-0012)
 - [x] remote hosting: RESOLVED 2026-09-05 - github.com/funkybooboo/khem,
       public (ADR-0011; CI green on the very first push)
-- [ ] first world file name: primordial_pond.kem ("warm little pond"
-      is Darwin's phrase for the setting)
 - [x] phase 1 placement: RESOLVED 2026-09-04 - kernel code lands in
       the khem-core lib, driven by the khem bin on main (ARCHITECTURE.md)
