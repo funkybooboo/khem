@@ -36,6 +36,10 @@ pub struct PhysicsConfig {
     pub spring_energy_scale: f32,
     pub strong_repulsion: f32,
     pub convection_rate: f32,
+    /// Vent heat injection per tick (spec 8.1). Phase-1 addition:
+    /// the spec's formula uses this constant but section 11 omits
+    /// it; revision adds it here. Pure tuning knob.
+    pub vent_heat_rate: f32,
     /// Bond-formation search radius, angstroms.
     pub bond_search_radius: f32,
     /// Per eligible pair per tick.
@@ -63,6 +67,7 @@ impl Default for PhysicsConfig {
             spring_energy_scale: 0.01,
             strong_repulsion: 1000.0,
             convection_rate: 0.001,
+            vent_heat_rate: 0.1,
             bond_search_radius: 4.0,
             base_formation_rate: 0.001,
             release_fraction: 0.5,
@@ -92,6 +97,8 @@ mod tests {
         assert_eq!(c.diffusion_rate, 0.1);
         assert_eq!(c.bond_search_radius, 4.0);
         assert_eq!(c.formation_fraction, 0.3);
+        assert_eq!(c.convection_rate, 0.001);
+        assert_eq!(c.vent_heat_rate, 0.1);
         assert_eq!(c.compaction_interval, 10_000);
         assert_eq!(c.surface_threshold, 0.9);
         assert_eq!(c.uv_sensitivity.of_order(2), 0.0003);

@@ -37,10 +37,12 @@ pub mod sim;
 pub mod spatial;
 pub mod world;
 
+pub use chemistry::ChemistrySystem;
 pub use config::{PhysicsConfig, UvSensitivity};
 pub use elements::{ELEMENTS, ElementProperties};
-pub use energy::{EnergySource, SourceKind};
+pub use energy::{Energy, EnergySource, EnergySystem, SourceKind};
 pub use observer::{Event, EventKind};
+pub use physics::{Physics, PhysicsSystem};
 pub use rng::Rng;
 pub use spatial::SpatialIndex;
 pub use world::{
