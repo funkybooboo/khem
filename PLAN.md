@@ -25,7 +25,7 @@ Handoff snapshot; the phases below are the plan, this is the state:
 - khem bin: CLI skeleton (usage, exit codes, --seed); run() is a stub
 - toolchain pinned in mise.toml; `mise run check` green locally
   (fmt, clippy, 20 tests) and identical in CI
-- hosted at github.com/funkybooboo/khem, private (ADR-0011)
+- hosted at github.com/funkybooboo/khem, public (ADR-0011)
 
 ## Phase 0 - literature grounding (in progress)
 
@@ -188,9 +188,10 @@ All of this is enabled by choices already fixed (runtime spec section
 
 ## Open decisions (owner: nate)
 
-- [ ] license (MIT suggested for a thesis-adjacent research artifact)
+- [x] license: RESOLVED 2026-09-05 - MIT (LICENSE at root, SPDX MIT in
+      crate metadata; ADR-0012)
 - [x] remote hosting: RESOLVED 2026-09-05 - github.com/funkybooboo/khem,
-      created private (ADR-0011; CI went live on first push)
+      public (ADR-0011; CI green on the very first push)
 - [ ] first world file name: primordial_pond.kem ("warm little pond"
       is Darwin's phrase for the setting)
 - [x] phase 1 placement: RESOLVED 2026-09-04 - kernel code lands in

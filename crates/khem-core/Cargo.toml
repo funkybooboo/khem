@@ -3,6 +3,7 @@ name = "khem-core"
 description = "Simulation engine for khem: atoms, bonds, systems, tick loop"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 publish = false
 
 [lints]

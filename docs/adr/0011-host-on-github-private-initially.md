@@ -1,7 +1,7 @@
 # ADR-0011: Host on GitHub, private initially
 
 Date: 2026-09-05
-Status: Accepted
+Status: Accepted; visibility changed to public 2026-09-05 (owner decision, same day as creation)
 
 ## Context
 

@@ -147,5 +147,5 @@ conversation-era spec drafts are preserved in git history only
     mise run check         # the CI gate, locally
 
 CI (.github/workflows/ci.yml) runs `mise run check` on every push and
-pull request at github.com/funkybooboo/khem (private, ADR-0011), using
+pull request at github.com/funkybooboo/khem (public, ADR-0011), using
 the same mise-pinned toolchain.

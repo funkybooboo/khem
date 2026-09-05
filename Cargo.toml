@@ -5,6 +5,8 @@ members = ["crates/khem", "crates/khem-core"]
 [workspace.package]
 version = "0.0.1"
 edition = "2024"
+license = "MIT"
+repository = "https://github.com/funkybooboo/khem"
 
 [workspace.dependencies]
 khem-core = { path = "crates/khem-core" }
