@@ -21,11 +21,16 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: jdx/mise-action@v4
-      # No cargo-cache step (rust-cache et al.) on purpose: the workspace
-      # has zero registry dependencies, mise installs the pinned toolchain
-      # in ~20s, and restoring a partial ~/.cargo / ~/.rustup cache over
-      # mise's install broke rustup component availability on the second
-      # run (observed 2026-09-05: "cargo-fmt is not installed"). Revisit
-      # when real dependencies arrive.
+      # ubuntu-latest ships a rustup-managed toolchain in a minimal
+      # profile (rustc/cargo only). mise sees the pinned version as
+      # already installed and does not add components (jdx/mise#6000),
+      # so ensure them explicitly - idempotent, and still pinned via
+      # RUSTUP_TOOLCHAIN=1.98.0.
+      - name: ensure rustup components
+        run: mise exec -- rustup component add rustfmt clippy
+      # No cargo-cache step: zero registry dependencies and mise
+      # installs the pinned toolchain in ~20s; caches layered over
+      # toolchain installs caused component loss (observed
+      # 2026-09-05). Revisit when real dependencies arrive.
       - name: "gate: fmt --check, clippy -D warnings, test --locked"
         run: mise run check
