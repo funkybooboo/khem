@@ -22,10 +22,9 @@
 //! - Formation chooses order 2 when both atoms have 2+ free slots,
 //!   else order 1 (spec 7.2). Triples are never formed in v0; they
 //!   can only exist if seeded into the initial world.
-//! - Events pushed here are minimal (kind + tick) until the observer
-//!   module lands its payload model and NDJSON serialization; the
-//!   run declaration's bond_events flag (language spec) is also an
-//!   observer concern.
+//! - Events pushed here carry full schema payloads (spec 3.3); the
+//!   run declaration's bond_events output flag (language spec) is
+//!   an observer/bin concern, applied when the stream is written.
 //!
 //! RNG discipline (ADR-0005): after the physics system's draws,
 //! break_bonds consumes exactly one uniform per LIVE bond per tick,
@@ -38,7 +37,7 @@
 //! Spec: docs/specs/runtime-spec.md, section 7 (Chemistry System).
 
 use crate::config::PhysicsConfig;
-use crate::observer::{Event, EventKind};
+use crate::observer::Event;
 use crate::world::{AtomId, BondId, ElementId, WorldState};
 
 /// The chemistry system interface, decomposed per the tick order
@@ -264,13 +263,17 @@ impl ChemistrySystem for Chemistry {
                 // Spec 7.1: release stored heat into the field. The
                 // field may go negative where formation absorbed more
                 // than was there; thermal kicks clamp at zero and
-                // diffusion smooths it (documented v0 behavior).
-                world
-                    .temp_field
-                    .add(mx, my, energy * self.config.release_fraction);
-                world.event_queue.push(Event {
-                    kind: EventKind::BondBroken,
+                // diffusion smooths (documented v0 behavior).
+                let released = energy * self.config.release_fraction;
+                world.temp_field.add(mx, my, released);
+                world.event_queue.push(Event::BondBroken {
                     tick: world.tick,
+                    bond_id: i as u32,
+                    elem_a: world.atom(a).element,
+                    elem_b: world.atom(b).element,
+                    energy_released: released,
+                    x: mx,
+                    y: my,
                 });
             }
         }
@@ -344,18 +347,25 @@ impl ChemistrySystem for Chemistry {
                     * t_factor
                     * (1.0 + en * self.config.en_bonus);
                 if world.rng.f01() < p as f64
-                    && world.form_bond(a_id, b_id, order, energy).is_some()
+                    && let Some(bond_id) = world.form_bond(a_id, b_id, order, energy)
                 {
                     // Spec 7.2: formation absorbs heat. May go
                     // negative; see break_bonds.
-                    world.temp_field.add(
-                        (ax + bx) * 0.5,
-                        (ay + by) * 0.5,
-                        -energy * self.config.formation_fraction,
-                    );
-                    world.event_queue.push(Event {
-                        kind: EventKind::BondFormed,
+                    let (mx, my) = ((ax + bx) * 0.5, (ay + by) * 0.5);
+                    world
+                        .temp_field
+                        .add(mx, my, -energy * self.config.formation_fraction);
+                    world.event_queue.push(Event::BondFormed {
                         tick: world.tick,
+                        bond_id: bond_id.0,
+                        atom_a: a_id,
+                        atom_b: b_id,
+                        elem_a: a_el,
+                        elem_b: b_el,
+                        order,
+                        energy,
+                        x: mx,
+                        y: my,
                     });
                 }
             }
@@ -469,11 +479,10 @@ mod tests {
         let released = w.temp_field.get(50.5, 50.0);
         assert!((released - 10_000.5).abs() < 1.0, "released {released}");
         // One break event queued.
-        assert!(
-            w.event_queue
-                .iter()
-                .any(|e| e.kind == EventKind::BondBroken)
-        );
+        assert!(matches!(
+            w.event_queue.first(),
+            Some(Event::BondBroken { .. })
+        ));
     }
 
     #[test]
@@ -524,11 +533,10 @@ mod tests {
         // Formation absorbed heat at the midpoint.
         let after = w.temp_field.get(51.0, 50.0);
         assert!(after < 43.6, "formation must cool, got {after}");
-        assert!(
-            w.event_queue
-                .iter()
-                .any(|e| e.kind == EventKind::BondFormed)
-        );
+        assert!(matches!(
+            w.event_queue.first(),
+            Some(Event::BondFormed { .. })
+        ));
     }
 
     #[test]
