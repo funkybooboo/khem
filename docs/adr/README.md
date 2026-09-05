@@ -25,3 +25,4 @@ Index:
 - 0008 Workspace crate layout
 - 0009 Canonical specs; history quarantined
 - 0010 Git history is the only archive
+- 0011 Host on GitHub, private initially

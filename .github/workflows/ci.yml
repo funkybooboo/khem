@@ -3,7 +3,7 @@
 # comes from mise.toml via jdx/mise-action - no separately-pinned
 # rust version to drift out of sync.
 #
-# Dormant until the repo gets a remote (PLAN.md, open decisions).
+# Repo: github.com/funkybooboo/khem, private (ADR-0011).
 
 name: ci
 
