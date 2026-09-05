@@ -21,6 +21,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: jdx/mise-action@v4
-      - uses: Swatinem/rust-cache@v2
+      # No cargo-cache step (rust-cache et al.) on purpose: the workspace
+      # has zero registry dependencies, mise installs the pinned toolchain
+      # in ~20s, and restoring a partial ~/.cargo / ~/.rustup cache over
+      # mise's install broke rustup component availability on the second
+      # run (observed 2026-09-05: "cargo-fmt is not installed"). Revisit
+      # when real dependencies arrive.
       - name: "gate: fmt --check, clippy -D warnings, test --locked"
         run: mise run check
