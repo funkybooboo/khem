@@ -47,6 +47,19 @@ pub struct PhysicsConfig {
     pub release_fraction: f32,
     pub formation_fraction: f32,
     pub en_bonus: f32,
+    /// Angular tolerance of the VSEPR geometry factor, degrees. v0
+    /// fill: spec 7.2 requires a geometry factor but names no
+    /// tolerance. Tuning knob.
+    pub geometry_sigma: f32,
+    /// Temperature-factor peak scale: T_opt = t_opt_scale *
+    /// bond_energy. v0 fill: spec 7.2 says "gaussian peaked at an
+    /// optimal temperature for the element pair" but defines no
+    /// optimum; stronger bonds tolerate hotter formation. Tuning
+    /// knob.
+    pub t_opt_scale: f32,
+    /// Temperature-factor gaussian width, degrees. v0 fill as
+    /// above. Tuning knob.
+    pub t_width: f32,
     /// Spatial hash cell size, angstroms.
     pub spatial_cell_size: f32,
     /// Field grid cell size, angstroms.
@@ -73,6 +86,9 @@ impl Default for PhysicsConfig {
             release_fraction: 0.5,
             formation_fraction: 0.3,
             en_bonus: 0.1,
+            geometry_sigma: 30.0,
+            t_opt_scale: 0.1,
+            t_width: 20.0,
             spatial_cell_size: 5.0,
             field_cell_size: 10.0,
             compaction_interval: 10_000,
@@ -101,6 +117,9 @@ mod tests {
         assert_eq!(c.vent_heat_rate, 0.1);
         assert_eq!(c.compaction_interval, 10_000);
         assert_eq!(c.surface_threshold, 0.9);
+        assert_eq!(c.geometry_sigma, 30.0);
+        assert_eq!(c.t_opt_scale, 0.1);
+        assert_eq!(c.t_width, 20.0);
         assert_eq!(c.uv_sensitivity.of_order(2), 0.0003);
         assert_eq!(c.uv_sensitivity.of_order(0), 0.0);
     }

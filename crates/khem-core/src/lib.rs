@@ -37,7 +37,7 @@ pub mod sim;
 pub mod spatial;
 pub mod world;
 
-pub use chemistry::ChemistrySystem;
+pub use chemistry::{Chemistry, ChemistrySystem, bond_energy};
 pub use config::{PhysicsConfig, UvSensitivity};
 pub use elements::{ELEMENTS, ElementProperties};
 pub use energy::{Energy, EnergySource, EnergySystem, SourceKind};
