@@ -118,7 +118,51 @@ nanoseconds for 10^5-10^6 atoms; evolution needs many orders of
 magnitude more. khem trades fidelity for reachable timescales - that
 trade IS the project.
 
+### Integration-scheme literature (feeds the tuning commit)
+
+- Jackson, A. ( undergrad experiment writeup, UCL): Finite-Difference
+  Simulation of a One-Dimensional Harmonic Oscillator - explicit
+  Euler "far too inaccurate and unstable for serious use" next to
+  velocity-Verlet and Gear predictor-corrector.
+  https://anjackson.net/page/files/y3-pm1-fd-ho.pdf
+- Skeel, R.D. et al. (1997). Common Molecular Dynamics Algorithms
+  Revisited: Accuracy and Optimal Time Steps of Stormer-Leapfrog
+  Integrators. J. Comput. Phys. 142:109-130. doi:10.1006/jcph.1997.5740
+- Skeel, R.D. (1998). Stability of molecular dynamics simulations of
+  classical systems. J. Chem. Phys. 109:3435. doi:10.1063/1.4768891
+  (shadow Hamiltonian: why symplectic integrators do not drift.)
+
+### Coarse-grained lipid self-assembly (the non-bonded requirement)
+
+- Huang, J. et al. (2012) and follow-ups: four-bead flexible lipid
+  model, MD lipids + multiparticle-collision solvent;
+  doi:10.1063/1.4736414 surveys the family.
+- Marrink group solvent-free CG POPC model: bonded + nonbonded +
+  effective hydrophobic cohesion. J. Phys. Chem. B
+  114:doi:10.1021/jp102543j
+- Arnarez, D. et al. soft solvent-free lipid model (weighted-density
+  functional nonbonded terms). arXiv:1002.2072
+- Steltenkamp, S. et al. generic monolayer/bilayer model, "phantom
+  solvent". arXiv:physics/0608226
+
+Lesson recorded in abstraction-notes.md section 4: every model that
+self-assembles amphiphiles uses explicit non-bonded potentials; khem's
+spring-only substrate cannot pass K2 without a documented addition.
+
 ## Digital evolution platforms - the evolution prior art
+
+- Hutton, T.J. (2002). Evolvable Self-Replicating Molecules in an
+  Artificial Chemistry. Artificial Life 8(4):361-376.
+  doi:10.1162/106454602321202417 (Squirm3: emergence, dirtiness,
+  resource depletion, flood selection - the K3-K5 dress rehearsal.)
+- Hutton, T.J. (2007). Evolvable Self-Reproducing Cells in a
+  Two-Dimensional Artificial Chemistry. Artificial Life 13(1):11-30.
+  doi:10.1162/artl.2007.13.1.11
+  https://github.com/timhutton/squirm3
+- Smith, A., Turney, P., Ewaschuk, R. (2002). JohnnyVon:
+  Self-replicating automata in continuous two-dimensional space.
+  NRC Technical Report ERB-1099 (continuous space at evolutionary
+  timescales; the perf cautionary tale.)
 
 - Ofria, C., Wilke, C.O. (2004). Avida: A Software Platform for
   Research in Computational Evolutionary Biology. Artificial Life
