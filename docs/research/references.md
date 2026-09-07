@@ -189,7 +189,41 @@ spring-only substrate cannot pass K2 without a documented addition.
 
 ## Similar-but-different software
 
-See README.md ("Relationship to prior work") for the comparison table
-covering Kappa, BioNetGen, SBML, MCell, LAMMPS/ReaxFF, SimSoup,
-Stringmol, Avida, The Bibites, Ribossome, Primordial, Genesis Engine,
-the protocell research sims, and the Conway/Golly lineage.
+khem assembles pieces that all exist separately; nobody has combined
+them. What each project is, what khem builds on, and where khem parts
+ways:
+
+| Project | What it is | khem builds on | khem differs |
+|---|---|---|---|
+| Kappa (kappalanguage.org) | rule-based language for interacting molecular agents + KaSim simulator | DSL/runtime split; rules over agents with binding sites (khem's ports/wire) | models known biochemistry at protein granularity; no space, energy, or evolution |
+| BioNetGen (github.com/RuleWorld/bionetgen) | rule-based biochemical modeling | rule composition, network-free simulation | reaction networks, no spatial matter substrate |
+| SBML (sbml.org) | standard exchange format for biochemical models | auditable text models consumed by many runtimes | describes known networks; no emergence |
+| MCell + MDL (mcell.org) | spatial stochastic particle biochemistry with a model description language | MDL precedent, reaction-diffusion in space | abstract molecule species, not bonded atoms |
+| LAMMPS + ReaxFF (docs.lammps.org) | reactive molecular dynamics, real bond-order potentials | atoms forming/breaking bonds under physics | femtosecond fidelity, orders of magnitude too slow for evolution; no DSL, no observer |
+| SimSoup (simsoup.info) | artificial chemistry for origin-of-life research | the motivation; structure-driven molecule properties | molecule-type interaction networks; no atom/bond spatial substrate |
+| Stringmol (stringmol.york.ac.uk) | automata chemistry for molecular evolution | artificial chemistry + evolution in silico | molecules are strings, not spatial atoms |
+| Avida (avida.devosoft.org) | digital evolution platform | seeded self-replicators, open-ended evolution, measurement discipline | organisms are programs competing for CPU cycles; no matter or chemistry |
+| The Bibites (thebibites.com) | real-time artificial life with neural-net creatures | the "watch evolution happen" experience goal | organism abstractions pre-coded; GUI-first, not a substrate |
+| Ribossome (github.com/Manalokosdev/Ribossome) | GPU evolution sim, RNA-inspired genome-to-body translation | Rust runtime, RNA-world inspiration, emergent ecosystems | abstract codon genetics, GPU-bound, biology pre-programmed |
+| Primordial (github.com/itzrnvr/primordial) | browser origin-of-life sim | seeded cells around a hydrothermal vent | JS/3D, biology pre-programmed, no chemistry substrate |
+| Genesis Engine (github.com/AVADSA25/genesis-engine) | protocell study with Monte Carlo + published preprint | protocell dynamics in warm-pond-class models | single-hypothesis study, not a platform; its withdrawn headline result is khem's methodological cautionary tale |
+| lifeSimulatoR (github.com/NoushinN/lifesimulatoR), protocell sims (github.com/chrisk60331/protocell-simulation) | simplified origin-of-life scenario models | protocell kinetics, OoL motivation | equation/statistical layer, not a runtime or language |
+| Conway's Game of Life / Golly (golly.sourceforge.net) | cellular automata engine | the whole framing: minimal rules + seeded patterns -> emergence | no chemistry, genomes, or evolution |
+
+Compressed:
+
+- From Conway: minimal rules + seeded patterns; emergence as the
+  only content.
+- From artificial chemistries (Dittrich taxonomy, SimSoup,
+  Stringmol): chemistry as evolution's ground layer; molecule
+  properties derived from structure.
+- From RNA-world theory and protocell research (Gilbert, Joyce,
+  Szostak, Ganti): the classic seed - replicator plus compartment.
+- From rule-based modeling (Kappa, BioNetGen, SBML, MCell's MDL):
+  the DSL/runtime split; grammar lessons for .kem.
+- From reactive MD (ReaxFF): the fidelity ceiling this project steps
+  back from - real reactive atom chemistry is six-plus orders of
+  magnitude too slow for evolutionary timescales.
+- From digital evolution (Avida): measurement discipline.
+- From Unix: do one thing; stream structured output; compose with
+  pipes.

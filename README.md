@@ -1,151 +1,117 @@
 # khem
 
-khem is an artificial-chemistry runtime and a small language for seeding
-worlds with simple molecular life, then watching what the rules do.
+khem simulates 2D worlds of atoms - real elements, real
+chemistry, thermodynamics deciding what forms and what breaks.
+The runtime has no concept of a cell, a genome, or reproduction:
+if anything alive appears, it built itself from the rules.
 
-Conway's Game of Life gave us a grid, a handful of rules, and seeded
-patterns - and complexity emerged. khem asks the same question one level
-down: in a 2D world of atoms with real valence, bond energies, VSEPR
-geometry, thermal noise, and a few energy sources, what happens when you
-seed a minimal RNA-world cell - an RNA strand inside a lipid vesicle -
-and let the rules run for a billion ticks?
+A world is space filled with atoms: ten elements (H, C, N, O,
+P, S, Si, Fe, Na, Cl) carrying real valences, masses, and
+electronegativities. Bonds form and break by Boltzmann
+probabilities against tables of real bond energies, steered by
+VSEPR geometry. Temperature, pressure, and UV fields evolve;
+vents heat the seafloor, sunlight the surface.
 
-khem names the language, its files, and its runtime, the way C does.
-You write `.kem` definition files (elements, structs, chains, bodies,
-worlds, runs). The `khem` runtime flattens them into atoms and bonds,
-executes ticks, and streams newline-delimited JSON events to stdout.
+You seed the world with anything buildable from atoms and bonds -
+a beaker of molecules with no life in it, an RNA strand inside a
+lipid vesicle, a whole cell. Then you let it run. Nobody knows
+whether evolution will take hold. That is the experiment.
 
-    khem experiment_1.kem > run_001.ndjson
+## It runs today
+
+The engine is built - pure Rust, two crates, zero dependencies -
+and one command streams a live world to stdout:
+
+    cargo run --release -p khem    # the hardcoded primordial pond
+
+    {"v":1,"type":"start","tick":0,"run_name":"primordial_pond",
+     "seed":42,"atom_count":3422,"bond_count":2048}
+    {"v":1,"type":"bond_formed","tick":2,"elem_a":"H","elem_b":"N",
+     "order":1,"energy":391}
+    {"v":1,"type":"tick","tick":1000,"atom_count":3422,
+     "bond_count":2083,"mol_size_dist":{"1":281,"2_5":1058,
+     "6_20":0,"21plus":0}}
+
+One JSON event per line, flushed every tick: stream it, grep it,
+chart it, build a viewer on it. Same seed, byte-identical run -
+determinism is by construction, not luck.
+
+## What you can do
+
+- Run prebiotic chemistry with no life at all: a warm pond, a
+  hydrothermal vent, UV from above.
+- Seed life, simple or complex - anything built from atoms and
+  bonds.
+- Compose worlds from small reusable templates; the standard
+  library ships water, nucleotides, lipids, a vesicle, a cell.
+- Pipe the stream anywhere: one JSON event per line is the whole
+  output contract, and anything that reads it is a viewer.
+- Run it long: billion-tick experiments, parameter sweeps,
+  lineage tracking.
+
+## The trade
+
+Real chemistry would be ideal, but reactive molecular dynamics
+is orders of magnitude too slow to ever watch evolution happen.
+khem takes the middle path: real element properties and real
+bond-energy tables drive phenomenological dynamics cheap enough
+to run a billion ticks on a laptop. Where the sim simplifies,
+the docs say so - no rule pretends to be deeper than it is.
+
+## What success looks like
+
+Nothing is built on the substrate until it passes measured gates:
+
+    K1  stability       molecules persist; bonds form and break
+                        at plausible rates
+    K2  self-assembly   lipids in water clump head-out, with no
+                        "form a membrane" rule anywhere
+    K3  replication     free nucleotides copy a seeded RNA strand
+                        by base-pair geometry alone
+    K4  variation       copies carry errors at tunable rates
+    K5  selection       lineages with different fidelity fare
+                        differently in a scarce pond
+
+## The language
+
+Everything above atoms and bonds is described, never programmed.
+Worlds are `.kem` files that compose bottom-up - element to
+molecule to strand to cell to world to run:
+
+    struct water {
+      atoms {
+        O1: O at ( 0.00, 0.00)
+        H1: H at (-0.96, 0.58)
+        H2: H at ( 0.96, 0.58)
+      }
+      bonds {
+        O1 - H1 : single
+        O1 - H2 : single
+      }
+    }
+
+    chain rna_strand {
+      sequence: A U G C A U G C    // a genome, as data
+    }
+
+A strand's sequence is data. Copying it is not a feature anywhere
+in the runtime - it is something the chemistry must do alone.
 
 ## Status
 
-Pre-prototype. Canonical specs, architecture decision records, a
-build plan, a research reading list, and a runtime scaffold exist.
-The simulation engine is a data-model skeleton; the systems are the
-plan's phase 1. Read PLAN.md before writing any - the build order is
-kernel first, language later. The founding conversation is preserved
-in git history only (ADR-0010).
+The engine is built and streams real output - every number above
+came off an actual run. The gates have not passed: K1 is
+measured, failing, and the measured cause is a missing
+thermostat; that fix is the open decision. The .kem language is
+spec-only - the parser is built only after the gates pass,
+because a language on a dead substrate is worthless.
 
-## The name
+## Documentation
 
-Pronounced "kem". khem is the root of the word "chemistry" itself: per
-one of the leading etymologies, al-kimiya (Arabic alchemy) descends from
-Egyptian kemet, "the black land" - the fertile mud of the Nile, where
-water, soil, and sun made things grow. A chemistry language named after
-the fertile black mud. The etymology is contested; the name is not the
-claim. The naming decision and the rejected-candidates record live in
-docs/adr/0007-name-khem.md; the conversation-era rename map lives in
-docs/specs/README.md.
+    PLAN.md            build order, validation gates, open decisions
+    ARCHITECTURE.md    crate map and scaling plan
+    docs/specs/        the .kem language and runtime specs
+    docs/adr/          the why behind every decision
+    docs/research/     prior work, mapped to design choices
 
-## What this project is
-
-- A bottom-up 2D artificial chemistry. Atoms carry real element
-  properties (valence, electronegativity, mass, covalent radius). Bonds
-  form and break by Boltzmann/Arrhenius-style probabilities against
-  lookup tables of real bond energies and VSEPR angles. Temperature,
-  pressure, and UV fields evolve. Energy sources (hydrothermal vents,
-  solar UV) drive the system away from equilibrium.
-- Seeded, not spontaneous. Worlds start with a minimal cell built
-  purely from atoms and bonds. Nothing above the atom/bond level is
-  coded into the runtime; replication, mutation, membrane division, and
-  evolution are supposed to fall out of the rules, not be programmed in.
-- A DSL + runtime pair in the Verilog tradition. Definition files
-  compose (water -> nucleotide -> RNA strand -> cell -> pond ->
-  experiment) and are testable in isolation. The runtime knows atoms,
-  bonds, fields, energy - nothing else.
-- Terminal-first, laptop-first. NDJSON to stdout, diagnostics to
-  stderr, viewers are separate pipe consumers. Deterministic seeds make
-  runs reproducible. Save/load lets long experiments span sessions. No
-  GPU required; the architecture leaves room for threading and
-  distribution (V2/V3) without depending on them.
-- A candidate thesis project (see PLAN.md, "Thesis track").
-
-## What this project is not
-
-- Not a game. No objectives, no balancing, no scripted organisms.
-- Not a faithful chemistry or physics simulator. No quantum mechanics,
-  no femtosecond molecular dynamics. The dynamics are phenomenological:
-  a physics-flavored artificial chemistry. The specs in docs/specs/
-  use real constants and real equations where cheap, and honest
-  simplifications everywhere else.
-- Not a claim of abiogenesis. Life is seeded by hand. The open question
-  is whether interesting evolution emerges from the substrate - and the
-  plan gates all further work on that question (PLAN.md, phase 1).
-- Not pre-coded biology wearing a physics costume - with one caveat the
-  project admits openly: some rules (permeability, base-pair geometry
-  targets) smell like smuggled biology. The design docs flag them
-  rather than pretending they emerged.
-
-## Relationship to prior work
-
-khem assembles pieces that all exist separately; nobody has combined
-them. Annotated bibliography with links and DOIs:
-docs/research/references.md.
-
-| Project | What it is | khem builds on | khem differs |
-|---|---|---|---|
-| Kappa (kappalanguage.org) | rule-based language for interacting molecular agents + KaSim simulator | DSL/runtime split; rules over agents with binding sites (khem's ports/wire) | models known biochemistry at protein granularity; no space, energy, or evolution |
-| BioNetGen (github.com/RuleWorld/bionetgen) | rule-based biochemical modeling | rule composition, network-free simulation | reaction networks, no spatial matter substrate |
-| SBML (sbml.org) | standard exchange format for biochemical models | auditable text models consumed by many runtimes | describes known networks; no emergence |
-| MCell + MDL (mcell.org) | spatial stochastic particle biochemistry with a model description language | MDL precedent, reaction-diffusion in space | abstract molecule species, not bonded atoms |
-| LAMMPS + ReaxFF (docs.lammps.org) | reactive molecular dynamics, real bond-order potentials | atoms forming/breaking bonds under physics | femtosecond fidelity, orders of magnitude too slow for evolution; no DSL, no observer |
-| SimSoup (simsoup.info) | artificial chemistry for origin-of-life research | the motivation; structure-driven molecule properties | molecule-type interaction networks; no atom/bond spatial substrate |
-| Stringmol (stringmol.york.ac.uk) | automata chemistry for molecular evolution | artificial chemistry + evolution in silico | molecules are strings, not spatial atoms |
-| Avida (avida.devosoft.org) | digital evolution platform | seeded self-replicators, open-ended evolution, measurement discipline | organisms are programs competing for CPU cycles; no matter or chemistry |
-| The Bibites (thebibites.com) | real-time artificial life with neural-net creatures | the "watch evolution happen" experience goal | organism abstractions pre-coded; GUI-first, not a substrate |
-| Ribossome (github.com/Manalokosdev/Ribossome) | GPU evolution sim, RNA-inspired genome-to-body translation | Rust runtime, RNA-world inspiration, emergent ecosystems | abstract codon genetics, GPU-bound, biology pre-programmed |
-| Primordial (github.com/itzrnvr/primordial) | browser origin-of-life sim | seeded cells around a hydrothermal vent | JS/3D, biology pre-programmed, no chemistry substrate |
-| Genesis Engine (github.com/AVADSA25/genesis-engine) | protocell study with Monte Carlo + published preprint | protocell dynamics in warm-pond-class models | single-hypothesis study, not a platform; its withdrawn headline result is khem's methodological cautionary tale |
-| lifeSimulatoR (github.com/NoushinN/lifesimulatoR), protocell sims (github.com/chrisk60331/protocell-simulation) | simplified origin-of-life scenario models | protocell kinetics, OoL motivation | equation/statistical layer, not a runtime or language |
-| Conway's Game of Life / Golly (golly.sourceforge.net) | cellular automata engine | the whole framing: minimal rules + seeded patterns -> emergence | no chemistry, genomes, or evolution |
-
-How khem builds on prior work, compressed:
-
-- From Conway: rules + seeded patterns, emergence as the only content.
-- From artificial chemistries (Dittrich taxonomy, SimSoup, Stringmol):
-  chemistry networks as the ground layer of evolution; molecule
-  properties derived from structure.
-- From RNA-world theory and the protocell program (Gilbert, Joyce,
-  Szostak, Ganti): the exact seed - replicator plus compartment.
-- From rule-based modeling (Kappa, BioNetGen, SBML, MCell's MDL): the
-  DSL + runtime split and grammar lessons for .kem.
-- From reactive MD (ReaxFF): the fidelity ceiling this project steps
-  back from - real reactive atom chemistry is six-plus orders of
-  magnitude too slow for evolutionary timescales.
-- From digital evolution (Avida): measurement discipline for open-ended
-  evolution.
-- From Unix: do one thing, stream structured output, compose with pipes.
-
-## Repository layout
-
-    khem/
-    |-- README.md            this file: identity, prior work, is / is not
-    |-- PLAN.md              build order: kernel first, language later
-    |-- ARCHITECTURE.md      target crate map, dependency rules, scaling plan
-    |-- mise.toml            toolchain pin + tasks (mise run check = the CI gate)
-    |-- docs/
-    |   |-- adr/             architecture decision records (the WHY)
-    |   |-- specs/           canonical language + runtime specs
-    |   |   `-- README.md    spec index + conversation-era rename map
-    |   `-- research/
-    |       `-- references.md  papers + projects, mapped to design choices
-    `-- crates/
-        |-- khem-core/       lib: the simulation engine (phase 1 lands here)
-        `-- khem/            bin: the runtime CLI (scaffold)
-
-Everything in the repo is ASCII. The founding conversation and the
-conversation-era spec drafts are preserved in git history only
-(ADR-0010).
-
-## Development
-
-    mise install          # pinned toolchain (rust 1.98.0, from mise.toml)
-    mise run build        # cargo build --workspace
-    mise run test         # cargo test --workspace --locked
-    mise run fmt           # format
-    mise run lint          # clippy, warnings are errors
-    mise run check         # the CI gate, locally
-
-CI (.github/workflows/ci.yml) runs `mise run check` on every push and
-pull request at github.com/funkybooboo/khem (public, ADR-0011), using
-the same mise-pinned toolchain.
+MIT license.
