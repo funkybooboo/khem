@@ -172,7 +172,7 @@ mod tests {
     /// guarded). Previous value 0xDD4E_87CD_A7FD_94CE (the K1.1
     /// substrate, 2026-09-05). Pre-fix values live in git history.
     /// Update ONLY with a justification in the commit message.
-    const GOLDEN_HASH: u64 = 0x0896_8E9C_98C9_54F6;
+    const GOLDEN_HASH: u64 = 0x6239_1611_1731_3A86;
 
     fn observer(interval: u64) -> Observer {
         Observer::new(ObserverConfig {
@@ -317,6 +317,21 @@ mod tests {
                     h ^= v;
                     h = h.wrapping_mul(0x0000_0100_0000_01b3);
                 }
+            }
+            // Field state: each grid's sum, hashed in fixed order.
+            // Sums are computed in the grids' fixed storage order, so
+            // they are as deterministic as the atom state above; UV
+            // is all-zero in this world but hashing it costs one
+            // step and guards future source additions.
+            for field in [
+                &world.temp_field,
+                &world.setpoint_field,
+                &world.pressure_field,
+                &world.uv_field,
+            ] {
+                let sum: f32 = field.data.iter().sum();
+                h ^= sum.to_bits() as u64;
+                h = h.wrapping_mul(0x0000_0100_0000_01b3);
             }
             h
         }
