@@ -43,6 +43,7 @@
 //! Spec: docs/specs/runtime-spec.md, section 6 (Physics System).
 
 use crate::config::PhysicsConfig;
+use crate::observer::Event;
 use crate::world::{AtomId, BoundaryType, WorldState};
 
 /// The physics system interface, decomposed per the tick order
@@ -65,7 +66,11 @@ pub trait PhysicsSystem {
     /// One integration sub-step's position update (spec 6.5) at
     /// dt_sub; the sub-steps sum to dt = 1 per tick.
     fn update_positions(&mut self, world: &mut WorldState);
-    /// Boundary normalization (spec 6.7; guarantee G05).
+    /// Boundary normalization (spec 6.7; guarantee G05). Open
+    /// worlds break a leaving atom's bonds before it dies and emit
+    /// BOND_BROKEN for each (energy_released 0 - no field
+    /// exchange), keeping the event stream a complete record of
+    /// bond liveness (spec 3.3).
     fn apply_boundary(&mut self, world: &mut WorldState);
 }
 
@@ -452,11 +457,37 @@ impl PhysicsSystem for Physics {
                     .map(|a| a.id)
                     .collect();
                 // Bonds break before the atom dies (spec 6.7);
-                // break_bond updates both sides.
+                // break_bond updates both sides. Each break emits
+                // BOND_BROKEN with energy_released 0: the boundary
+                // removes the bond with no field exchange (sinks
+                // cannot cascade - the same rule as the 7.1
+                // mechanical channel), so a stream consumer never
+                // carries a ghost bond that died at the edge.
                 for id in leaving {
                     let slots = world.atom(id).bonds;
                     for bond in slots.into_iter().flatten() {
-                        world.break_bond(bond);
+                        let (a, b) = {
+                            let bond_state = world.bond(bond);
+                            (bond_state.atom_a, bond_state.atom_b)
+                        };
+                        // Midpoint via delta (spec 4.9 rule): raw
+                        // displacement in an Open world, so a bond to
+                        // a leaving atom reports a midpoint outside
+                        // [0, w) - informational, like chemistry's.
+                        let (ax, ay) = (world.atom(a).x, world.atom(a).y);
+                        let (dx, dy) = world.delta(ax, ay, world.atom(b).x, world.atom(b).y);
+                        let (mx, my) = (ax + dx * 0.5, ay + dy * 0.5);
+                        if world.break_bond(bond) {
+                            world.event_queue.push(Event::BondBroken {
+                                tick: world.tick,
+                                bond_id: bond.0,
+                                elem_a: world.atom(a).element,
+                                elem_b: world.atom(b).element,
+                                energy_released: 0.0,
+                                x: mx,
+                                y: my,
+                            });
+                        }
                     }
                     world.atom_mut(id).alive = false;
                 }
@@ -884,6 +915,19 @@ mod tests {
         assert_eq!(w.atom(inside).bond_count, 0, "inside atom loses the bond");
         // The dead atom's bonds array is also cleared by break_bond.
         assert_eq!(w.atom(outside).bond_count, 0);
+        // Spec 3.3: BOND_BROKEN for every break, boundary removals
+        // included - and with no field exchange.
+        match w.event_queue.first() {
+            Some(Event::BondBroken {
+                bond_id,
+                energy_released,
+                ..
+            }) => {
+                assert_eq!(*bond_id, bond.0);
+                assert_eq!(*energy_released, 0.0);
+            }
+            other => panic!("expected BondBroken, got {other:?}"),
+        }
     }
 
     #[test]

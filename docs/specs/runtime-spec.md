@@ -130,6 +130,10 @@ BOND_BROKEN - when output.bond_events is true:
      "elem_a":"C","elem_b":"O","energy_released":399.5,
      "x":45.3,"y":123.8}
 
+Emitted for every bond break, including Open-boundary removals
+(energy_released 0; the boundary takes the bond with no field
+exchange, 6.7).
+
 NOTABLE - [phase 2] when a watch condition triggers; always
 emitted regardless of output settings:
 
@@ -489,6 +493,11 @@ matter does, not because any biology needs it.
     Wrap   x = x mod width; y = y mod height
     Wall   clamp position; reverse the velocity component
     Open   atom flagged dead; bonds broken first
+
+Open-boundary bond breaks emit BOND_BROKEN (energy_released 0, no
+field exchange): the stream stays a complete record of bond
+liveness for spec 3.3 consumers - a bond never silently vanishes
+at the edge.
 
 ## 7. Chemistry system
 
