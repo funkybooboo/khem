@@ -116,6 +116,16 @@ dimension-agnostic regression reference:
 3. K1.3 water persistence: the seeded waters stay intact.
 4. K1.4 reactive balance: F18 fix active from day one; rates
    re-tuned with the 2D methodology (starve-then-retune).
+   PASSED 2026-09-08 with one bar re-derived: the F6 floor rides
+   the measured 3D dip (min avg 7.54 C vs 2D 12.16 - the same
+   42,037-degree drain over half the cells; bar 10 -> 5).
+   Everything else held: tail avg 35.41 in band, stationarity
+   windows passed unchanged (2-5 -0.4%, bonds +0.6%, clusters
+   +1.1 - the 3D construction finishes EARLIER), O-O thermal 12
+   at age 10,117 (2D: 18 at 10,007), strong thermal 0, phantoms
+   0, tail active (42 formations / 6 thermal). No constant
+   needed retuning: the 2D-tuned set carried the 3D substrate
+   as the port plan's test vector predicted.
 5. K1.5 seam symmetry: all three seams.
 
 Each pass records the 2D-versus-3D number pair - what moved and

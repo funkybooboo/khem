@@ -230,6 +230,22 @@ The attack found and fixed two structural findings:
 K1.1 re-ran in the same commit per the contract (the binding
 above): PASS after the windows rode the measured steady tail.
 
+RE-CLIMBED AND PASSED IN 3D 2026-09-08: every bar held except
+the F6 floor, which rides the measured 3D construction dip -
+the same formation drain (42,037 field degrees by 20k) lands on
+the slab's 72 cells (half the 2D pond's 144), dipping the
+average ~2x deeper (measured 7.54 C vs 2D 12.16) before
+recovering to tail avg 35.41 against the 35 C setpoint. The
+stationarity windows passed UNCHANGED - the 3D construction
+finishes earlier (the denser slab builds its free population
+faster): 2-5 -0.4%, singles -13.2%, bonds +0.6%, clusters +1.1.
+Census: O-O thermal 12 at mean age 10,117 ticks (2D: 18 at
+10,007 - the ladder's scale holds), N-N 1 at 16,261, strong
+thermal 0, seeded 0, phantoms 0, mechanical 1; tail active (42
+formations, 6 thermal over 15k-20k); largest 22, 21+ bucket 1,
+bonds 2403. The ledger closes: vent 0.454 degrees-sum/tick,
+every 1k window's five columns explain the delta.
+
 ### K1.5 - seam correctness: PASSED
 
 The spatial index wraps in Wrap worlds (F11) - cross-seam

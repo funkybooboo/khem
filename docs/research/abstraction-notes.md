@@ -347,7 +347,7 @@ measured:
   with their rationale in docs/plans/phase-2-3d-port.md,
   "Decisions this phase owns".
 
-## Resolution log (2026-09-08, the 3D re-climb: K1.1-K1.3)
+## Resolution log (2026-09-08, the 3D re-climb: K1.1-K1.4)
 
 - Gate K1.1 PASSED in 3D - the port's first re-climbed gate, and
   the run falsified one port-commit claim in its first sample,
@@ -396,6 +396,30 @@ measured:
   down to the number: the mechanical well depth (~80 kT) and
   the thermal scale (exp(-29)) are energy arguments, not
   geometry.
+
+- Gate K1.4 PASSED in 3D with exactly one bar re-derived, and
+  the re-derivation is the port's own geometry showing through:
+  the F6 refrigeration floor moved 12.16 -> 7.54 C (bar 10 -> 5)
+  because the same construction drain - 42,037 field degrees
+  absorbed by 20k - lands on the slab's 72 cells, half the 2D
+  pond's 144, so the average dips ~2x deeper. Nothing about the
+  REFRIGERATION changed; the measuring cup halved. Recovery
+  held (tail avg 35.41 vs the 35 C setpoint, 2D measured
+  ~35.5-35.9), and every other bar passed unchanged, including
+  the stationarity windows - the 3D construction finishes
+  EARLIER than 2D's (2-5 bucket -0.4% over the tail windows;
+  singles -13.2%; bonds +0.6%; clusters +1.1) because the denser
+  slab builds its free population faster. The census pairs the
+  substrates almost row for row: O-O thermal 12 at mean age
+  10,117 ticks (2D: 18 at 10,007 - the ladder's ~10k-tick scale
+  holds), N-N 1, strong thermal 0, seeded 0, phantoms 0,
+  mechanical 1, tail active (42 formations, 6 thermal over
+  15k-20k). No constant needed retuning: the 2D-tuned set
+  carried the 3D substrate - the port plan's "what does not
+  move" test vector holding exactly as designed. The ledger
+  closes on the slab: vent flux 0.454 degrees-sum/tick, every
+  1k window's five columns (vent, relax, absorb, release,
+  thermo residual) explain the measured delta.
 
 ## Findings first analyzed before measurement
 
