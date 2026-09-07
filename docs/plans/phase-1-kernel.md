@@ -60,6 +60,15 @@ optional follow-up. Current bindings:
   the crossings the clamp guarded, satisfying this contract's
   requirement that the clamp be gone before the E-gates run
   their long horizons
+- the 3D port (phase 1.5, ADR-0013) moves EVERY gate's
+  assumptions at once - dimension itself. Its exit criterion is
+  the whole K1 ladder re-run in 3D, gate by gate, in order, with
+  the 2D pass records as the dimension-agnostic regression
+  reference (ledger closure, coupling law, band bounds). K1.4
+  and K1.5 still land in 2D first: the F18 fix is
+  dimension-generic (and more needed in 3D), and porting a
+  substrate with known open pathologies makes 3D failures
+  unattributable.
 - no soft spot exists only in prose: every known limitation
   lives either in this contract or as a finding in
   docs/research/abstraction-notes.md with a named owner gate
@@ -145,6 +154,10 @@ The spatial index wraps in Wrap worlds (F11) - cross-seam
 formation is symmetric with the bulk. Originally queued for
 phase 2; promoted, because a Wrap world with asymmetric formation
 cannot pass honest gates.
+
+K1.5 is the 2D ladder's close: the 3D port follows (phase 1.5,
+ADR-0013) and re-climbs K1.1-K1.5 in 3D before K2; K2-K5 then
+climb in 3D.
 
 ## Milestone K2 - self-assembly: membranes are consequences, not rules
 

@@ -22,7 +22,9 @@ Remaining (the spec's [phase 2] markers):
 
 - save/load world state: SAVE events (spec 3.3) + G09 - a
   resumed run is byte-identical to an uninterrupted one. E1 is
-  this wearing its working clothes.
+  this wearing its working clothes. Lands after the 3D port
+  (phase 1.5, ADR-0013), so the state layout it serializes is
+  natively 3D.
 - dead-slot compaction (spec 5.2): atoms and bonds are flagged
   dead, never removed mid-tick; compaction every
   compaction_interval ticks. Long experiment runs accumulate
@@ -40,4 +42,7 @@ Remaining (the spec's [phase 2] markers):
   behaviorally sane; the gates are correctness gates. The
   obvious levers: per-sub-step neighbor-query allocation reuse,
   the index rebuild schedule, and a profile before anything
-  clever.
+  clever. The 3D port (phase 1.5, ADR-0013) re-opens this
+  baseline first - a 4 A query scans up to 27 cells versus 9 at
+  the 5 A cell size - so the port records the honest new number
+  against the same spec 13 targets.

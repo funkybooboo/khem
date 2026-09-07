@@ -28,15 +28,20 @@ before specs.
   physics, chemistry, energy, observer with union-find molecule
   detection, hand-rolled NDJSON v:1, the hardcoded pond, the khem
   bin streaming real output. Canonical specs (docs/specs/) and
-  nine ADRs (docs/adr/) stay synced with the code; the founding
+  ten ADRs (docs/adr/) stay synced with the code; the founding
   conversation lives in git history only.
 - The gate ladder is climbing: K1.1-K1.3 PASSED (thermostat,
   force sanity, water persistence - the pond's 1024 waters hold
   intact through 10k-tick vented runs). Next: K1.4 reactive
-  balance, then K1.5 seam symmetry. Ladder, rules, and pass
-  history: docs/plans/phase-1-kernel.md.
+  balance, then K1.5 seam symmetry, then the 3D port (phase 1.5).
+  Ladder, rules, and pass history: docs/plans/phase-1-kernel.md.
 - Findings F1-F18 live in docs/research/abstraction-notes.md;
   the open one is F18 (wide-capture churn, K1.4's lever).
+- Dimensionality is decided (ADR-0013): 2D carries the K1 gates -
+  the F18 fix is dimension-generic, and the 2D passes become the
+  port's regression vector - then the 3D port lands before K2
+  tuning, the phase-2 save format, or the phase-3 grammar encodes
+  more 2D. Port plan: docs/plans/phase-1.5-3d-port.md.
 - Release speed measured ~60 t/s at 3.4k atoms (2026-09-07;
   K1.3's sub-stepping costs 4x force passes); the phase-2 perf
   pass owns the target (10k atoms at >500 t/s).
@@ -51,7 +56,8 @@ before specs.
 | Phase | Plan | Status |
 |-------|------|--------|
 | 0 - literature grounding | [phase-0-research.md](docs/plans/phase-0-research.md) | notes + bibliography landed; re-opens before detector design |
-| 1 - physics/chemistry kernel | [phase-1-kernel.md](docs/plans/phase-1-kernel.md) | in progress: K1.1-K1.3 passed, K1.4 next |
+| 1 - physics/chemistry kernel | [phase-1-kernel.md](docs/plans/phase-1-kernel.md) | in progress: K1.1-K1.3 passed, K1.4 next; K2-K5 climb after the port |
+| 1.5 - the 3D port | [phase-1.5-3d-port.md](docs/plans/phase-1.5-3d-port.md) | planned; gated on K1.5, before K2 tuning |
 | 2 - runtime hardening | [phase-2-hardening.md](docs/plans/phase-2-hardening.md) | not started; cheap items landed early with phase 1 |
 | 3 - the khem language | [phase-3-language.md](docs/plans/phase-3-language.md) | spec-only; gated on K1-K5 |
 | 4 - experiments and the thesis | [phase-4-experiments.md](docs/plans/phase-4-experiments.md) | gated on phases 2-3 |
@@ -69,6 +75,10 @@ before specs.
 - scope discipline: the founding conversation ballooned from "900
   lines of Python" to a full language spec before one tick ran. This
   plan exists to prevent a repeat.
+- one dimensionality at a time: the runtime is 2D through the K1
+  gates, then the phase-1.5 port makes it 3D - no dual-mode
+  runtime, no per-world dimension flag (ADR-0013); 2D survives
+  in git history.
 
 ## Beyond v0.1 (horizon, not scheduled)
 
@@ -87,7 +97,6 @@ All of this is enabled by choices already fixed (runtime spec section
   contract (ADR-0004, ADR-0008)
 - publishing the khem crate to hold the crates.io name (ADR-0007),
   when there is something real to publish
-- 3D: a port, not a redesign, if 2D results ever justify it
 
 ## How this plan is maintained
 
@@ -127,6 +136,11 @@ All of this is enabled by choices already fixed (runtime spec section
       work, lands only with harness evidence, as its own commit.
 - [ ] first world file name: primordial_pond.kem ("warm little
       pond" is Darwin's phrase for the setting).
+- [x] dimensionality (ADR-0013): RESOLVED 2026-09-07 - 3D is the
+      destination substrate. 2D stands through the K1 gates; the
+      port is phase 1.5, gated on K1.5 and landed before K2 tuning
+      or any phase 2/3 surface encodes more 2D. Port plan:
+      docs/plans/phase-1.5-3d-port.md.
 - [x] license: RESOLVED 2026-09-05 - MIT (LICENSE at root, SPDX MIT
       in crate metadata).
 - [x] remote hosting: RESOLVED 2026-09-05 - github.com/funkybooboo/khem,

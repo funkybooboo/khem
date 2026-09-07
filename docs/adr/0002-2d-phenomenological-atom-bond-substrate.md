@@ -1,7 +1,9 @@
 # ADR-0002: 2D phenomenological atom/bond substrate
 
 Date: 2026-09-04 (decision made in the founding conversation)
-Status: Accepted
+Status: Accepted (amended 2026-09-07 by ADR-0013: 3D is the
+committed destination substrate, ported as phase 1.5 after K1.5;
+the 2D decision stands for V1 through the close of the K1 gates)
 
 ## Context
 

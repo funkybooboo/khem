@@ -119,6 +119,10 @@ chemistry settles (gate K1.4), and cross-seam formation
 symmetry is not yet measured (gate K1.5). The .kem language is
 spec-only - the parser is built only after the gates pass,
 because a language on a dead substrate is worthless.
+Dimensionality is decided: the K1 gates land in 2D, then the 3D
+port runs as its own phase before K2 (ADR-0013) - so vesicles,
+base pairs, and carbon get true geometry instead of 2D shadows
+before anything tunes against it.
 
 ## Documentation
 

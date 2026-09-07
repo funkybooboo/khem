@@ -159,6 +159,27 @@ Lesson recorded in abstraction-notes.md section 4: every model that
 self-assembles amphiphiles uses explicit non-bonded potentials; khem's
 spring-only substrate cannot pass K2 without a documented addition.
 
+## Dimensionality - 2D precedent and 2D artifacts (ADR-0013)
+
+- Ono, N., Ikegami, T. (1999). Model of self-replicating cell
+  capable of self-maintenance. Proc. ECAL '99.
+  arXiv:adap-org/9905002 (the 2D precedent: a membrane-bounded
+  cell that self-organizes, grows, and divides from local rules
+  on a 2D lattice - replication does not require a third
+  dimension.)
+- Meyer, H., Kreer, T., Cavallo, A., Wittmer, J.P., Baschnagel,
+  J. (2007). On the dynamics and disentanglement in thin and
+  two-dimensional polymer films. Eur. Phys. J. Special Topics.
+  doi:10.1140/epjst/e2007-00035-9 (the long-run artifact: "In a
+  2D melt, chains cannot overlap" - long molecules in two
+  dimensions cannot pass through one another, a topological
+  ceiling on coexisting long-chain chemistry.)
+
+Lesson, both directions (ADR-0013): 2D suffices for the K gates
+and buys observability plus atom budget, but compounds artifacts
+as molecules grow; 3D is the committed destination substrate,
+ported as phase 1.5 before K2 tuning.
+
 ## Digital evolution platforms - the evolution prior art
 
 - Hutton, T.J. (2002). Evolvable Self-Replicating Molecules in an
