@@ -34,6 +34,7 @@ Handoff snapshot; the phases below are the plan, this is the state:
   strong_repulsion/r^2 compounds it (v ~ 1e4 per overlap). Constants
   cannot fix this; the Langevin thermostat proposal
   (abstraction-notes section 10) awaits the owner decision below
+  - the gate ladder names it K1.1
 - toolchain pinned in mise.toml; `mise run check` green locally
   (fmt, clippy, 70 tests) and identical in CI
 - hosted at github.com/funkybooboo/khem, public (ADR-0011)
@@ -73,26 +74,120 @@ Everything is hardcoded:
 - a hardcoded primordial pond + one hardcoded minimal cell
 - NDJSON events to stdout (tick + bond events + watch conditions)
 
-Validation gates - all must pass before any parser work:
+Validation gates - the ladder below is the project's spine, and
+all of it must pass before any parser work. A milestone (K_n)
+passes when its sub-gates do; a sub-gate is a harness test with
+a measured pass criterion - pass it, commit it, move to the
+next. Each milestone gets a harness file in tests/ (k1_stability.rs
+exists; k2_self_assembly.rs, k3_replication.rs, k4_variation.rs,
+k5_selection.rs follow). Constants retune inside a sub-gate as
+the harness demands (F1's lesson), but no sub-gate may be
+passed by adding a rule above the atom/bond level (G01).
+Thresholds are starting points; they move with evidence, never
+by wish. Gates are measured by the harness, never by eyeballing
+a viewer.
 
-    K1  STABILITY: water and small molecules persist at moderate
-        temperature. Bonds form and break at plausible rates - no
-        runaway crosslinking, no frozen inertness.
-    K2  SELF-ASSEMBLY: lipids in water aggregate head-out (amphipathic
-        behavior emerges from polarity rules, not a "form membrane"
-        rule).
-    K3  REPLICATION: free nucleotides bond to a seeded RNA strand by
-        base-pair geometry; strands separate thermally; copies happen.
-    K4  VARIATION: copy errors occur at tunable rates and produce
-        distinguishable daughter strands.
-    K5  SELECTION: lineages with different copy fidelity or speed show
-        different survival in a resource-limited pond (populations
-        grow, crash, recover).
+    K1  STABILITY - the substrate holds together
+        [measured 2026-09-05: FAILING; the sub-gates name the
+        measured causes - F6 through F9, F11]
+
+    K1.1 THERMOSTAT: Langevin damping toward the local field
+        temperature (the pending decision; spec 6.1 revision).
+        PASS: KE per atom AND mean bond length both go flat over
+        a 10k-tick vented-pond run.
+    K1.2 FORCE SANITY: a bonded overlap imparts bounded velocity
+        (F9 measured v ~ 1e4 - a cannon). PASS: mean bond length
+        stays within [0.8, 1.5] * r_eq over the same run.
+    K1.3 WATER PERSISTS: a 35 C pond of H2O keeps its molecules
+        - intact count flat, O-H essentially never breaks (real
+        chemistry's own exp(-29) answer), the form+break cycle
+        mints no energy (the F7 regression stays green).
+    K1.4 REACTIVE BALANCE: a beaker of free atoms settles to a
+        STATIONARY molecule-size distribution - weak bonds break
+        (O-O on a ~10k-tick scale), strong ones persist; no
+        runaway crosslinking, no frozen inertness; formation
+        refrigeration (F6) stays bounded and recovers.
+    K1.5 SEAM CORRECTNESS: the spatial index wraps in Wrap worlds
+        (F11) - cross-seam formation is symmetric with the bulk.
+        Originally queued for phase 2; promoted, because a Wrap
+        world with asymmetric formation cannot pass honest gates.
+
+    K2  SELF-ASSEMBLY - membranes are consequences, not rules
+        [precondition: K1; the literature is unanimous that
+        amphiphiles assemble through non-bonded potentials,
+        never through springs alone - hence K2.1 comes first]
+
+    K2.1 EXCLUDED VOLUME: soft non-bonded repulsion (F4 - smuggled
+        PHYSICS, documented as such): free atoms no longer pass
+        through each other. PASS: minimum approach distance
+        >= 0.8 * (r_a + r_b) in a scattering test.
+    K2.2 CONDENSED MEDIUM: the pond behaves as matter, not free
+        flight - most atoms hold a non-bonded neighbor within
+        3 A, and pair distances show structure.
+    K2.3 AMPHIPHILE SORTING: a lipid (polar head, nonpolar tails)
+        in water - head-water and tail-tail contact fractions
+        beat chance by a set margin. No "membrane" rule exists
+        anywhere in the runtime.
+    K2.4 VESICLE CLOSES: lipids form a persistent cluster with an
+        interior (union-find: cluster >= 12 lipids, survives
+        >= 10k ticks), heads pointing outward.
+    K2.5 CONTENTS HELD: free nucleotides placed inside a vesicle
+        stay inside above a leak threshold.
+    K2.6 VESICLE GROWS: a fed vesicle incorporates lipids and
+        grows (Squirm3 lesson: membranes must grow, not just
+        close). Division is NOT gated in v0.1 - it is the first
+        thing to chase after K5.
+
+    K3  REPLICATION - copying is chemistry, not code
+        [precondition: K2.5; the strand lives in a vesicle with
+        free nucleotides]
+
+    K3.1 PAIRING: free nucleotides bond the correct complement
+        (A-U, G-C) far more often than the wrong one (starting
+        threshold 4:1) in a minimal beaker. Base-pair geometry
+        targets stay flagged as smuggled biology (ADR-0003's
+        honesty rule).
+    K3.2 TEMPLATING: a seeded strand acquires a full complement
+        - >= 80% of bases paired within a fixed tick budget.
+    K3.3 SEPARATION: a thermal window exists - pairing holds at
+        T_low, the duplex releases at T_high - and the window
+        moves by retuning constants, not by adding rules.
+    K3.4 THE COPY: template + free nucleotides + thermal cycling
+        yields a free daughter strand (complement signature in
+        the event stream), and the daughter templates a second
+        generation.
+
+    K4  VARIATION - copies carry errors
+
+    K4.1 COPY ERRORS: wrong-base incorporation happens, and the
+        measured mismatch rate tracks a single tunable constant
+        across a sweep.
+    K4.2 VIABLE MUTANTS: most single-substitution daughters still
+        copy (the K3.4 criteria) - variation is not instantly
+        lethal.
+
+    K5  SELECTION - the pond has ecology
+        [precondition: K4; long runs - the phase-2 perf target
+        and dead-slot compaction are what make K5 practical]
+
+    K5.1 COMPETITION: two lineages (differing fidelity or speed)
+        share one pond with capped nucleotide supply - both
+        copy, one wins by a preregistered margin. Needs lineage
+        identity in the harness.
+    K5.2 TURNOVER: with material feed + decay (the Squirm3 lesson
+        - selection starves without turnover), populations grow,
+        crash, recover, persisting for many generations without
+        extinction or monoculture takeover.
+    K5.3 NOVELTY PROBE: reconstructed lineage trees keep producing
+        new sequences over time - open-endedness or convergence,
+        measured against a metric preregistered BEFORE looking
+        (the Genesis Engine rule).
 
 Exit criterion: if K1-K3 do not pass after honest parameter sweeps
 (weeks, not days), stop and redesign the substrate before building
 anything on top. A beautiful language on a dead substrate is
-worthless.
+worthless. Sub-gates are sized to be attackable - a sitting to a
+week each; if one sprawls, split it.
 
 Explicit non-goals for phase 1: no parser, no .kem files, no plugins,
 no CLI flags beyond --seed. Hardcode everything. The kernel is
@@ -127,10 +222,28 @@ Starts only after phase 1's K1-K5 gates pass (ADR-0006).
 
 ## Phase 4 - experiments and (maybe) the thesis
 
-- parameter sweeps: mutation rate vs fidelity, resource scarcity, UV,
-  temperature, pond size
-- lineage tracking: phylogenies reconstructed from NDJSON event logs
-- candidate research questions (preregister metrics BEFORE looking):
+The K-gates prove the substrate; the E-gates prove the instrument
+- that khem can run real evolution experiments. Each E-gate is a
+platform capability, built in the order the experiments need them
+(E1 is phase 2's G09 wearing its working clothes):
+
+    E1  SAVE/RESUME: a resumed run is byte-identical to an
+        uninterrupted one (G09) - long experiments span sessions.
+    E2  LINEAGE TRACKING: event logs reconstruct phylogenies -
+        every copy event a parent/child edge, every mutation
+        labeled on the edge it changed.
+    E3  SWEEPS: a batch runner executes a parameter grid (mutation
+        rate, UV, temperature, pond size, scarcity) across seeds
+        and collates the results.
+    E4  CONTROLS: negative controls are first-class runs -
+        no-template, no-UV, dead-strand. Anything that cannot
+        report "no" is not a detector (the Genesis Engine rule).
+    E5  FIRST EXPERIMENT: mutation rate vs copy fidelity, one
+        preregistered prediction, an ablation arm (bond-table
+        perturbation), and the full writeup - the thesis-track
+        dress rehearsal.
+
+Candidate research questions (preregister metrics BEFORE looking):
   - does evolution of the seeded cell produce open-ended genome
     diversity, or converge to a dominant strain? under which
     parameters?
@@ -204,13 +317,13 @@ All of this is enabled by choices already fixed (runtime spec section
 
 ## Open decisions (owner: nate)
 
-- [ ] thermostat: Langevin-style damping toward the local field
-      temperature (abstraction-notes section 10) - the measured K1
-      blocker. Proposal: v <- v*(1-damping) + normal(0, sigma(T));
-      region declarations become bath setpoints. One knob,
-      spec-6.1 revision, harness-gated (KE and bond length must go
-      flat)
-- [ ] non-bonded soft repulsion (finding F4): drafted before K2
+- [ ] thermostat (gate K1.1): Langevin-style damping toward
+      the local field temperature (abstraction-notes section
+      10) - the measured K1 blocker. Proposal: v <- v*(1-damping)
+      + normal(0, sigma(T)); region declarations become bath
+      setpoints. One knob, spec-6.1 revision, harness-gated (KE
+      and bond length must go flat)
+- [ ] non-bonded soft repulsion (finding F4; gate K2.1): drafted before K2
       work, lands only with harness evidence, as its own commit
 - [ ] first world file name: primordial_pond.kem ("warm little pond"
       is Darwin's phrase for the setting)
