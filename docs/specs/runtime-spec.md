@@ -5,16 +5,11 @@ Status: canonical as of 2026-09-04. Drafts until validated (ADR-0006):
 revised against phase-1 kernel reality before the parser is built.
 Sync policy (owner decision 2026-09-05): the implementation and
 this spec must agree; any divergence is fixed in both in the same
-commit. Synced 2026-09-05 against khem-core post-F10, and again the
-same day for the K1.1 substrate corrections (6.1 thermostat and
-bookkeeping, 6.3 smooth springs with F = ma, 6.6 excluded volume,
-7.1 mechanical dissociation, 7.2 capture gate, 4.9 wrap-aware
-index, section 11 constants), and 2026-09-07 for the K1.3
-integrator (5.1 sub-stepped tick order, 6.1 velocity clamp
-removed, 6.3 stability law and well depth at dt_sub, 6.5
-integration, section 11 constants; the duplicate 6.5/6.6 section
-numbers fixed by renumbering non-bonded interactions to 6.6 and
-boundaries to 6.7). Items marked
+commit. Sync history: 2026-09-05 post-F10 and the K1.1 substrate
+corrections (4.9, 6.1, 6.3, 6.6, 7.1, 7.2, section 11);
+2026-09-07 the K1.3 integrator (5.1, 6.1, 6.3, 6.5, 6.6, 6.7,
+section 11) and the open-boundary BOND_BROKEN event (3.3, 6.7).
+Items marked
 [phase 2] / [phase 3] are designed but not yet implemented.
 Provenance: reconciled from the founding conversation (preserved in
 git history) with the final terminology applied (ADR-0007,
@@ -25,6 +20,11 @@ ADR-0009).
 khem is the simulator: a physics engine. It accepts .kem
 descriptions, outputs a structured event stream, and knows about
 atoms, bonds, forces, and energy - nothing above that level (G01).
+
+Terms: the engine is khem-core (the simulation library); the
+runtime is the engine plus the khem binary; "the simulator" is the
+runtime seen from the language side - the tool that runs what .kem
+describes.
 
 khem is designed to scale from a laptop to a large multi-machine
 system. v0.1 implements single-machine execution. The architecture
@@ -101,14 +101,14 @@ Every event contains:
 
 ### 3.3 Event types
 
-START - first line, emitted once:
+start - first line, emitted once:
 
     {"v":1,"type":"start","tick":0,"khem_version":"0.1.0",
      "run_name":"experiment_1","world_name":"primordial_pond",
      "seed":42,"atom_count":4821,"bond_count":341,
      "world_width":200.0,"world_height":200.0}
 
-TICK - every tick_interval ticks (timing fields are wall-clock
+tick - every tick_interval ticks (timing fields are wall-clock
 and excluded from reproducibility, see G02):
 
     {"v":1,"type":"tick","tick":1000,"elapsed_ms":124,
@@ -118,13 +118,13 @@ and excluded from reproducibility, see G02):
      "free_atoms":{"H":892,"C":234,"O":445},
      "mol_size_dist":{"1":892,"2_5":445,"6_20":89,"21plus":12}}
 
-BOND_FORMED - when output.bond_events is true:
+bond_formed - when output.bond_events is true:
 
     {"v":1,"type":"bond_formed","tick":1247,"bond_id":4521,
      "atom_a":442,"atom_b":891,"elem_a":"C","elem_b":"O",
      "order":2,"energy":799.0,"x":45.2,"y":123.7}
 
-BOND_BROKEN - when output.bond_events is true:
+bond_broken - when output.bond_events is true:
 
     {"v":1,"type":"bond_broken","tick":1248,"bond_id":4521,
      "elem_a":"C","elem_b":"O","energy_released":399.5,
@@ -134,7 +134,7 @@ Emitted for every bond break, including Open-boundary removals
 (energy_released 0; the boundary takes the bond with no field
 exchange, 6.7).
 
-NOTABLE - [phase 2] when a watch condition triggers; always
+notable - [phase 2] when a watch condition triggers; always
 emitted regardless of output settings:
 
     {"v":1,"type":"notable","tick":1247900,"event":"largest_molecule",
@@ -148,11 +148,11 @@ Event vocabulary:
     population_crash     population drop above threshold
     bond_type_first      bond type seen for the first time
 
-SAVE - [phase 2] when state is saved:
+save - [phase 2] when state is saved:
 
     {"v":1,"type":"save","tick":1000000,"path":"./saves/tick_1000000.state"}
 
-END - last line, emitted once:
+end - last line, emitted once:
 
     {"v":1,"type":"end","tick":5000000,"elapsed_ms":620000,
      "reason":"max_ticks_reached"}
@@ -247,6 +247,8 @@ The complete mutable simulation state:
         height:         f32
         boundary:       BoundaryType
         temp_field:     Grid2D
+        setpoint_field: Grid2D     // declared environment setpoints;
+                                   // 0 = none (6.2)
         pressure_field: Grid2D
         uv_field:       Grid2D
         energy_sources: Vec<EnergySource>
@@ -267,8 +269,8 @@ positions. Default cell size 10 angstroms. Index = col + row * cols.
 ### 4.9 SpatialIndex
 
 Spatial hash for neighbor queries. Default cell size 5 angstroms.
-Rebuilt every tick after position updates; rebuild is O(n), queries
-are O(1) average. Wrap-aware (2026-09-05, finding F11): cell
+Rebuilt inside the sub-step loop and again after boundary
+application (5.1); rebuild is O(n), queries are O(1) average. Wrap-aware (2026-09-05, finding F11): cell
 coordinates fold at the grid edges in Wrap worlds so seam-crossing
 candidates are found - consistent with the minimum-image chemistry
 that evaluates them; Wall and Open use raw coordinates.
@@ -366,20 +368,14 @@ delta (it arrives inside v'). Net zero at equilibrium; off
 equilibrium energy flows both ways. The invariant:
 field + KE * ke_field_scale is constant through the bath.
 
-A velocity clamp (max_atom_speed) guarded the founding substrate
-against the tunneling mint (F13: fast atoms crossed the ~1.6-5 A
-non-bonded zone in one unresolved step; the asymmetric force
-sampling minted energy - measured: collision cascade to v ~18,
-field to 2200 C). REMOVED 2026-09-07 (gate K1.3): the integrator
-sub-steps (6.5) resolve those crossings - an atom crossing the
-zone in several sub-steps samples the force symmetrically - so
-no clamp, no mint, and the re-validation contract's requirement
-that the clamp be gone before the E-gates is satisfied. The
-clamp pass also handled F = ma: all accumulated forces are
-divided by the atom's mass at application (the founding draft
-said "applied to both atoms" without /mass; with unit-mass
-hydrogen hiding the error, each oxygen interaction minted
-~(0.5*m - 1) * F^2 - the measured pond furnace).
+All accumulated forces are divided by the atom's mass at
+application (F = ma; the founding draft said "applied to both
+atoms" without /mass - with unit-mass hydrogen hiding the error,
+each oxygen interaction minted ~(0.5*m - 1) * F^2: finding F12).
+No velocity clamp exists: the sub-stepped integrator (6.5) resolves
+the fast-crossing "tunneling mint" the founding substrate needed
+one for (history and measurements: F13, F17 in
+docs/research/abstraction-notes.md).
 
 ### 6.2 Temperature diffusion
 
@@ -412,14 +408,11 @@ Applied to both atoms along the bond axis, equal and opposite,
 divided by mass at application (F = ma; see 6.1). ONE smooth Hooke
 law both directions: stretched is attractive, compressed is
 repulsive through the same F = k * (r - r_eq), bounded at
-k * r_eq near coincidence. The founding draft's separate hard
-core (-strong_repulsion / r^2 below 0.5 * r_eq) is REMOVED
-(2026-09-05): it was a force discontinuity that symplectic Euler
-pumped into runaway oscillation whenever a thermal kick carried
-an atom through it - the measured furnace ignition (F9 revised:
-not a cannon to cap, a core to remove). Coincident atoms
-(r ~ 0) have no defined axis; the force is skipped and the next
-kick separates them.
+k * r_eq near coincidence - no hard core (a force discontinuity
+pumps symplectic integrators; history: F9,
+docs/research/abstraction-notes.md). Coincident atoms (r ~ 0) have
+no defined axis; the force is skipped and the next kick separates
+them.
 
 In Wrap worlds every pair displacement uses the minimum-image
 convention (the shortest vector between the atoms, crossing the
@@ -431,15 +424,10 @@ found by test 2026-09-05, fixed the same day). All pair rules
 The stability law (pinned by test for every formable bond at the
 configured scale): symplectic Euler is stable for
 dt_sub * sqrt(k / reduced_mass) < 2, evaluated at the integration
-sub-step (6.5). spring_energy_scale is set inside that bound with
-margin. Retuned 2026-09-07 from 0.004 to 0.032 with the
-sub-stepping (gate K1.3): at dt = 1 the bound capped light-pair
-springs so soft that the O-H mechanical well - the stretch energy
-at the 7.1 break point - was only ~10 kT, and thermal-speed
-hydrogens shattered the pond's water (measured: 1482 mechanical
-O-H breaks in 10k ticks). At dt_sub = 0.25 the same law admits
-0.032 with the worst formable pair (H-H) at 1.32 < 2, deepening
-the O-H well to ~80 kT - real water's own ratio.
+sub-step (6.5); spring_energy_scale sits inside that bound with
+margin - which at dt_sub = 0.25 holds real-water bond well depths
+(O-H ~80 kT; worst formable pair H-H at 1.32 < 2). History and
+measurements: F2, F17 in docs/research/abstraction-notes.md.
 
 ### 6.4 Pressure force
 
@@ -507,11 +495,10 @@ Per alive bond, in BondId order. FIRST, mechanical dissociation:
 bonds stretched past bond_break_factor * r_eq break
 deterministically, no RNG roll, NO heat release - the stretch
 already spent the energy, and the vanishing spring potential is a
-sink (a heat-releasing length break cascaded in measurement:
-break heat -> kicks -> shoves -> breaks). Real bonds do not
-stretch to multiples of their length; without this rule the
-substrate carried 30-80 A "bonds" (measured). Then the thermal
-roll:
+sink (a heat-releasing length break would cascade: break heat ->
+kicks -> shoves -> breaks; sinks cannot). Real bonds do not
+stretch to multiples of their length (measured without the rule:
+30-80 A "bonds"; F15). Then the thermal roll:
 
     T       = temperature at the bond midpoint (minimum-image)
     p_break = exp(-bond.energy / (kb_scaled * T))   // Boltzmann
@@ -527,11 +514,15 @@ For each atom A with available bond slots, candidates within
 bond_search_radius (default 4.0 angstroms) via the spatial index:
 each unordered pair is attempted at most once per tick, from the
 iteration of the lower AtomId (A is the geometry anchor; a small
-documented asymmetry). Eligibility (alive, capacity on both sides, minimum-image
-distance, not already bonded, and CAPTURE: relative speed below
-max_form_speed - a pair flying past cannot be captured; the bond
-would have to absorb their relative KE as stretch and become a
-comet, measured at ~80 A) is checked before the RNG draw.
+documented asymmetry). Eligibility, checked before the RNG draw:
+
+    - both atoms alive
+    - bond capacity on both sides
+    - minimum-image distance within the search radius
+    - not already bonded to each other
+    - capture: relative speed below max_form_speed - a pair
+      flying past cannot bond (it would have to absorb their
+      relative KE as stretch and become a comet; F14)
 
     p_form = base_formation_rate
            * geometry_factor(A, B)
@@ -715,8 +706,10 @@ changes what chemistry is possible. [Phase 1: these are the defaults
 in khem-core/src/config.rs, test-locked; physics.cfg loading arrives
 in phase 3.]
 
-Values below are the phase-1 tuned set (2026-09-05); the founding
-draft's literals are recorded in git history and in
+Values below are the phase-1 tuned set (tuned 2026-09-05;
+integration_substeps and spring_energy_scale retuned 2026-09-07
+with the K1.3 integrator); the founding draft's literals are
+recorded in git history and in
 docs/research/abstraction-notes.md (findings F1, F2, F7) with the
 measurements that changed them:
 
