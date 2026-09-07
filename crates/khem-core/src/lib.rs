@@ -12,7 +12,7 @@
 //!
 //! - [`world`]: the complete data model - `AtomId`, `BondId`,
 //!   `ElementId`, `AtomState`, `BondState`, `WorldState` with
-//!   guarantee-G04 bond bookkeeping, `Grid2D`, `BoundaryType`
+//!   guarantee-G04 bond bookkeeping, `Grid3D`, `BoundaryType`
 //! - [`elements`]: `ElementProperties` and the 10-element table with
 //!   real values
 //! - [`config`]: `PhysicsConfig`, the tunable constants from runtime
@@ -23,7 +23,7 @@
 //! - [`physics`], [`chemistry`], [`energy`]: the systems (spec 6, 7,
 //!   8) behind their traits (spec 10.4)
 //! - [`observer`]: event model + read-only sampling with union-find
-//!   molecule detection (spec 9); [`ndjson`]: the schema v:1 emitter
+//!   molecule detection (spec 9); [`ndjson`]: the schema v:2 emitter
 //! - [`sim`]: the tick loop driving all systems in spec 5.1 order
 //! - [`pond`]: the hardcoded phase-1 vented primordial pond (the
 //!   K1 gate world; phase 4 replaces it with .kem declarations)
@@ -52,5 +52,5 @@ pub use rng::Rng;
 pub use sim::Sim;
 pub use spatial::SpatialIndex;
 pub use world::{
-    AtomId, AtomState, BondId, BondState, BoundaryType, ElementId, Grid2D, MAX_BONDS, WorldState,
+    AtomId, AtomState, BondId, BondState, BoundaryType, ElementId, Grid3D, MAX_BONDS, WorldState,
 };

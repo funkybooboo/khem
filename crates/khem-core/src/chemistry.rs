@@ -15,10 +15,11 @@
 //!   loads. Unknown-pair fallback: geometric mean of the elements'
 //!   single-bond reference energies; unknown order for a known pair:
 //!   single-bond energy times order (v0 fallbacks).
-//! - The 3D VSEPR angles (109.5 tetrahedral and friends) cannot all
-//!   exist in 2D; they are used as scoring ideals only - effective
-//!   geometry emerges from the gaussian competition. Water's bent
-//!   104.5 and the 120/180 orders matter most; they fit 2D.
+//! - The 3D VSEPR angles (109.5 tetrahedral and friends) are scoring
+//!   ideals for the gaussian competition (spec 7.2/7.4); since the
+//!   3D port they are literally expressible - four bonds CAN sit
+//!   109.5 apart - and effective geometry emerges from the
+//!   competition, not from enforcement.
 //! - Formation chooses order 2 when both atoms have 2+ free slots,
 //!   else order 1 (spec 7.2). Triples are never formed in v0; they
 //!   can only exist if seeded into the initial world.
@@ -138,18 +139,13 @@ fn table_single(lo: u8, hi: u8) -> Option<f32> {
     None
 }
 
-/// Angular distance between two directions, radians, in [0, pi].
-fn angdist(x: f32, y: f32) -> f32 {
-    let d = (x - y).rem_euclid(std::f32::consts::TAU);
-    d.min(std::f32::consts::TAU - d)
-}
-
 /// The ideal angle between an existing bond and a new candidate bond
 /// for this atom, degrees (spec 7.4). None means unconstrained (first
 /// bond, or H/Na/Cl which cannot coordinate).
 ///
-/// The 3D-to-2D tension is real (four bonds cannot be 109.5 apart in
-/// 2D) and accepted: these are scoring ideals, not enforced angles.
+/// These are scoring ideals for the gaussian competition below; in
+/// 3D the tetrahedral 109.5 exists literally (the 2D substrate
+/// could only approximate it).
 fn ideal_angle(world: &WorldState, a: AtomId, candidate_order: u8) -> Option<f32> {
     let atom = world.atom(a);
     if atom.bond_count == 0 {
@@ -209,10 +205,11 @@ pub struct PairOutcome {
     /// Formation probability this tick.
     pub p: f32,
     /// Midpoint via the minimum-image delta (F10); field reads
-    /// wrap, so the midpoint may fall outside [0, width)
+    /// wrap, so the midpoint may fall outside the box
     /// harmlessly.
     pub mx: f32,
     pub my: f32,
+    pub mz: f32,
 }
 
 /// The v0.1 chemistry implementation (runtime spec 10.4: exactly one).
@@ -243,17 +240,17 @@ impl Chemistry {
         index: usize,
         a: AtomId,
         b: AtomId,
-        dx: f32,
-        dy: f32,
+        delta: (f32, f32, f32),
     ) -> bool {
+        let (dx, dy, dz) = delta;
         let r_eq = world.element(world.atom(a).element).radius
             + world.element(world.atom(b).element).radius;
-        let r = (dx * dx + dy * dy).sqrt();
+        let r = (dx * dx + dy * dy + dz * dz).sqrt();
         if r <= self.config.bond_break_factor * r_eq {
             return false;
         }
         if world.break_bond(BondId(index as u32)) {
-            let (ax, ay) = (world.atom(a).x, world.atom(a).y);
+            let (ax, ay, az) = (world.atom(a).x, world.atom(a).y, world.atom(a).z);
             world.event_queue.push(Event::BondBroken {
                 tick: world.tick,
                 bond_id: index as u32,
@@ -262,6 +259,7 @@ impl Chemistry {
                 energy_released: 0.0,
                 x: ax + dx * 0.5,
                 y: ay + dy * 0.5,
+                z: az + dz * 0.5,
             });
         }
         true
@@ -286,19 +284,28 @@ impl Chemistry {
         let order: u8 = if a_free >= 2 && b_free >= 2 { 2 } else { 1 };
         let energy = bond_energy(a_el, b_el, order);
         // Midpoint via minimum-image delta (F10); field reads wrap,
-        // so the midpoint may fall outside [0, width) harmlessly.
-        let (dx, dy) = world.delta(atom_a.x, atom_a.y, atom_b.x, atom_b.y);
-        let (mx, my) = (atom_a.x + dx * 0.5, atom_a.y + dy * 0.5);
+        // so the midpoint may fall outside the box harmlessly.
+        let (dx, dy, dz) = world.delta(atom_a.x, atom_a.y, atom_a.z, atom_b.x, atom_b.y, atom_b.z);
+        let (mx, my, mz) = (
+            atom_a.x + dx * 0.5,
+            atom_a.y + dy * 0.5,
+            atom_a.z + dz * 0.5,
+        );
         // Temperature factor: gaussian around the pair's optimal
         // temperature (module doc: v0 fill).
-        let t = world.temp_field.get(mx, my).max(0.0);
+        let t = world.temp_field.get(mx, my, mz).max(0.0);
         let t_opt = self.config.t_opt_scale * energy;
         let dt = t - t_opt;
         let t_factor = (-dt * dt / (2.0 * self.config.t_width * self.config.t_width)).exp();
         let en =
             (world.element(a_el).electronegativity - world.element(b_el).electronegativity).abs();
+        // The candidate direction as a unit vector; the geometry
+        // factor scores it against the anchor's ideals (F20: the
+        // delta here is the minimum-image one, so a seam-crossing
+        // candidate scores against its true direction).
+        let r = (dx * dx + dy * dy + dz * dz).sqrt();
         let p = self.config.base_formation_rate
-            * self.geometry_factor(world, a, dy.atan2(dx), order)
+            * self.geometry_factor(world, a, (dx / r, dy / r, dz / r), order)
             * t_factor
             * (1.0 + en * self.config.en_bonus);
         PairOutcome {
@@ -307,21 +314,33 @@ impl Chemistry {
             p,
             mx,
             my,
+            mz,
         }
     }
 
     /// Spec 7.2 geometry factor, 0.0-1.0: how well the candidate
-    /// direction fits the atom's VSEPR ideals. Unconstrained atoms
-    /// score 1.0. Otherwise the best-scoring existing bond anchors
-    /// the ideal (on either side of it), scored by a gaussian in
-    /// angular deviation with sigma = geometry_sigma. Private:
-    /// pair_probability is the only production caller, and the
-    /// law tests live in this module.
+    /// direction (a unit vector) fits the atom's VSEPR ideals.
+    /// Unconstrained atoms score 1.0. Otherwise the best-scoring
+    /// existing bond anchors the ideal: the deviation is
+    /// |angle(candidate, bond) - ideal| - the angle between the
+    /// two unit vectors (acos of the dot product) against the
+    /// 7.4 table's ideal - scored by a gaussian with sigma =
+    /// geometry_sigma. This is the 2D law's exact dimensional
+    /// generalization (the 2D form scored |planar-angle - ideal|
+    /// to either side, which is the same deviation in the plane)
+    /// and, since the 3D port, the tetrahedral ideal is literally
+    /// expressible: the candidate cone at 109.5 off the anchor
+    /// exists. The existing bond's direction is the MINIMUM-IMAGE
+    /// direction (spec 6.3: every pair rule; finding F20): a
+    /// seam-straddling bond's raw delta reads mirrored (pi off
+    /// in the crossing axis), and candidates would score against
+    /// a phantom ideal. Private: pair_probability is the only
+    /// production caller, and the law tests live in this module.
     fn geometry_factor(
         &self,
         world: &WorldState,
         a: AtomId,
-        candidate_angle: f32,
+        candidate_dir: (f32, f32, f32),
         candidate_order: u8,
     ) -> f32 {
         let Some(ideal) = ideal_angle(world, a, candidate_order) else {
@@ -330,7 +349,7 @@ impl Chemistry {
         let ideal = ideal.to_radians();
         let sigma = self.config.geometry_sigma.to_radians();
         let atom = world.atom(a);
-        let (ax, ay) = (atom.x, atom.y);
+        let (ax, ay, az) = (atom.x, atom.y, atom.z);
         let mut best = 0.0f32;
         for id in atom.bond_ids() {
             let bond = world.bond(id);
@@ -340,15 +359,19 @@ impl Chemistry {
                 bond.atom_a
             };
             let o = world.atom(other);
-            // The existing bond's direction is the minimum-image
-            // direction (spec 6.3: every pair rule; finding F20):
-            // a seam-straddling bond's raw delta reads mirrored
-            // (pi off in the crossing axis), and candidates would
-            // score against a phantom ideal.
-            let (dx, dy) = world.delta(ax, ay, o.x, o.y);
-            let theta = dy.atan2(dx);
-            let delta = angdist(candidate_angle, theta + ideal)
-                .min(angdist(candidate_angle, theta - ideal));
+            let (dx, dy, dz) = world.delta(ax, ay, az, o.x, o.y, o.z);
+            let len = (dx * dx + dy * dy + dz * dz).sqrt();
+            if len < f32::EPSILON {
+                continue;
+            }
+            // The angle between the candidate direction and the
+            // existing bond direction; the ideal sits at `ideal`
+            // off the anchor, on a cone in 3D (to either side in
+            // the 2D projection).
+            let cos_theta =
+                (candidate_dir.0 * dx + candidate_dir.1 * dy + candidate_dir.2 * dz) / len;
+            let theta = cos_theta.clamp(-1.0, 1.0).acos();
+            let delta = (theta - ideal).abs();
             let score = (-delta * delta / (2.0 * sigma * sigma)).exp();
             best = best.max(score);
         }
@@ -376,22 +399,29 @@ impl ChemistrySystem for Chemistry {
             // One minimum-image delta serves both the length check
             // and the midpoint (a seam pair samples the field where
             // the bond actually is, not across the world - F10).
-            let (ax, ay) = (world.atom(a).x, world.atom(a).y);
-            let (dx, dy) = world.delta(ax, ay, world.atom(b).x, world.atom(b).y);
-            if self.break_if_overstretched(world, i, a, b, dx, dy) {
+            let (ax, ay, az) = (world.atom(a).x, world.atom(a).y, world.atom(a).z);
+            let (dx, dy, dz) = world.delta(
+                ax,
+                ay,
+                az,
+                world.atom(b).x,
+                world.atom(b).y,
+                world.atom(b).z,
+            );
+            if self.break_if_overstretched(world, i, a, b, (dx, dy, dz)) {
                 continue;
             }
-            let (mx, my) = (ax + dx * 0.5, ay + dy * 0.5);
+            let (mx, my, mz) = (ax + dx * 0.5, ay + dy * 0.5, az + dz * 0.5);
             // Spec 7.1. Non-positive temperatures give p_break 0
             // (clamped field reads; exp(-inf) guard).
-            let t = world.temp_field.get(mx, my).max(0.0);
+            let t = world.temp_field.get(mx, my, mz).max(0.0);
             let p_break = if t > 0.0 {
                 (-(energy / (self.config.kb_scaled * t))).exp()
             } else {
                 0.0
             };
             // Spec 8.2, folded in (module doc).
-            let p_uv = world.uv_field.get(mx, my) * self.config.uv_sensitivity.of_order(order);
+            let p_uv = world.uv_field.get(mx, my, mz) * self.config.uv_sensitivity.of_order(order);
             let p = 1.0 - (1.0 - p_break) * (1.0 - p_uv);
             if world.rng.f01() < p as f64 && world.break_bond(BondId(i as u32)) {
                 // Spec 7.1: the released heat COMMITS to the
@@ -403,7 +433,7 @@ impl ChemistrySystem for Chemistry {
                 // unchanged: the full release_fraction * E enters
                 // the field, spread over E/0.3/cap ticks.
                 let released = energy * self.config.release_fraction;
-                world.release_field.add(mx, my, released);
+                world.release_field.add(mx, my, mz, released);
                 world.event_queue.push(Event::BondBroken {
                     tick: world.tick,
                     bond_id: i as u32,
@@ -412,6 +442,7 @@ impl ChemistrySystem for Chemistry {
                     energy_released: released,
                     x: mx,
                     y: my,
+                    z: mz,
                 });
             }
         }
@@ -429,6 +460,7 @@ impl ChemistrySystem for Chemistry {
                 element: a_el,
                 x: ax,
                 y: ay,
+                z: az,
                 alive: a_alive,
                 ..
             } = world.atoms[i];
@@ -446,7 +478,7 @@ impl ChemistrySystem for Chemistry {
             }
             // Candidates come from the spatial index the tick loop
             // rebuilt after position updates (G07).
-            let candidates = world.spatial_index.neighbors(ax, ay, radius);
+            let candidates = world.spatial_index.neighbors(ax, ay, az, radius);
             for b_id in candidates {
                 // Each unordered pair is attempted exactly once: from
                 // the iteration of the lower AtomId. The iterating
@@ -458,17 +490,17 @@ impl ChemistrySystem for Chemistry {
                 if world.atom(a_id).bond_count >= a_max {
                     break;
                 }
-                let (b_el, bx, by, b_alive) = {
+                let (b_el, bx, by, bz, b_alive) = {
                     let b = world.atom(b_id);
-                    (b.element, b.x, b.y, b.alive)
+                    (b.element, b.x, b.y, b.z, b.alive)
                 };
                 let b_max = world.element(b_el).max_bonds;
                 let b_count = world.atom(b_id).bond_count;
                 if !b_alive || b_count >= b_max {
                     continue;
                 }
-                let (dx, dy) = world.delta(ax, ay, bx, by);
-                if dx * dx + dy * dy > radius2 {
+                let (dx, dy, dz) = world.delta(ax, ay, az, bx, by, bz);
+                if dx * dx + dy * dy + dz * dz > radius2 {
                     continue;
                 }
                 // Steric contact (F18's fix, spec 7.2): a bond may
@@ -484,7 +516,7 @@ impl ChemistrySystem for Chemistry {
                 // nothing (RNG discipline).
                 let r_eq = world.element(a_el).radius + world.element(b_el).radius;
                 let cap = self.config.bond_form_factor * r_eq;
-                if dx * dx + dy * dy > cap * cap {
+                if dx * dx + dy * dy + dz * dz > cap * cap {
                     continue;
                 }
                 if world.is_bonded(a_id, b_id) {
@@ -495,11 +527,14 @@ impl ChemistrySystem for Chemistry {
                 // have to absorb their relative KE as stretch and
                 // become a comet (measured without this gate:
                 // bond-length tail at ~80 A).
-                let (rvx, rvy) = (
+                let (rvx, rvy, rvz) = (
                     world.atom(b_id).vx - world.atom(a_id).vx,
                     world.atom(b_id).vy - world.atom(a_id).vy,
+                    world.atom(b_id).vz - world.atom(a_id).vz,
                 );
-                if rvx * rvx + rvy * rvy > self.config.max_form_speed * self.config.max_form_speed {
+                if rvx * rvx + rvy * rvy + rvz * rvz
+                    > self.config.max_form_speed * self.config.max_form_speed
+                {
                     continue;
                 }
                 let outcome = self.pair_probability(world, a_id, b_id);
@@ -513,6 +548,7 @@ impl ChemistrySystem for Chemistry {
                     world.temp_field.add(
                         outcome.mx,
                         outcome.my,
+                        outcome.mz,
                         -outcome.energy * self.config.formation_fraction,
                     );
                     world.event_queue.push(Event::BondFormed {
@@ -526,6 +562,7 @@ impl ChemistrySystem for Chemistry {
                         energy: outcome.energy,
                         x: outcome.mx,
                         y: outcome.my,
+                        z: outcome.mz,
                     });
                 }
             }
@@ -543,6 +580,7 @@ mod tests {
 
     fn world(seed: u64) -> WorldState {
         WorldState::new(
+            100.0,
             100.0,
             100.0,
             BoundaryType::Wrap,
@@ -586,35 +624,41 @@ mod tests {
         // straddling the Wrap seam (O at x=0.5, H across at x=99.4
         // of a 100 A world: the true bond points at 180 degrees,
         // the raw delta reads angle 0) must score the direction at
-        // the TRUE ideal (104.5 degrees off the real bond, i.e.
-        // 75.5 degrees) near 1.0, and the direction ideal only
-        // against the MIRRORED anchor (104.5 degrees) low.
-        // Pre-fix this was inverted: the phantom direction scored
-        // 1.0, the true one 0.63.
+        // the TRUE ideal (104.5 degrees off the real bond) near
+        // 1.0, and the direction ideal only against the MIRRORED
+        // anchor low. Pre-fix this was inverted: the phantom
+        // direction scored 1.0, the true one 0.63.
         let config = PhysicsConfig::default();
         let mut w = world(6);
-        let o = w.spawn_atom(element_id("O").unwrap(), 0.5, 50.0);
-        let h = w.spawn_atom(element_id("H").unwrap(), 99.4, 50.0);
+        let o = w.spawn_atom(element_id("O").unwrap(), 0.5, 50.0, 50.0);
+        let h = w.spawn_atom(element_id("H").unwrap(), 99.4, 50.0, 50.0);
         w.form_bond(o, h, 1, 463.0);
         let chem = chemistry(config);
-        let at_true_ideal = chem.geometry_factor(&w, o, 75.5f32.to_radians(), 1);
-        let at_mirrored_ideal = chem.geometry_factor(&w, o, 104.5f32.to_radians(), 1);
+        // The true bond direction is (-1, 0, 0); the ideal sits
+        // 104.5 degrees off it, in the xy plane (the anchor and the
+        // ideal cone are symmetric in every perpendicular plane -
+        // one representative suffices).
+        let ideal = 104.5f32.to_radians();
+        let at_true_ideal = (-ideal.cos(), ideal.sin(), 0.0);
+        let at_mirrored_ideal = (ideal.cos(), ideal.sin(), 0.0);
         assert!(
-            at_true_ideal > 0.99,
+            chem.geometry_factor(&w, o, at_true_ideal, 1) > 0.99,
             "the ideal off the true bond direction must score ~1, \
-             got {at_true_ideal}"
+             got {}",
+            chem.geometry_factor(&w, o, at_true_ideal, 1)
         );
         assert!(
-            at_mirrored_ideal < 0.7,
-            "the mirrored anchor's ideal must score low, got {at_mirrored_ideal}"
+            chem.geometry_factor(&w, o, at_mirrored_ideal, 1) < 0.7,
+            "the mirrored anchor's ideal must score low, got {}",
+            chem.geometry_factor(&w, o, at_mirrored_ideal, 1)
         );
         // A bulk anchor (same geometry away from the seam) agrees
         // with the raw delta, so the fix changes nothing there.
         let mut b = world(6);
-        let ob = b.spawn_atom(element_id("O").unwrap(), 50.0, 50.0);
-        let hb = b.spawn_atom(element_id("H").unwrap(), 51.1, 50.0);
+        let ob = b.spawn_atom(element_id("O").unwrap(), 50.0, 50.0, 50.0);
+        let hb = b.spawn_atom(element_id("H").unwrap(), 51.1, 50.0, 50.0);
         b.form_bond(ob, hb, 1, 463.0);
-        let bulk = chem.geometry_factor(&b, ob, 104.5f32.to_radians(), 1);
+        let bulk = chem.geometry_factor(&b, ob, (ideal.cos(), ideal.sin(), 0.0), 1);
         assert!(
             bulk > 0.99,
             "bulk anchor must score its ideal ~1, got {bulk}"
@@ -624,15 +668,15 @@ mod tests {
     #[test]
     fn ideal_angle_covers_the_table() {
         let mut w = world(1);
-        let h = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0);
-        let o = w.spawn_atom(element_id("O").unwrap(), 50.0, 50.0);
-        let c = w.spawn_atom(element_id("C").unwrap(), 50.0, 50.0);
+        let h = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0, 50.0);
+        let o = w.spawn_atom(element_id("O").unwrap(), 50.0, 50.0, 50.0);
+        let c = w.spawn_atom(element_id("C").unwrap(), 50.0, 50.0, 50.0);
         // No existing bonds: unconstrained.
         assert_eq!(ideal_angle(&w, o, 1), None);
         // Give each a first bond (separate partners: an H can hold
         // only one bond, so the same partner cannot serve twice).
-        let h_o = w.spawn_atom(element_id("H").unwrap(), 90.0, 90.0);
-        let h_c = w.spawn_atom(element_id("H").unwrap(), 80.0, 90.0);
+        let h_o = w.spawn_atom(element_id("H").unwrap(), 90.0, 90.0, 90.0);
+        let h_c = w.spawn_atom(element_id("H").unwrap(), 80.0, 90.0, 90.0);
         w.form_bond(o, h_o, 1, 463.0);
         w.form_bond(c, h_c, 1, 346.0);
         assert_eq!(ideal_angle(&w, o, 1), Some(104.5));
@@ -644,38 +688,50 @@ mod tests {
     #[test]
     fn geometry_factor_peaks_at_ideal_angle() {
         let mut w = world(1);
-        let o = w.spawn_atom(element_id("O").unwrap(), 50.0, 50.0);
-        let h1 = w.spawn_atom(element_id("H").unwrap(), 51.0, 50.0); // bond at 0 deg
+        let o = w.spawn_atom(element_id("O").unwrap(), 50.0, 50.0, 50.0);
+        let h1 = w.spawn_atom(element_id("H").unwrap(), 51.0, 50.0, 50.0); // bond at 0 deg
         w.form_bond(o, h1, 1, 463.0);
         let chem = chemistry(PhysicsConfig::default());
-        let at_ideal = chem.geometry_factor(&w, o, 104.5f32.to_radians(), 1);
-        let at_opposite = chem.geometry_factor(&w, o, std::f32::consts::PI, 1);
+        let ideal = 104.5f32.to_radians();
+        let at_ideal = (ideal.cos(), ideal.sin(), 0.0);
+        let at_opposite = (-1.0, 0.0, 0.0);
+        let at_ideal_scored = chem.geometry_factor(&w, o, at_ideal, 1);
+        let at_opposite_scored = chem.geometry_factor(&w, o, at_opposite, 1);
         assert!(
-            at_ideal > 0.99,
-            "ideal direction should score ~1, got {at_ideal}"
+            at_ideal_scored > 0.99,
+            "ideal direction should score ~1, got {at_ideal_scored}"
         );
         assert!(
-            at_opposite < 0.2,
-            "opposite direction should score low, got {at_opposite}"
+            at_opposite_scored < 0.2,
+            "opposite direction should score low, got {at_opposite_scored}"
+        );
+        // The ideal cone: any perpendicular plane scores the same
+        // (in 3D the 104.5 ideal is a cone off the anchor, not two
+        // planar directions).
+        let at_ideal_off_plane = (ideal.cos(), 0.0, ideal.sin());
+        let off_plane_scored = chem.geometry_factor(&w, o, at_ideal_off_plane, 1);
+        assert!(
+            (off_plane_scored - at_ideal_scored).abs() < 1e-5,
+            "the ideal is a cone: {off_plane_scored} vs {at_ideal_scored}"
         );
         // Unconstrained atom (free carbon) scores 1.
-        let c = w.spawn_atom(element_id("C").unwrap(), 70.0, 70.0);
-        assert_eq!(chem.geometry_factor(&w, c, 0.0, 1), 1.0);
+        let c = w.spawn_atom(element_id("C").unwrap(), 70.0, 70.0, 70.0);
+        assert_eq!(chem.geometry_factor(&w, c, (1.0, 0.0, 0.0), 1), 1.0);
     }
 
     #[test]
     fn hot_weak_bonds_break_and_release_heat() {
         let config = PhysicsConfig::default();
         let mut w = world(7);
-        let a = w.spawn_atom(element_id("O").unwrap(), 50.0, 50.0);
-        let b = w.spawn_atom(element_id("O").unwrap(), 51.0, 50.0);
+        let a = w.spawn_atom(element_id("O").unwrap(), 50.0, 50.0, 50.0);
+        let b = w.spawn_atom(element_id("O").unwrap(), 51.0, 50.0, 50.0);
         // A pathologically weak bond in a very hot field: p_break =
         // exp(-E/(kb_scaled * T)) = exp(-1/(0.45 * 10_000)) ~ 0.9998
         // per tick. (Breaking reads kb_scaled 0.45, not
         // thermal_kick_scale 0.008314 - the constants decoupled in
         // the F1 tuning; the old comment here had them crossed.)
         w.form_bond(a, b, 1, 1.0);
-        w.temp_field.set(50.0, 50.0, 10_000.0);
+        w.temp_field.set(50.0, 50.0, 50.0, 10_000.0);
         let mut chem = chemistry(config);
         for _ in 0..10 {
             chem.break_bonds(&mut w);
@@ -687,13 +743,13 @@ mod tests {
         // at the break moment, and the full release_fraction * E
         // sits in the reservoir awaiting the bath's bounded drain
         // (physics owns the drain; the law tests live there).
-        let committed = w.release_field.get(50.5, 50.0);
+        let committed = w.release_field.get(50.5, 50.0, 50.0);
         let expected = 1.0 * config.release_fraction;
         assert!(
             (committed - expected).abs() < 1e-2,
             "committed {committed}, expected {expected}"
         );
-        let temp = w.temp_field.get(50.5, 50.0);
+        let temp = w.temp_field.get(50.5, 50.0, 50.0);
         assert!(
             (temp - 10_000.0).abs() < 1e-2,
             "cell spiked to {temp} at break"
@@ -715,8 +771,11 @@ mod tests {
             ..PhysicsConfig::default()
         };
         let mut w = world(11);
-        let a = w.spawn_atom(element_id("C").unwrap(), 50.0, 95.0);
-        let b = w.spawn_atom(element_id("C").unwrap(), 51.0, 95.0);
+        // The surface is the TOP LAYER in z (the 3D port moved the
+        // vertical axis from y to z: spec 8.2), so the bonded pair
+        // sits at z = 95 - a surface cell.
+        let a = w.spawn_atom(element_id("C").unwrap(), 50.0, 50.0, 95.0);
+        let b = w.spawn_atom(element_id("C").unwrap(), 51.0, 50.0, 95.0);
         w.form_bond(a, b, 1, 346.0); // strong bond, frozen at T=0
         w.energy_sources
             .push(crate::energy::EnergySource::solar_uv(1.0, true));
@@ -737,9 +796,9 @@ mod tests {
             ..PhysicsConfig::default()
         };
         let mut w = world(3);
-        let a = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0);
-        let b = w.spawn_atom(element_id("H").unwrap(), 51.0, 50.0);
-        w.temp_field.set(51.0, 50.0, 43.6);
+        let a = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0, 50.0);
+        let b = w.spawn_atom(element_id("H").unwrap(), 51.0, 50.0, 50.0);
+        w.temp_field.set(51.0, 50.0, 50.0, 43.6);
         rebuild_index(&mut w);
         chemistry(config).form_bonds(&mut w);
         assert_eq!(
@@ -751,7 +810,7 @@ mod tests {
         assert_eq!(w.atom(a).bond_count, 1);
         assert_eq!(w.atom(b).bond_count, 1);
         // Formation absorbed heat at the midpoint.
-        let after = w.temp_field.get(51.0, 50.0);
+        let after = w.temp_field.get(51.0, 50.0, 50.0);
         assert!(after < 43.6, "formation must cool, got {after}");
         assert!(matches!(
             w.event_queue.first(),
@@ -767,11 +826,11 @@ mod tests {
         };
         // G04: a full H cannot bond a third atom.
         let mut w = world(4);
-        let a = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0);
-        let b = w.spawn_atom(element_id("H").unwrap(), 51.0, 50.0);
-        let c = w.spawn_atom(element_id("H").unwrap(), 52.0, 50.0);
+        let a = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0, 50.0);
+        let b = w.spawn_atom(element_id("H").unwrap(), 51.0, 50.0, 50.0);
+        let c = w.spawn_atom(element_id("H").unwrap(), 52.0, 50.0, 50.0);
         w.form_bond(a, b, 1, 436.0);
-        w.temp_field.set(51.0, 50.0, 43.6);
+        w.temp_field.set(51.0, 50.0, 50.0, 43.6);
         rebuild_index(&mut w);
         chemistry(config).form_bonds(&mut w);
         assert_eq!(w.bonds.len(), 1, "no second bond on a full atom");
@@ -779,8 +838,8 @@ mod tests {
         assert_eq!(w.atom(c).bond_count, 0, "the bystander gains nothing");
         // Out of radius: no bond even at rate 1.0.
         let mut w = world(4);
-        let d = w.spawn_atom(element_id("H").unwrap(), 10.0, 10.0);
-        let e = w.spawn_atom(element_id("H").unwrap(), 90.0, 90.0);
+        let d = w.spawn_atom(element_id("H").unwrap(), 10.0, 10.0, 50.0);
+        let e = w.spawn_atom(element_id("H").unwrap(), 90.0, 90.0, 50.0);
         rebuild_index(&mut w);
         chemistry(config).form_bonds(&mut w);
         assert_eq!(w.bonds.len(), 0, "distant pair must not bond");
@@ -799,9 +858,9 @@ mod tests {
         };
         let mut w = world(5);
         // Two carbons, both with all slots free: order 2 expected.
-        let a = w.spawn_atom(element_id("C").unwrap(), 50.0, 50.0);
-        let b = w.spawn_atom(element_id("C").unwrap(), 51.0, 50.0);
-        w.temp_field.set(50.5, 50.0, 61.4); // t_opt = 0.1 * 614
+        let a = w.spawn_atom(element_id("C").unwrap(), 50.0, 50.0, 50.0);
+        let b = w.spawn_atom(element_id("C").unwrap(), 51.0, 50.0, 50.0);
+        w.temp_field.set(50.5, 50.0, 50.0, 61.4); // t_opt = 0.1 * 614
         rebuild_index(&mut w);
         chemistry(config).form_bonds(&mut w);
         assert_eq!(w.bonds.len(), 1);
@@ -811,9 +870,9 @@ mod tests {
         assert_eq!(w.atom(b).bond_count, 1);
         // H + C: H has one slot, so single.
         let mut w = world(5);
-        let h = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0);
-        let c = w.spawn_atom(element_id("C").unwrap(), 51.0, 50.0);
-        w.temp_field.set(50.5, 50.0, 41.3);
+        let h = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0, 50.0);
+        let c = w.spawn_atom(element_id("C").unwrap(), 51.0, 50.0, 50.0);
+        w.temp_field.set(50.5, 50.0, 50.0, 41.3);
         rebuild_index(&mut w);
         chemistry(config).form_bonds(&mut w);
         assert_eq!(w.bond(BondId(0)).order, 1);
@@ -830,11 +889,11 @@ mod tests {
             ..PhysicsConfig::default()
         };
         let mut w = world(6);
-        let o = w.spawn_atom(element_id("O").unwrap(), 50.0, 50.0);
-        let h1 = w.spawn_atom(element_id("H").unwrap(), 51.0, 50.0);
-        let h2 = w.spawn_atom(element_id("H").unwrap(), 49.2, 50.0); // ~180 deg, too close to anti-ideal
+        let o = w.spawn_atom(element_id("O").unwrap(), 50.0, 50.0, 50.0);
+        let h1 = w.spawn_atom(element_id("H").unwrap(), 51.0, 50.0, 50.0);
+        let h2 = w.spawn_atom(element_id("H").unwrap(), 49.2, 50.0, 50.0); // ~180 deg, too close to anti-ideal
         w.form_bond(o, h1, 1, 463.0);
-        w.temp_field.set(50.0, 50.0, 46.3); // t_opt for O-H
+        w.temp_field.set(50.0, 50.0, 50.0, 46.3); // t_opt for O-H
         rebuild_index(&mut w);
         chemistry(config).form_bonds(&mut w);
         assert_eq!(
@@ -897,8 +956,8 @@ mod tests {
         // bond_break_factor * r_eq breaks without any RNG roll.
         let config = PhysicsConfig::default();
         let mut w = world(6);
-        let a = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0);
-        let b = w.spawn_atom(element_id("H").unwrap(), 60.0, 50.0); // r = 10 >> 2.5 * 1.06
+        let a = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0, 50.0);
+        let b = w.spawn_atom(element_id("H").unwrap(), 60.0, 50.0, 50.0); // r = 10 >> 2.5 * 1.06
         w.form_bond(a, b, 1, 436.0);
         let before: f32 = w.temp_field.data.iter().sum();
         // A cold field: thermal breaking is impossible (p = 0), so
@@ -922,8 +981,8 @@ mod tests {
         // Within the factor: no break, even at max roll pressure
         // (the thermal probability at T=0 is zero).
         let mut w2 = world(6);
-        let c = w2.spawn_atom(element_id("H").unwrap(), 50.0, 50.0);
-        let d = w2.spawn_atom(element_id("H").unwrap(), 51.0, 50.0); // r = 1 < 2.65
+        let c = w2.spawn_atom(element_id("H").unwrap(), 50.0, 50.0, 50.0);
+        let d = w2.spawn_atom(element_id("H").unwrap(), 51.0, 50.0, 50.0); // r = 1 < 2.65
         w2.form_bond(c, d, 1, 436.0);
         chemistry(config).break_bonds(&mut w2);
         assert!(w2.bond(BondId(0)).alive, "normal-length bond must survive");
@@ -938,11 +997,11 @@ mod tests {
             ..PhysicsConfig::default()
         };
         let mut w = world(4);
-        let a = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0);
-        let b = w.spawn_atom(element_id("H").unwrap(), 51.0, 50.0);
+        let a = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0, 50.0);
+        let b = w.spawn_atom(element_id("H").unwrap(), 51.0, 50.0, 50.0);
         w.atom_mut(a).vx = 10.0; // opposite directions: |v_rel| 11
         w.atom_mut(b).vx = -1.0;
-        w.temp_field.set(50.5, 50.0, 43.6);
+        w.temp_field.set(50.5, 50.0, 50.0, 43.6);
         rebuild_index(&mut w);
         chemistry(config).form_bonds(&mut w);
         assert_eq!(w.bonds.len(), 0, "a fast flyby must not be captured");
@@ -970,9 +1029,9 @@ mod tests {
         // 7.1 break length. Pre-fix this captured, and the next
         // pass killed the bond silently - 123 measured.
         let mut w = world(6);
-        w.spawn_atom(h, 50.0, 50.0);
-        w.spawn_atom(o, 53.2, 50.0);
-        w.temp_field.set(51.0, 50.0, 46.3); // t_opt for O-H
+        w.spawn_atom(h, 50.0, 50.0, 50.0);
+        w.spawn_atom(o, 53.2, 50.0, 50.0);
+        w.temp_field.set(51.0, 50.0, 50.0, 46.3); // t_opt for O-H
         rebuild_index(&mut w);
         chemistry(config).form_bonds(&mut w);
         assert_eq!(w.bonds.len(), 0, "phantom candidate must not be captured");
@@ -980,17 +1039,17 @@ mod tests {
         // break length - the birth mints fling energy (measured 40
         // mechanical breaks at age 1-2).
         let mut w = world(6);
-        w.spawn_atom(h, 50.0, 50.0);
-        w.spawn_atom(o, 52.9, 50.0);
-        w.temp_field.set(51.0, 50.0, 46.3);
+        w.spawn_atom(h, 50.0, 50.0, 50.0);
+        w.spawn_atom(o, 52.9, 50.0, 50.0);
+        w.temp_field.set(51.0, 50.0, 50.0, 46.3);
         rebuild_index(&mut w);
         chemistry(config).form_bonds(&mut w);
         assert_eq!(w.bonds.len(), 0, "wide candidate must not be captured");
         // Contact: formation proceeds.
         let mut w = world(6);
-        let a = w.spawn_atom(h, 50.0, 50.0);
-        w.spawn_atom(o, 51.5, 50.0);
-        w.temp_field.set(51.0, 50.0, 46.3);
+        let a = w.spawn_atom(h, 50.0, 50.0, 50.0);
+        w.spawn_atom(o, 51.5, 50.0, 50.0);
+        w.temp_field.set(51.0, 50.0, 50.0, 46.3);
         rebuild_index(&mut w);
         chemistry(config).form_bonds(&mut w);
         assert_eq!(w.bonds.len(), 1, "contact candidate must be captured");
@@ -1004,9 +1063,9 @@ mod tests {
             let mut w = world(seed);
             // A handful of atoms in a warm field, chemistry only.
             for i in 0..6 {
-                w.spawn_atom(element_id("H").unwrap(), 50.0 + i as f32, 50.0);
+                w.spawn_atom(element_id("H").unwrap(), 50.0 + i as f32, 50.0, 50.0);
             }
-            w.temp_field.set(50.0, 50.0, 400.0);
+            w.temp_field.set(50.0, 50.0, 50.0, 400.0);
             rebuild_index(&mut w);
             let mut chem = chemistry(config);
             chem.form_bonds(&mut w);
@@ -1026,16 +1085,17 @@ mod tests {
         // One carbon surrounded by six hydrogens within the contact
         // cap (C-H r_eq 1.30, cap 1.95); only four bonds may form
         // (G04 via form_bond).
-        let c = w.spawn_atom(element_id("C").unwrap(), 50.0, 50.0);
+        let c = w.spawn_atom(element_id("C").unwrap(), 50.0, 50.0, 50.0);
         for i in 0..6 {
             let angle = i as f32 * std::f32::consts::TAU / 6.0;
             w.spawn_atom(
                 element_id("H").unwrap(),
                 50.0 + 1.5 * angle.cos(),
                 50.0 + 1.5 * angle.sin(),
+                50.0,
             );
         }
-        w.temp_field.set(50.0, 50.0, 46.3);
+        w.temp_field.set(50.0, 50.0, 50.0, 46.3);
         rebuild_index(&mut w);
         chemistry(config).form_bonds(&mut w);
         // G04 across the whole world: no atom exceeds its element's
@@ -1071,10 +1131,10 @@ mod tests {
             ..PhysicsConfig::default()
         };
         let mut w = world(9);
-        let a = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0);
-        let b = w.spawn_atom(element_id("H").unwrap(), 51.0, 50.0);
+        let a = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0, 50.0);
+        let b = w.spawn_atom(element_id("H").unwrap(), 51.0, 50.0, 50.0);
         w.temp_field.data.fill(20.0);
-        w.temp_field.set(50.5, 50.0, 43.6); // H-H optimum
+        w.temp_field.set(50.5, 50.0, 50.0, 43.6); // H-H optimum
         let before: f32 = w.temp_field.data.iter().sum();
         rebuild_index(&mut w);
         chemistry(config).form_bonds(&mut w);
@@ -1085,7 +1145,7 @@ mod tests {
         assert!((absorbed - expected).abs() < 1e-2, "absorbed {absorbed}");
         // Now break it thermally: T so hot that p ~ 1. The set()
         // changes the field sum too, so measure from after it.
-        w.temp_field.set(50.5, 50.0, 10_000.0);
+        w.temp_field.set(50.5, 50.0, 50.0, 10_000.0);
         let after_set: f32 = w.temp_field.data.iter().sum();
         chemistry(config).break_bonds(&mut w);
         assert!(!w.bond(BondId(0)).alive);
@@ -1145,8 +1205,8 @@ mod tests {
             for i in 0..200u32 {
                 let y = 10.0 + (i / 20) as f32;
                 let x = 10.0 + (i % 20) as f32 * 2.5;
-                let a = w.spawn_atom(element_id("O").unwrap(), x, y);
-                let b = w.spawn_atom(element_id("O").unwrap(), x + 1.0, y);
+                let a = w.spawn_atom(element_id("O").unwrap(), x, y, 50.0);
+                let b = w.spawn_atom(element_id("O").unwrap(), x + 1.0, y, 50.0);
                 w.form_bond(a, b, 1, 146.0);
             }
             w
@@ -1179,10 +1239,10 @@ mod tests {
         // exact comparisons.
         let config = PhysicsConfig::default();
         let mut w = world(13);
-        let hh_a = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0);
-        let hh_b = w.spawn_atom(element_id("H").unwrap(), 51.0, 50.0);
-        let ho_a = w.spawn_atom(element_id("H").unwrap(), 60.0, 50.0);
-        let ho_b = w.spawn_atom(element_id("O").unwrap(), 61.0, 50.0);
+        let hh_a = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0, 50.0);
+        let hh_b = w.spawn_atom(element_id("H").unwrap(), 51.0, 50.0, 50.0);
+        let ho_a = w.spawn_atom(element_id("H").unwrap(), 60.0, 50.0, 50.0);
+        let ho_b = w.spawn_atom(element_id("O").unwrap(), 61.0, 50.0, 50.0);
         // Same field temperature for all pairs.
         w.temp_field.data.fill(43.6); // H-H optimum
         let chem = chemistry(config);
@@ -1202,8 +1262,8 @@ mod tests {
         // Temperature gaussian: at the pair's optimum the
         // probability is maximal; 60 degrees away it collapses.
         let mut cold = world(13);
-        let a = cold.spawn_atom(element_id("H").unwrap(), 50.0, 50.0);
-        let b = cold.spawn_atom(element_id("H").unwrap(), 51.0, 50.0);
+        let a = cold.spawn_atom(element_id("H").unwrap(), 50.0, 50.0, 50.0);
+        let b = cold.spawn_atom(element_id("H").unwrap(), 51.0, 50.0, 50.0);
         cold.temp_field.data.fill(43.6);
         let chem = chemistry(config);
         let p_opt = chem.pair_probability(&cold, a, b).p;
@@ -1261,7 +1321,7 @@ mod tests {
     fn angle_table_covers_every_element() {
         // Spec 7.4, every element, one bond held:
         let mut w = world(15);
-        let partner = w.spawn_atom(element_id("H").unwrap(), 90.0, 90.0);
+        let partner = w.spawn_atom(element_id("H").unwrap(), 90.0, 90.0, 50.0);
         let expect = [
             ("H", None),
             ("C", Some(109.5)),
@@ -1276,7 +1336,7 @@ mod tests {
         ];
         for (symbol, want) in expect {
             let el = element_id(symbol).unwrap();
-            let a = w.spawn_atom(el, 50.0, 50.0);
+            let a = w.spawn_atom(el, 50.0, 50.0, 50.0);
             w.form_bond(a, partner, 1, 200.0);
             assert_eq!(
                 ideal_angle(&w, a, 1),
@@ -1287,9 +1347,9 @@ mod tests {
         }
         // Carbon coordination states: one double existing -> 120,
         // two doubles -> 180.
-        let c = w.spawn_atom(element_id("C").unwrap(), 10.0, 10.0);
-        let o1 = w.spawn_atom(element_id("O").unwrap(), 11.0, 10.0);
-        let o2 = w.spawn_atom(element_id("O").unwrap(), 12.0, 10.0);
+        let c = w.spawn_atom(element_id("C").unwrap(), 10.0, 10.0, 50.0);
+        let o1 = w.spawn_atom(element_id("O").unwrap(), 11.0, 10.0, 50.0);
+        let o2 = w.spawn_atom(element_id("O").unwrap(), 12.0, 10.0, 50.0);
         w.form_bond(c, o1, 2, 799.0);
         assert_eq!(ideal_angle(&w, c, 1), Some(120.0));
         w.form_bond(c, o2, 2, 799.0);

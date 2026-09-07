@@ -53,6 +53,22 @@
 //!
 //! Findings and gate history live in
 //! docs/research/abstraction-notes.md.
+//!
+//! THE 3D PORT (phase 2, ADR-0013) mechanically moved this harness
+//! to 3D geometry; the gates' PASS BARS below remain the 2D pass
+//! records until each gate's re-climb commit re-derives them with
+//! 3D evidence (the port plan's exit criterion: one gate per
+//! commit, the 2D numbers as the regression reference). The known
+//! dimensional moves are written where they bite:
+//! - K1.1's coupling law is dimensional BY CONSTRUCTION - three
+//!   Langevin components put KE/atom at 3/2 * kb * T, so the 2D
+//!   bar [0.8, 1.4] rides as its 3D counterpart [1.2, 2.1] (the
+//!   same relative width around 3/2); the re-climb measures it.
+//! - K1.5's beaker is PROVISIONALLY sized (a 30 A cube, the 2D
+//!   beaker's free mix): in 3D a 4 A seam band is a large
+//!   surface fraction of any affordable box - the class split
+//!   (per-axis seams versus bulk), the sizing, and the bars are
+//!   the re-climb commit's measured work.
 
 use khem_core::config::PhysicsConfig;
 use khem_core::observer::Event;
@@ -96,10 +112,14 @@ fn mean_bond_length(world: &WorldState) -> f32 {
 
 /// All atom state finite (no NaN/inf positions or velocities).
 fn all_state_finite(world: &WorldState) -> bool {
-    world
-        .atoms
-        .iter()
-        .all(|a| a.x.is_finite() && a.y.is_finite() && a.vx.is_finite() && a.vy.is_finite())
+    world.atoms.iter().all(|a| {
+        a.x.is_finite()
+            && a.y.is_finite()
+            && a.z.is_finite()
+            && a.vx.is_finite()
+            && a.vy.is_finite()
+            && a.vz.is_finite()
+    })
 }
 
 /// Per-bond stretch ratios (length / r_eq) of all live bonds, in
@@ -113,9 +133,9 @@ fn bond_stretch_ratios(world: &WorldState) -> Vec<f32> {
         .filter(|b| b.alive)
         .map(|b| {
             let (a, c) = (world.atom(b.atom_a), world.atom(b.atom_b));
-            let (dx, dy) = world.delta(a.x, a.y, c.x, c.y);
+            let (dx, dy, dz) = world.delta(a.x, a.y, a.z, c.x, c.y, c.z);
             let r_eq = world.element(a.element).radius + world.element(c.element).radius;
-            (dx * dx + dy * dy).sqrt() / r_eq
+            (dx * dx + dy * dy + dz * dz).sqrt() / r_eq
         })
         .collect()
 }
@@ -129,11 +149,11 @@ fn phase1_loop_smoke() {
     // well-formed event stream.
     let config = PhysicsConfig::default();
 
-    fn dump(world: &WorldState) -> Vec<(f32, f32, u8)> {
+    fn dump(world: &WorldState) -> Vec<(f32, f32, f32, u8)> {
         world
             .atoms
             .iter()
-            .map(|a| (a.x, a.y, a.bond_count))
+            .map(|a| (a.x, a.y, a.z, a.bond_count))
             .collect()
     }
 
@@ -167,7 +187,7 @@ fn phase1_loop_smoke() {
     // The emitted stream is single-line JSON objects.
     for event in &events_a {
         let line = khem_core::ndjson::emit(event);
-        assert!(line.starts_with("{\"v\":1,") && line.ends_with('}'));
+        assert!(line.starts_with("{\"v\":2,") && line.ends_with('}'));
         assert!(!line.contains('\n'));
     }
 }
@@ -210,6 +230,15 @@ fn phase1_loop_smoke() {
 /// seam-crossing anchored formation draws): PASS - coupling
 /// 1.055-1.158 at every sample, steady-tail KE +1.7%, bond
 /// length +0.3%.
+///
+/// 3D PORT NOTE (2026-09-08): the coupling law is dimensional BY
+/// CONSTRUCTION - the Langevin bath draws three components, each
+/// with stationary variance kb*T/m, so KE/atom settles at
+/// 3/2 * kb * T where the 2D substrate settled at 1 * kb * T. The
+/// bar rides the same relative width around 3/2: [1.2, 2.1]
+/// against the 2D [0.8, 1.4]. Everything else in this gate - the
+/// steady-tail flatness windows, the bounded-KE bar - is
+/// dimension-agnostic and re-measures at the re-climb.
 #[test]
 #[ignore] // explicit: cargo test --release -- --ignored --nocapture
 fn k1_1_thermostat_flatness() {
@@ -245,9 +274,10 @@ fn k1_1_thermostat_flatness() {
                 .sum::<f32>()
                 / world.temp_field.data.len() as f32;
             // The thermostat coupling law: atoms at their local
-            // bath's thermal level (kb * T), not above, not below.
+            // bath's thermal level (3/2 * kb * T - three Langevin
+            // components since the 3D port), not above, not below.
             let coupling =
-                ke_per_atom / (f64::from(config.thermal_kick_scale) * f64::from(field_warm));
+                ke_per_atom / (1.5 * f64::from(config.thermal_kick_scale) * f64::from(field_warm));
             ke_samples.push(ke_per_atom);
             len_samples.push(mean_len);
             eprintln!(
@@ -255,10 +285,10 @@ fn k1_1_thermostat_flatness() {
                  field_avg={field_avg:.1} coupling={coupling:.3}"
             );
             assert!(
-                (0.8..=1.4).contains(&coupling),
+                (1.2..=2.1).contains(&coupling),
                 "K1.1 FAIL: thermostat decoupled at tick {t}: KE/atom {ke_per_atom:.4} \
                  vs bath level {:.4} (ratio {coupling:.3})",
-                config.thermal_kick_scale * field_warm
+                1.5 * config.thermal_kick_scale * field_warm
             );
         }
     }
@@ -272,10 +302,11 @@ fn k1_1_thermostat_flatness() {
     }
     assert_eq!(ke_samples.len(), idx(20_000) + 1, "sampling bug");
     // Bounded throughout, transient included: the 35 C bath level
-    // (kb * T = 0.291) is the scale; 2x it would already be a
-    // furnace signature (the founding F8 failure measured 1e13).
+    // (3/2 * kb * T = 0.4365 in 3D) is the scale; 2x it would
+    // already be a furnace signature (the founding F8 failure
+    // measured 1e13).
     assert!(
-        ke_samples.iter().all(|k| *k < 2.0 * 0.291),
+        ke_samples.iter().all(|k| *k < 2.0 * 0.4365),
         "K1.1 FAIL: KE/atom unbounded during the run: {ke_samples:?}"
     );
     let mean = |s: &[f64]| s.iter().sum::<f64>() / s.len() as f64;
@@ -350,9 +381,9 @@ fn k1_2_force_sanity() {
     // Part 1: the overlap probe.
     let o = ElementId(3);
     let r_eq = 2.0 * khem_core::ELEMENTS[o.0 as usize].radius;
-    let mut world = WorldState::new(50.0, 50.0, BoundaryType::Wrap, 42, config);
-    let a = world.spawn_atom(o, 25.0, 25.0);
-    let b = world.spawn_atom(o, 25.0 + 0.05 * r_eq, 25.0);
+    let mut world = WorldState::new(50.0, 50.0, 50.0, BoundaryType::Wrap, 42, config);
+    let a = world.spawn_atom(o, 25.0, 25.0, 25.0);
+    let b = world.spawn_atom(o, 25.0 + 0.05 * r_eq, 25.0, 25.0);
     let energy = bond_energy(o, o, 1);
     let bond = world
         .form_bond(a, b, 1, energy)
@@ -370,7 +401,7 @@ fn k1_2_force_sanity() {
     let impulse_bound = 1.5 * k * r_eq / m;
     let mut max_speed = 0.0f32;
     for (id, atom) in [(a, world.atom(a)), (b, world.atom(b))] {
-        let speed = (atom.vx * atom.vx + atom.vy * atom.vy).sqrt();
+        let speed = (atom.vx * atom.vx + atom.vy * atom.vy + atom.vz * atom.vz).sqrt();
         max_speed = max_speed.max(speed);
         assert!(
             speed <= impulse_bound,
@@ -378,9 +409,9 @@ fn k1_2_force_sanity() {
              single-impulse Hooke bound {impulse_bound:.4}"
         );
     }
-    let (ax, ay) = (world.atom(a).x, world.atom(a).y);
-    let (bx, by) = (world.atom(b).x, world.atom(b).y);
-    let separation = ((bx - ax) * (bx - ax) + (by - ay) * (by - ay)).sqrt();
+    let (ax, ay, az) = (world.atom(a).x, world.atom(a).y, world.atom(a).z);
+    let (bx, by, bz) = (world.atom(b).x, world.atom(b).y, world.atom(b).z);
+    let separation = ((bx - ax) * (bx - ax) + (by - ay) * (by - ay) + (bz - az) * (bz - az)).sqrt();
     assert!(
         separation > 0.05 * r_eq,
         "K1.2 probe: compression did not push the pair apart"
@@ -486,6 +517,7 @@ fn k1_3_water_persistence() {
                     energy_released,
                     x,
                     y,
+                    z,
                 } => {
                     if !is_oh(*elem_a, *elem_b) {
                         other_breaks += 1;
@@ -511,12 +543,14 @@ fn k1_3_water_persistence() {
                         // last mutating step of the tick).
                         let bond = world.bond(BondId(*bond_id));
                         let (a, b) = (world.atom(bond.atom_a), world.atom(bond.atom_b));
-                        let rel = ((a.vx - b.vx).powi(2) + (a.vy - b.vy).powi(2)).sqrt();
+                        let rel =
+                            ((a.vx - b.vx).powi(2) + (a.vy - b.vy).powi(2) + (a.vz - b.vz).powi(2))
+                                .sqrt();
                         oh_details.push(format!(
                             "t={tick} {} {} local_T={:.1} rel_speed={rel:.2}",
                             if mechanical { "MECH" } else { "THERM" },
                             if seeded { "seeded" } else { "formed" },
-                            world.temp_field.get(*x, *y),
+                            world.temp_field.get(*x, *y, *z),
                         ));
                     }
                 }
@@ -672,13 +706,18 @@ fn k1_4_reactive_balance() {
             let field = &world.temp_field;
             let r2 = s.radius * s.radius;
             let mut sum = 0.0f32;
-            for row in 0..field.rows {
-                for col in 0..field.cols {
-                    let cx = (col as f32 + 0.5) * field.cell_width;
-                    let cy = (row as f32 + 0.5) * field.cell_height;
-                    let d2 = (cx - s.position.0).powi(2) + (cy - s.position.1).powi(2);
-                    if d2 <= r2 {
-                        sum += s.intensity * (1.0 / (1.0 + d2 / r2)) * config.vent_heat_rate;
+            for layer in 0..field.layers {
+                for row in 0..field.rows {
+                    for col in 0..field.cols {
+                        let cx = (col as f32 + 0.5) * field.cell_width;
+                        let cy = (row as f32 + 0.5) * field.cell_height;
+                        let cz = (layer as f32 + 0.5) * field.cell_depth;
+                        let d2 = (cx - s.position.0).powi(2)
+                            + (cy - s.position.1).powi(2)
+                            + (cz - s.position.2).powi(2);
+                        if d2 <= r2 {
+                            sum += s.intensity * (1.0 / (1.0 + d2 / r2)) * config.vent_heat_rate;
+                        }
                     }
                 }
             }
@@ -792,8 +831,8 @@ fn k1_4_reactive_balance() {
                     ..
                 } => {
                     let (a, b) = (world.atom(*atom_a), world.atom(*atom_b));
-                    let (dx, dy) = world.delta(a.x, a.y, b.x, b.y);
-                    let r = (dx * dx + dy * dy).sqrt();
+                    let (dx, dy, dz) = world.delta(a.x, a.y, a.z, b.x, b.y, b.z);
+                    let r = (dx * dx + dy * dy + dz * dz).sqrt();
                     let r_eq = world.element(a.element).radius + world.element(b.element).radius;
                     let phantom = r > config.bond_break_factor * r_eq;
                     formed.insert(*bond_id, (t, r, phantom));
@@ -1197,6 +1236,17 @@ fn k1_4_reactive_balance() {
 /// asymmetric formation cannot pass honest gates (K2-K5 all run
 /// Wrap worlds; the 3D port re-climbs this gate on three seams).
 ///
+/// 3D PORT NOTE (2026-09-08): the paragraphs below describe the
+/// 2D beaker and its measured pass; they are the regression
+/// reference. The 3D beaker is PROVISIONAL (30x30x30 A, the same
+/// free mix, any-axis seam classification) - in 3D a 4 A seam
+/// band is a large surface fraction of any affordable box, so
+/// the seam/bulk volume split differs from 2D by construction.
+/// The re-climb commit owns: the per-axis seam split (x/y/z
+/// versus bulk), the beaker sizing, and the bars, re-measured
+/// with 3D evidence - conditioned on sum-p from the start (the
+/// 2D probe's lesson; see the module doc).
+///
 /// The pond CANNOT supply this measurement: its free-atom
 /// sprinkle carries a 2 A margin, so a free pair straddling the
 /// seam starts 4 A apart - past every capture cap (steric contact
@@ -1283,22 +1333,25 @@ fn k1_5_seam_symmetry() {
     // One beaker run: returns (E_seam, E_bulk, S_seam, S_bulk);
     // the gathering law is asserted every tick inside.
     let run = |seed: u64| -> (f64, f64, u64, u64) {
-        let mut world = WorldState::new(60.0, 60.0, BoundaryType::Wrap, seed, config);
+        // 3D PORT (provisional sizing; see the module doc): the
+        // 2D beaker's free mix in a 30 A cube. In 3D a 4 A seam
+        // band is a large surface fraction of any affordable box,
+        // so the seam/bulk volume split differs from 2D by
+        // construction - the census conditions on sum-p (see the
+        // doc comment), which is exactly what makes the comparison
+        // honest under a different split. The re-climb commit owns
+        // the per-axis split, the sizing, and the bars.
+        let mut world = WorldState::new(30.0, 30.0, 30.0, BoundaryType::Wrap, seed, config);
         world.temp_field.data.fill(55.0);
         world.setpoint_field.data.fill(55.0);
-        // The pond's free-atom mix (pond FREE_ATOMS proportions,
-        // doubled), sprinkled uniformly from the world RNG. 60x60
-        // A: small enough that the seam band (within
-        // bond_search_radius of an edge, 25% of the area) carries a
-        // real population, large enough that the bulk dominates and
-        // field cells dwarf the caps.
         let mix = [("H", 200u32), ("C", 160), ("N", 160), ("O", 240)];
         for (symbol, count) in mix {
             let el = khem_core::elements::element_id(symbol).expect("element in table");
             for _ in 0..count {
                 let x = world.rng.f01() as f32 * world.width;
                 let y = world.rng.f01() as f32 * world.height;
-                world.spawn_atom(el, x, y);
+                let z = world.rng.f01() as f32 * world.depth;
+                world.spawn_atom(el, x, y, z);
             }
         }
         let mut sim = Sim::new(config, observer(seed, 100_000));
@@ -1313,17 +1366,18 @@ fn k1_5_seam_symmetry() {
         let mut form_seam: u64 = 0;
         let mut form_bulk: u64 = 0;
 
-        eprintln!("K1.5 beaker seed {seed}: 760 free atoms, 60x60 Wrap, 55 C");
+        eprintln!("K1.5 beaker seed {seed}: 760 free atoms, 30x30x30 Wrap, 55 C");
         for t in 1..=20_000u64 {
             let events = sim.tick(&mut world);
 
-            // Formations, classified by the pair's own geometry.
+            // Formations, classified by the pair's own geometry
+            // (provisional any-axis fold; see above).
             for event in &events {
                 if let Event::BondFormed { atom_a, atom_b, .. } = event {
                     let (a, b) = (world.atom(*atom_a), world.atom(*atom_b));
-                    let (raw_dx, raw_dy) = (b.x - a.x, b.y - a.y);
-                    let (dx, dy) = world.delta(a.x, a.y, b.x, b.y);
-                    if dx != raw_dx || dy != raw_dy {
+                    let (raw_dx, raw_dy, raw_dz) = (b.x - a.x, b.y - a.y, b.z - a.z);
+                    let (dx, dy, dz) = world.delta(a.x, a.y, a.z, b.x, b.y, b.z);
+                    if (dx != raw_dx) || (dy != raw_dy) || (dz != raw_dz) {
                         form_seam += 1;
                     } else {
                         form_bulk += 1;
@@ -1337,7 +1391,7 @@ fn k1_5_seam_symmetry() {
             let queries: Vec<Vec<AtomId>> = world
                 .atoms
                 .iter()
-                .map(|a| world.spatial_index.neighbors(a.x, a.y, radius))
+                .map(|a| world.spatial_index.neighbors(a.x, a.y, a.z, radius))
                 .collect();
             for (i, a) in world.atoms.iter().enumerate() {
                 if !a.alive {
@@ -1349,9 +1403,9 @@ fn k1_5_seam_symmetry() {
                     if !b.alive {
                         continue;
                     }
-                    let (raw_dx, raw_dy) = (b.x - a.x, b.y - a.y);
-                    let (dx, dy) = world.delta(a.x, a.y, b.x, b.y);
-                    let d2 = dx * dx + dy * dy;
+                    let (raw_dx, raw_dy, raw_dz) = (b.x - a.x, b.y - a.y, b.z - a.z);
+                    let (dx, dy, dz) = world.delta(a.x, a.y, a.z, b.x, b.y, b.z);
+                    let d2 = dx * dx + dy * dy + dz * dz;
                     if d2 > radius2 {
                         continue;
                     }
@@ -1379,9 +1433,10 @@ fn k1_5_seam_symmetry() {
                     }
                     let r_eq = world.element(a.element).radius + world.element(b.element).radius;
                     let cap = config.bond_form_factor * r_eq;
-                    let (rvx, rvy) = (b.vx - a.vx, b.vy - a.vy);
+                    let (rvx, rvy, rvz) = (b.vx - a.vx, b.vy - a.vy, b.vz - a.vz);
                     if d2 <= cap * cap
-                        && rvx * rvx + rvy * rvy <= config.max_form_speed * config.max_form_speed
+                        && rvx * rvx + rvy * rvy + rvz * rvz
+                            <= config.max_form_speed * config.max_form_speed
                         && !world.is_bonded(a.id, b.id)
                     {
                         // The anchor (lower AtomId) is passed first:
@@ -1389,7 +1444,9 @@ fn k1_5_seam_symmetry() {
                         // lower id, and the geometry factor anchors
                         // on it (7.2).
                         let p = chem.pair_probability(&world, a.id, b.id).p;
-                        if dx != raw_dx || dy != raw_dy {
+                        // Provisional classification (any-axis fold);
+                        // the re-climb splits per-axis seams.
+                        if (dx != raw_dx) || (dy != raw_dy) || (dz != raw_dz) {
                             elig_seam += 1;
                             exp_seam += f64::from(p);
                         } else {

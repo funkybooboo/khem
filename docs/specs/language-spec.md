@@ -4,6 +4,12 @@ Language version: 0.1 (the version string "0.1" inside .kem files)
 Status: canonical as of 2026-09-04. Drafts until validated: phase 1
 (PLAN.md) tests the substrate before the parser is built, and this
 document is revised against kernel reality at that point (ADR-0006).
+The coordinate grammar is 3D since the phase-2 port (2026-09-08,
+ADR-0013): positions and placements are 3-tuples, world sizes are
+triples, regions partition by z (the vertical axis), and rotations
+are degrees per axis. The revision is made here, in the port
+commits, so the language lands once and never migrates - no parser
+existed to break.
 Provenance: reconciled from the founding conversation (preserved in
 git history) with the final terminology applied (ADR-0007,
 ADR-0009).
@@ -100,9 +106,9 @@ Literals:
     float      [0-9]+ . [0-9]+     104.5      (no scientific notation in v0.1)
     string     "..."               "Hydrogen" (no escapes in v0.1)
     bool       true | false
-    coord      ( float , float )   (1.2, -3.4)
+    coord      ( float , float , float )   (1.2, -3.4, 0.5)
     range      float - float       0 - 50
-    dimension  integer x integer   200 x 200
+    dimension  integer x integer x integer   200 x 200 x 200
 
 ## 4. Units
 
@@ -110,6 +116,7 @@ Implicit, fixed by context, never written in the file:
 
     distance / position    angstroms
     angle                  degrees
+    vertical               z (depth); the surface is the top
     temperature            celsius
     pressure               atmospheres
     energy                 kJ/mol
@@ -174,9 +181,9 @@ composite (built from other structs). It cannot be both.
         tier:        1        // optional, 0-9, organizational only
 
         atoms {
-          O1: O  at ( 0.00, 0.00)
-          H1: H  at (-0.96, 0.58)
-          H2: H  at ( 0.96, 0.58)
+          O1: O  at ( 0.00, 0.00, 0.00)
+          H1: H  at (-0.96, 0.58, 0.00)
+          H2: H  at ( 0.96, 0.58, 0.00)
         }
 
         bonds {
@@ -192,7 +199,7 @@ composite (built from other structs). It cannot be both.
     }
 
 - Atom labels are unique within the struct; positions are relative to
-  the struct's (0,0) anchor.
+  the struct's (0, 0, 0) anchor.
 - Bond types: single | double | triple.
 - Ports name atoms (or atom groups) as the struct's connection points
   for composition. Port names are unique within the struct.
@@ -207,9 +214,9 @@ composite (built from other structs). It cannot be both.
         use "ribose.kem"         as sugar
         use "phosphate.kem"      as phos
 
-        place base  at (0.0, 0.0)
-        place sugar at (4.0, 0.0)
-        place phos  at (7.5, 0.0)
+        place base  at (0.0, 0.0, 0.0)
+        place sugar at (4.0, 0.0, 0.0)
+        place phos  at (7.5, 0.0, 0.0)
 
         wire base.sugar_attach   -> sugar.base_attach
         wire sugar.phosphate_out -> phos.chain_in
@@ -224,7 +231,8 @@ composite (built from other structs). It cannot be both.
 
 - use imports another .kem file that declares struct, under an alias.
 - All aliases must be placed. Positions are relative to the parent;
-  optional rotate <degrees> rotates the alias around its anchor.
+  optional rotate (<rx>, <ry>, <rz>) rotates the alias around its
+  anchor.
 - wire forms a bond between the named ports' atoms. Bond type is
   inferred from available valence unless overridden:
   wire <alias>.<port> -> <alias>.<port> as single
@@ -285,8 +293,8 @@ is just atoms; no behavior is defined here.
         use "nucleotide_C.kem" as free_C
         use "water.kem"        as h2o
 
-        place membrane at (0.0, 0.0)
-        place genome   at (0.0, 0.0) inside membrane
+        place membrane at (0.0, 0.0, 0.0)
+        place genome   at (0.0, 0.0, 0.0) inside membrane
 
         place free_A count 20  inside membrane scatter
         place free_U count 20  inside membrane scatter
@@ -300,12 +308,23 @@ is just atoms; no behavior is defined here.
 
 Place forms:
 
-    place <alias> at (<x>, <y>)               single placement
-    place <alias> at (<x>, <y>) rotate <deg>  rotated placement
+    place <alias> at (<x>, <y>, <z>)          single placement
+    place <alias> at (<x>, <y>, <z>)
+                 rotate (<rx>, <ry>, <rz>)    rotated placement
     place <alias> count <n> inside <alias> scatter
                                             N copies inside another
                                             struct
     place <alias> count <n> scatter           N copies in body space
+
+Rotation representation (decided with the 3D port, phase 2, so the
+grammar lands once): degrees per axis, applied about the fixed x,
+y, and z axes in that order (fixed-axis Euler; the runtime
+elaborates to a rotation matrix - a quaternion is an internal
+representation, not an author-facing one). A .kem file is a
+human-authored description and molecular thinking is in angles:
+water is bent 104.5, not quaternion (0, 0.08, 0, 0.997). The fixed
+order is pinned so compositions are unambiguous; the runtime never
+guesses.
 
 - inside requires the target struct to declare an interior port (a
   closed structure such as a vesicle).
@@ -321,7 +340,8 @@ energy sources, and placement.
 
       world primordial_pond {
 
-        size:     200 x 200
+        size:     200 x 200 x 60       // width x height x depth (z,
+                                       // the vertical)
         boundary: wrap                 // wrap | wall | open
 
         use "minimal_cell.kem"  as cell
@@ -329,7 +349,7 @@ energy sources, and placement.
         use "nucleotide_A.kem"  as free_A
         use "lipid.kem"         as lipid
 
-        region surface (y: 150 - 200) {
+        region surface (z: 150 - 200) {
           temperature: 15
           pressure:    0.8
           uv:          0.7
@@ -337,7 +357,7 @@ energy sources, and placement.
           place free_A count 200   scatter
         }
 
-        region ocean (y: 50 - 150) {
+        region ocean (z: 50 - 150) {
           temperature: 35
           pressure:    4.0
           uv:          0.1
@@ -347,7 +367,7 @@ energy sources, and placement.
           place cell   count 10    scatter
         }
 
-        region seafloor (y: 0 - 50) {
+        region seafloor (z: 0 - 50) {
           temperature: 80
           pressure:    20.0
           uv:          0.0
@@ -357,7 +377,7 @@ energy sources, and placement.
 
         source hydrothermal_vent {
           type:      hydrothermal   // hydrothermal | solar_uv | radiation
-          position:  (100.0, 0.0)
+          position:  (100.0, 100.0, 0.0)
           intensity: 0.8
           radius:    15.0
         }
@@ -372,8 +392,10 @@ energy sources, and placement.
 
     }
 
-- Regions partition the world by y-range. Ranges must not overlap and
-  together must cover 0 to world height exactly.
+- Regions partition the world by z-range (the vertical axis since
+  the 3D port; region declarations are horizontal strata - surface,
+  ocean, seafloor). Ranges must not overlap and together must cover
+  0 to world depth exactly.
 - uv and intensity must be 0.0 - 1.0.
 - A bare element symbol in a place block places free atoms of that
   element.
@@ -466,8 +488,8 @@ start if any are present. Warnings are logged but do not halt.
     V-BODY-03    inside targets must have an interior port
     V-BODY-04    scatter requires count
     V-BODY-05    wire references must resolve
-    V-WORLD-01   region y ranges must not overlap
-    V-WORLD-02   region y ranges must cover 0 to world height exactly
+    V-WORLD-01   region z ranges must not overlap
+    V-WORLD-02   region z ranges must cover 0 to world depth exactly
     V-WORLD-03   uv must be 0.0 - 1.0
     V-WORLD-04   source intensity must be 0.0 - 1.0
     V-WORLD-05   all imports must resolve

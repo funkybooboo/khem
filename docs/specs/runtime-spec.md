@@ -1,14 +1,18 @@
 # khem runtime specification
 
-Runtime version: 0.1 (emits output schema v:1)
+Runtime version: 0.1 (emits output schema v:2)
 Status: canonical as of 2026-09-04. Drafts until validated (ADR-0006):
 revised against phase-1 kernel reality before the parser is built.
+The substrate is 3D since the phase-2 port (2026-09-08, ADR-0013);
+2D survives in git history.
 Sync policy (owner decision 2026-09-05): the implementation and
 this spec must agree; any divergence is fixed in both in the same
 commit. Sync history: 2026-09-05 post-F10 and the K1.1 substrate
 corrections (4.9, 6.1, 6.3, 6.6, 7.1, 7.2, section 11);
 2026-09-07 the K1.3 integrator (5.1, 6.1, 6.3, 6.5, 6.6, 6.7,
-section 11) and the open-boundary BOND_BROKEN event (3.3, 6.7).
+section 11) and the open-boundary BOND_BROKEN event (3.3, 6.7);
+2026-09-08 the 3D port (3.2-3.4, 4.4, 4.7-4.9, 5.3, 6.1, 6.2,
+6.4, 6.5, 6.7, 7.2, 7.4, 8.1, 8.2, G13).
 Items marked
 [phase 3] / [phase 4] are designed but not yet implemented.
 Provenance: reconciled from the founding conversation (preserved in
@@ -95,7 +99,8 @@ output.
 
 Every event contains:
 
-    v      integer   output schema version; always 1 in khem v0.1
+    v      integer   output schema version; 2 since the 3D port
+                     (v:1 was the 2D stream; see 3.4)
     type   string    event type
     tick   integer   simulation tick when the event occurred
 
@@ -103,15 +108,15 @@ Every event contains:
 
 start - first line, emitted once:
 
-    {"v":1,"type":"start","tick":0,"khem_version":"0.1.0",
+    {"v":2,"type":"start","tick":0,"khem_version":"0.1.0",
      "run_name":"experiment_1","world_name":"primordial_pond",
      "seed":42,"atom_count":4821,"bond_count":341,
-     "world_width":200.0,"world_height":200.0}
+     "world_width":200.0,"world_height":200.0,"world_depth":40.0}
 
 tick - every tick_interval ticks (timing fields are wall-clock
 and excluded from reproducibility, see G02):
 
-    {"v":1,"type":"tick","tick":1000,"elapsed_ms":124,
+    {"v":2,"type":"tick","tick":1000,"elapsed_ms":124,
      "ticks_per_sec":8064,"atom_count":4821,"bond_count":2341,
      "temp_min":12.3,"temp_max":847.2,"temp_avg":34.1,
      "pressure_min":0.8,"pressure_max":20.1,"pressure_avg":4.2,
@@ -120,15 +125,15 @@ and excluded from reproducibility, see G02):
 
 bond_formed - when output.bond_events is true:
 
-    {"v":1,"type":"bond_formed","tick":1247,"bond_id":4521,
+    {"v":2,"type":"bond_formed","tick":1247,"bond_id":4521,
      "atom_a":442,"atom_b":891,"elem_a":"C","elem_b":"O",
-     "order":2,"energy":799.0,"x":45.2,"y":123.7}
+     "order":2,"energy":799.0,"x":45.2,"y":123.7,"z":12.4}
 
 bond_broken - when output.bond_events is true:
 
-    {"v":1,"type":"bond_broken","tick":1248,"bond_id":4521,
+    {"v":2,"type":"bond_broken","tick":1248,"bond_id":4521,
      "elem_a":"C","elem_b":"O","energy_released":399.5,
-     "x":45.3,"y":123.8}
+     "x":45.3,"y":123.8,"z":12.4}
 
 Emitted for every bond break, including Open-boundary removals
 (energy_released 0; the boundary takes the bond with no field
@@ -137,7 +142,7 @@ exchange, 6.7).
 notable - [phase 3] when a watch condition triggers; always
 emitted regardless of output settings:
 
-    {"v":1,"type":"notable","tick":1247900,"event":"largest_molecule",
+    {"v":2,"type":"notable","tick":1247900,"event":"largest_molecule",
      "data":{"atom_count":47,"first_seen_tick":891000}}
 
 Event vocabulary:
@@ -150,7 +155,7 @@ Event vocabulary:
 
 save - [phase 3] when state is saved:
 
-    {"v":1,"type":"save","tick":1000000,"path":"./saves/tick_1000000.state"}
+    {"v":2,"type":"save","tick":1000000,"path":"./saves/tick_1000000.state"}
 
 end - last line, emitted once:
 
@@ -162,9 +167,15 @@ runtime_error.
 
 ### 3.4 Schema versioning
 
-The v field is the output schema version. khem v0.1 always emits v:1.
-Consumers must handle unknown v values gracefully; within a v the
-contract only grows additively.
+The v field is the output schema version. khem v0.1 emits v:2 since
+the 3D port (2026-09-08): the stream grew `z` on the bond events and
+`world_depth` on start - additive fields, but the world model changed
+dimensionality, and a consumer that silently ignored the new fields
+would mis-model geometry from x/y alone. v:1 was the 2D stream (in
+git history); no external consumer existed at the bump, which is why
+the port plan called the port "the cheap moment". Consumers must
+handle unknown v values gracefully; within a v the contract only
+grows additively.
 
 ## 4. Core data structures
 
@@ -194,8 +205,10 @@ Fixed-size struct, no heap allocation:
         element:    ElementId
         x:          f32            // angstroms
         y:          f32
+        z:          f32
         vx:         f32            // angstroms per tick
         vy:         f32
+        vz:         f32
         bonds:      [Option<BondId>; 6]  // first bond_count slots
                                          // are Some; empty slots
                                          // are None (an empty slot
@@ -245,15 +258,16 @@ The complete mutable simulation state:
         bonds:          Vec<BondState>
         width:          f32
         height:         f32
+        depth:          f32
         boundary:       BoundaryType
-        temp_field:     Grid2D
-        release_field:  Grid2D     // committed bond-break heat,
+        temp_field:     Grid3D
+        release_field:  Grid3D     // committed bond-break heat,
                                    // drained into temp_field at
                                    // release_rate_cap (6.2; F19)
-        setpoint_field: Grid2D     // declared environment setpoints;
+        setpoint_field: Grid3D     // declared environment setpoints;
                                    // 0 = none (6.2)
-        pressure_field: Grid2D
-        uv_field:       Grid2D
+        pressure_field: Grid3D
+        uv_field:       Grid3D
         energy_sources: Vec<EnergySource>
         element_table:  Arc<Vec<ElementProperties>>
         spatial_index:  SpatialIndex
@@ -261,28 +275,33 @@ The complete mutable simulation state:
         event_queue:    Vec<Event>        // observer fills; flush per tick
     }
 
-### 4.8 Grid2D
+### 4.8 Grid3D
 
 Field values (temperature, pressure, UV) on a grid coarser than atom
-positions. Default cell size 10 angstroms. Index = col + row * cols.
+positions. Default cell size 10 angstroms. Index =
+col + row * cols + layer * cols * rows (the 2D flat index plus a
+layer stride - the port's one structural change to the grid).
 
-    Grid2D { data: Vec<f32>, cols: u32, rows: u32,
-             cell_width: f32, cell_height: f32 }
+    Grid3D { data: Vec<f32>, cols: u32, rows: u32, layers: u32,
+             cell_width: f32, cell_height: f32, cell_depth: f32 }
 
 ### 4.9 SpatialIndex
 
 Spatial hash for neighbor queries. Default cell size 5 angstroms.
 Rebuilt inside the sub-step loop and again after boundary
-application (5.1); rebuild is O(n), queries are O(1) average. Wrap-aware (2026-09-05, finding F11): cell
-coordinates fold at the grid edges in Wrap worlds so seam-crossing
-candidates are found - consistent with the minimum-image chemistry
-that evaluates them; Wall and Open use raw coordinates. The index
-is a pure accelerator, never a filter: every pair within the
-minimum-image query radius is found by both sides' queries (a law,
-pinned always-on in the spatial tests and measured pair-for-pair
-against brute force by gate K1.5, 2026-09-07).
+application (5.1); rebuild is O(n), queries are O(1) average. Wrap-aware on every axis since the 3D port (finding F11; the
+2-torus became the 3-torus): cell coordinates fold at the grid
+edges in Wrap worlds so seam-crossing candidates are found -
+consistent with the minimum-image chemistry that evaluates them;
+Wall and Open use raw coordinates. A radius-r query scans up to
+27 cells (3x3x3) at the 5 A cell size against the 2D index's 9.
+The index is a pure accelerator, never a filter: every pair within
+the minimum-image query radius is found by both sides' queries (a
+law, pinned always-on in the spatial tests and measured
+pair-for-pair against brute force by gate K1.5, 2026-09-07; the
+3D re-climb re-runs it on three seams).
 
-    SpatialIndex { cells: HashMap<(i32, i32), Vec<AtomId>>,
+    SpatialIndex { cells: HashMap<(i32, i32, i32), Vec<AtomId>>,
                    cell_size: f32 }
 
 ### 4.10 BoundaryType
@@ -337,9 +356,10 @@ byte-identical forever (G02, G14). Requirements: fixed tick order
 (5.1); one deterministic seeded RNG with per-tick state; no
 thread-local state in v0.1; iteration over atoms always by AtomId.
 
-RNG draw discipline (pinned by the phase-1 kernel, ADR-0005): the
-physics system draws first - exactly two normal draws per live atom
-per tick, in AtomId order, inside the once-per-tick bath step
+RNG draw discipline (pinned by the phase-1 kernel, ADR-0005;
+three components per atom since the 3D port - x, y, z): the
+physics system draws first - exactly three normal draws per live
+atom per tick, in AtomId order, inside the once-per-tick bath step
 (dead atoms draw nothing; zero-temperature atoms draw no-op
 samples). Bond breaking draws exactly one uniform per live bond
 per tick, in BondId order, except bonds the mechanical overstretch
@@ -363,8 +383,10 @@ gate K1.1):
           * sqrt(thermal_kick_scale * T / mass)
     v'  = v * (1 - thermostat_damping) + rng.normal(0, s)
 
-so velocities relax to the local field temperature with the
-correct stationary variance instead of random-walking upward
+applied per component (x, y, z - three normal draws per atom per
+tick), so velocities relax to the local field temperature with the
+correct stationary variance (KE/atom settles at 3/2 * kb * T,
+three-dimensional equipartition) instead of random-walking upward
 forever (finding F8's fix). T <= 0 gives s 0 (pure damping; the
 draws still happen, keeping the RNG stream uniform).
 
@@ -402,8 +424,9 @@ its neighbors even under a full-cap stream, and cuts the cascade
 to ~1e-4 expected secondaries per break - the feedback cannot
 close - while conserving the full release into the field (F7's
 cycle law, spread over E/0.3/cap ticks). Then diffusion, per
-cell, 4-connected neighbors, wrapped at the
-grid edges (grids wrap like the Wrap boundary, 4.8). After
+cell, 6-connected neighbors (the x, y, and z neighbor pairs since
+the 3D port; the 2D stencil was 4-connected), wrapped at the
+grid edges on every axis (grids wrap like the Wrap boundary, 4.8). After
 diffusion, cells with a declared setpoint (> 0 in
 setpoint_field) relax toward it at field_relax_rate - the
 environment reservoir, the pond's heat sink. Without it a vented
@@ -413,7 +436,7 @@ K1.1's vented-pond flatness criterion requires it). Region
 declarations (phase 4) are the setpoint source; the phase-1 pond
 declares 35 C everywhere.
 
-    T_new = T * (1 - diffusion_rate) + mean(T_neighbors) * diffusion_rate
+    T_new = T * (1 - diffusion_rate) + mean(6 neighbors) * diffusion_rate
 
 diffusion_rate default 0.1. release_rate_cap default 2.0.
 
@@ -436,11 +459,12 @@ no defined axis; the force is skipped and the next kick separates
 them.
 
 In Wrap worlds every pair displacement uses the minimum-image
-convention (the shortest vector between the atoms, crossing the
-seam when shorter): raw deltas read a seam-adjacent pair as
-width - 1 angstroms apart and the spring shreds it (finding F10,
-found by test 2026-09-05, fixed the same day). All pair rules
-(springs, chemistry distance checks, bond midpoints) use it.
+convention on every axis (the shortest vector between the atoms,
+crossing whichever of the three seams is shorter): raw deltas read
+a seam-adjacent pair as width - 1 angstroms apart and the spring
+shreds it (finding F10, found by test 2026-09-05, fixed the same
+day). All pair rules (springs, chemistry distance checks, bond
+midpoints, VSEPR anchor directions) use it.
 
 The stability law (pinned by test for every formable bond at the
 configured scale): symplectic Euler is stable for
@@ -452,16 +476,17 @@ measurements: F2, F17 in docs/research/abstraction-notes.md.
 
 ### 6.4 Pressure force
 
-    pressure[cell] = atom_count_in_cell / cell_area
+    pressure[cell] = atom_count_in_cell / cell_volume
 
-Each atom feels force from the central-difference pressure gradient,
-scaled by pressure_sensitivity, divided by mass at application
-(6.1).
+Each atom feels force from the central-difference pressure
+gradient on every axis, scaled by pressure_sensitivity, divided by
+mass at application (6.1).
 
 ### 6.5 Position update and integration
 
     x += vx * dt_sub
     y += vy * dt_sub
+    z += vz * dt_sub
     dt_sub = 1.0 / integration_substeps
 
 Implemented 2026-09-07 (gate K1.3): the force/integration pair
@@ -499,9 +524,10 @@ matter does, not because any biology needs it.
 
 ### 6.7 Boundaries
 
-    Wrap   x = x mod width; y = y mod height
-    Wall   clamp position; reverse the velocity component
-    Open   atom flagged dead; bonds broken first
+    Wrap   x = x mod width; y = y mod height; z = z mod depth
+    Wall   clamp position; reverse the velocity component (all axes)
+    Open   atom flagged dead (left the box on any axis); bonds
+           broken first
 
 Open-boundary bond breaks emit BOND_BROKEN (energy_released 0, no
 field exchange): the stream stays a complete record of bond
@@ -561,21 +587,25 @@ documented asymmetry). Eligibility, checked before the RNG draw:
            * temperature_factor(T, elem_a, elem_b)
            * (1.0 + |EN_a - EN_b| * en_bonus)
 
-- geometry_factor (v0.1 semantics, pinned by the kernel): an atom
-  with no existing bonds is unconstrained (1.0), as are H, Na, Cl.
-  Otherwise the ideal adjacent-bond angle comes from the 7.4 table
-  for the atom's coordination state (doubles shift carbon to
-  120/180, nitrogen to 120); the candidate is scored against each
-  existing bond's MINIMUM-IMAGE direction (6.3: every pair rule; a
+- geometry_factor (semantics pinned by the kernel; 3D since the
+  port): an atom with no existing bonds is unconstrained (1.0),
+  as are H, Na, Cl. Otherwise the ideal adjacent-bond angle comes
+  from the 7.4 table for the atom's coordination state (doubles
+  shift carbon to 120/180, nitrogen to 120); the candidate
+  DIRECTION (a unit vector) is scored against each existing bond's
+  MINIMUM-IMAGE direction (6.3: every pair rule; a
   seam-straddling bond's raw direction reads mirrored - pi off in
   the crossing axis - and candidates would score against a
-  phantom ideal; finding F20, fixed 2026-09-07 with gate K1.5),
-  ideal angle to either side, by a gaussian in angular deviation
-  with sigma = geometry_sigma; the best-scoring existing bond
-  anchors the factor. The 3D table values are scoring ideals,
-  not enforced angles - 109.5 cannot exist four ways in 2D - and
-  effective geometry emerges from the competition (water's 104.5
-  fits and matters most).
+  phantom ideal; finding F20, fixed 2026-09-07 with gate K1.5):
+  the deviation is |angle(candidate, bond) - ideal|, the angle
+  between the two unit vectors against the 7.4 ideal, scored by a
+  gaussian with sigma = geometry_sigma; the best-scoring existing
+  bond anchors the factor. The table values are scoring ideals,
+  not enforced angles - and since the port they are literally
+  expressible (the 109.5 tetrahedral ideal is a cone off the
+  anchor, four ways in 3D; the 2D substrate could only approximate
+  it in-plane); effective geometry emerges from the competition
+  (water's 104.5 fits and matters most).
 - temperature_factor: gaussian in T around the pair's optimum
   t_opt = t_opt_scale * bond_energy (stronger bonds tolerate
   hotter formation), width t_width.
@@ -645,10 +675,13 @@ loading arrives in phase 4 with the language.
 Also in physics.cfg, not source code. [phase 4; phase 1 hardcodes
 this in khem-core/src/chemistry.rs with test-locked values]
 
-Semantics (v0.1, pinned by the kernel): the angles are scoring
-ideals for the 7.2 geometry factor, not enforced constraints -
-the 3D values cannot all exist in 2D (109.5 four ways exceeds the
-plane), so effective geometry emerges from gaussian competition.
+Semantics (pinned by the kernel; 3D since the port): the angles
+are scoring ideals for the 7.2 geometry factor, not enforced
+constraints. In 2D the values could not all exist (109.5 four
+ways exceeds the plane), so effective geometry emerged from
+gaussian competition against in-plane approximations; since the
+port the ideals are literally expressible, and the competition
+still decides effective geometry.
 Elements with no listed constraint score 1.0 always. Carbon's
 coordination states: 109.5 with only single bonds, 120 when one
 double is involved, 180 with two. Phosphorus switches to 90 for
@@ -658,18 +691,23 @@ its fifth bond.
 
 ### 8.1 Hydrothermal vent
 
-Per tick, for cells within radius:
+Per tick, for cells within radius (3D distance; a source position
+is a 3-tuple since the port):
 
     falloff = 1.0 / (1.0 + distance^2 / radius^2)
     temp_field[cell] += intensity * falloff * vent_heat_rate
 
-Atoms in radius get upward velocity: vy += convection_rate * falloff.
+Atoms in radius get upward velocity along the VERTICAL AXIS
+(+z, toward the surface - the top cell layer, 8.2; the 2D
+substrate's "up" was +y): vz += convection_rate * falloff.
 
 ### 8.2 Solar UV
 
-Per tick, the energy system writes the UV field: surface cells (y
-above surface_threshold * height) carry the source intensity, all
-other cells zero. The field is per-tick state, rebuilt wholesale.
+Per tick, the energy system writes the UV field: surface cells
+(the top layer - cells centered above surface_threshold * depth
+on the z axis, the vertical since the port) carry the source
+intensity, all other cells zero. The field is per-tick state,
+rebuilt wholesale.
 
 UV bond breaking executes in ChemistrySystem::break_bonds (5.1
 gives chemistry the only bond-mutating steps; one place breaks
@@ -825,7 +863,8 @@ measurements that changed them:
     spatial_cell_size       5.0      // angstroms
     field_cell_size         10.0     // angstroms
     compaction_interval     10000    // ticks [phase 3]
-    surface_threshold       0.9      // fraction of world height
+    surface_threshold       0.9      // fraction of world depth (z,
+                                     // the vertical since the port)
 
     non_bonded_repulsion    1.0      // excluded volume strength
                                      // (6.6)
@@ -861,7 +900,8 @@ hard core is gone; 6.3 has the story).
     G10  stdout contains only NDJSON events
     G11  stderr contains only human-readable diagnostics
     G12  Exit codes follow section 2.3
-    G13  The v field in every event is 1 in khem v0.1
+    G13  The v field in every event is 2 in khem v0.1 (v:1 was the
+         2D stream; the 3D port bumped the schema - 3.4)
     G14  Tick ordering follows section 5.1 and does not vary
 
 ## 13. Performance targets

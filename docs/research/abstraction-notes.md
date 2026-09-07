@@ -290,6 +290,63 @@ run by channel):
   0, mechanical 2, phantoms 0, tail active (21 formations,
   4 thermal over 15k-20k).
 
+## Resolution log (2026-09-08, the 3D port)
+
+The phase-2 port (ADR-0013) landed as one substrate diff,
+`mise run check` green. The record of what moved and what it
+measured:
+
+- The golden hash is re-cut CONSCIOUSLY (the K1.3 precedent):
+  0xC2DA_83B1_D546_6D7C -> 0x4B84_4F68_14CC_5899. Every number
+  changes by design: positions/velocities carry z/vz (both now
+  hashed), the Langevin bath draws THREE components per atom
+  (the whole RNG stream shifts; spec 5.3 synced), the diffusion
+  stencil is 6-connected, the VSEPR geometry factor scores 3D
+  directions, the pond re-seeded as the 60x60x15 A slab (same
+  3432-atom budget), and the NDJSON schema is v:2.
+- The geometry factor's dimensional generalization is exact, not
+  approximate: the 2D law scored gaussian(|planar angle
+  candidate-anchor - ideal|) to either side; the 3D law scores
+  gaussian(|acos(u_c . u_b) - ideal|) - the same deviation,
+  with the ideal now a CONE off the anchor (the tetrahedral
+  109.5 exists literally, four ways). The F20 law test moved
+  from planar angles to direction vectors and pins the same
+  inversion (the mirrored anchor's phantom ideal scores 0.63,
+  the true ideal 1.0); a new law test pins the cone (every
+  perpendicular plane scores identically).
+- The thermostat's equipartition moved with the dimension:
+  three Langevin components put KE/atom at 3/2 * kb * T (2D:
+  1 * kb * T). K1.1's coupling bar rides the same relative
+  width around 3/2 ([1.2, 2.1] against the 2D [0.8, 1.4]) - by
+  construction, not taste; the 2000-tick diagnostic already
+  measured coupling ~1.04 at the construction dip.
+- A representation fact for K1.4's ledger: the 6-connected f32
+  diffusion rounds the field sum at ~8e-4 degrees/tick on a
+  1000-cell grid (2D: ~2e-4/tick; with diffusion_rate 0 the
+  drift measures EXACTLY 0 - stencil rounding, not an exchange
+  leak). Three-plus orders below the ledger's smallest real
+  flux term; the thermostat-conservation unit test sums the
+  f32 field in f64 (the honest ledger read) and its tolerance
+  names the source.
+- Perf honestly re-measured (the port plan's requirement):
+  11.7 t/s at 3432 atoms in release, against the 2D substrate's
+  ~60 t/s. The ~5x is ~4x candidates per query (slab pair
+  density) plus the 27-cell scan against 9 - with the
+  visited-cell dedup cost growing quadratically in scan size, a
+  phase-3 target alongside SoA. Spec 13's targets stand; the
+  phase-3 perf pass owns the levers.
+- The 2000-tick diagnostic at the landing: 1024/1024 waters
+  intact, bond lengths mean 1.207 / p95 1.376 A, 75
+  formed-and-alive bonds (chemistry active), all state finite.
+  The ported substrate behaves like its 2D predecessor; the
+  re-climb owns the measured gate evidence from here.
+- The port's contract decisions (NDJSON v:2 additive z/
+  world_depth; 3-tuples and fixed-axis degrees-per-axis rotation
+  in the language grammar; the 3.75 A cubic lattice kept; the
+  provisional slab; harness-side observability) are recorded
+  with their rationale in docs/plans/phase-2-3d-port.md,
+  "Decisions this phase owns".
+
 ## Findings first analyzed before measurement
 
 - F1  Literal kB (0.008314) with pond temperatures (15-80 C) makes

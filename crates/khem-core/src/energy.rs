@@ -39,7 +39,7 @@ pub enum SourceKind {
 pub struct EnergySource {
     pub kind: SourceKind,
     /// Position, angstroms; meaningful for point sources.
-    pub position: (f32, f32),
+    pub position: (f32, f32, f32),
     /// Normalized intensity, 0.0 - 1.0.
     pub intensity: f32,
     /// Radius, angstroms; point sources.
@@ -49,7 +49,7 @@ pub struct EnergySource {
 }
 
 impl EnergySource {
-    pub fn hydrothermal(position: (f32, f32), intensity: f32, radius: f32) -> Self {
+    pub fn hydrothermal(position: (f32, f32, f32), intensity: f32, radius: f32) -> Self {
         Self {
             kind: SourceKind::Hydrothermal,
             position,
@@ -62,7 +62,7 @@ impl EnergySource {
     pub fn solar_uv(intensity: f32, surface_only: bool) -> Self {
         Self {
             kind: SourceKind::SolarUv,
-            position: (0.0, 0.0),
+            position: (0.0, 0.0, 0.0),
             intensity,
             radius: 0.0,
             surface_only,
@@ -88,55 +88,73 @@ impl Energy {
 
     /// Spec 8.1: heat cells within the vent radius by
     /// `intensity * falloff * vent_heat_rate`, where
-    /// `falloff = 1 / (1 + d^2 / radius^2)`; lift atoms in radius by
-    /// `convection_rate * falloff`. Plain Euclidean distance; vent
-    /// influence does not wrap at world edges.
+    /// `falloff = 1 / (1 + d^2 / radius^2)` with the 3D distance;
+    /// lift atoms in radius along the VERTICAL AXIS (the 3D port
+    /// moved the vertical from y to z: the surface is the top cell
+    /// layer, so convection raises vz). Plain Euclidean distance;
+    /// vent influence does not wrap at world edges.
     fn apply_hydrothermal(&self, world: &mut WorldState, source: EnergySource) {
-        let (px, py) = source.position;
+        let (px, py, pz) = source.position;
         let r2 = source.radius * source.radius;
         let field = &mut world.temp_field;
-        let (cols, rows) = (field.cols as usize, field.rows as usize);
-        for row in 0..rows {
-            for col in 0..cols {
-                let cx = (col as f32 + 0.5) * field.cell_width;
-                let cy = (row as f32 + 0.5) * field.cell_height;
-                let d2 = (cx - px) * (cx - px) + (cy - py) * (cy - py);
-                if d2 > r2 {
-                    continue;
+        let (cols, rows, layers) = (
+            field.cols as usize,
+            field.rows as usize,
+            field.layers as usize,
+        );
+        for layer in 0..layers {
+            for row in 0..rows {
+                for col in 0..cols {
+                    let cx = (col as f32 + 0.5) * field.cell_width;
+                    let cy = (row as f32 + 0.5) * field.cell_height;
+                    let cz = (layer as f32 + 0.5) * field.cell_depth;
+                    let d2 = (cx - px) * (cx - px) + (cy - py) * (cy - py) + (cz - pz) * (cz - pz);
+                    if d2 > r2 {
+                        continue;
+                    }
+                    let falloff = 1.0 / (1.0 + d2 / r2);
+                    field.data[col + row * cols + layer * cols * rows] +=
+                        source.intensity * falloff * self.config.vent_heat_rate;
                 }
-                let falloff = 1.0 / (1.0 + d2 / r2);
-                field.data[col + row * cols] +=
-                    source.intensity * falloff * self.config.vent_heat_rate;
             }
         }
         for atom in &mut world.atoms {
             if !atom.alive {
                 continue;
             }
-            let d2 = (atom.x - px) * (atom.x - px) + (atom.y - py) * (atom.y - py);
+            let d2 = (atom.x - px) * (atom.x - px)
+                + (atom.y - py) * (atom.y - py)
+                + (atom.z - pz) * (atom.z - pz);
             if d2 > r2 {
                 continue;
             }
             let falloff = 1.0 / (1.0 + d2 / r2);
-            // +y is toward the surface (surface cells sit at high y),
-            // so convection lifts.
-            atom.vy += self.config.convection_rate * falloff;
+            // +z is toward the surface (the top cell layer), so
+            // convection lifts.
+            atom.vz += self.config.convection_rate * falloff;
         }
     }
 
     /// Spec 8.2: surface cells (center above
-    /// `surface_threshold * height`) carry the UV intensity for this
-    /// tick; all other cells are zero. The field is per-tick state,
+    /// `surface_threshold * depth` - the TOP cell layer, the 3D
+    /// port's vertical axis) carry the UV intensity for this tick;
+    /// all other cells are zero. The field is per-tick state,
     /// rebuilt every update, so stale values cannot persist.
     fn apply_solar_uv(&self, world: &mut WorldState, source: EnergySource) {
-        let limit = self.config.surface_threshold * world.height;
+        let limit = self.config.surface_threshold * world.depth;
         let field = &mut world.uv_field;
-        let (cols, rows) = (field.cols as usize, field.rows as usize);
-        for row in 0..rows {
-            let cy = (row as f32 + 0.5) * field.cell_height;
-            let value = if cy > limit { source.intensity } else { 0.0 };
-            for col in 0..cols {
-                field.data[col + row * cols] = value;
+        let (cols, rows, layers) = (
+            field.cols as usize,
+            field.rows as usize,
+            field.layers as usize,
+        );
+        for layer in 0..layers {
+            let cz = (layer as f32 + 0.5) * field.cell_depth;
+            let value = if cz > limit { source.intensity } else { 0.0 };
+            for row in 0..rows {
+                for col in 0..cols {
+                    field.data[col + row * cols + layer * cols * rows] = value;
+                }
             }
         }
     }
@@ -168,6 +186,7 @@ mod tests {
         WorldState::new(
             100.0,
             100.0,
+            100.0,
             BoundaryType::Wrap,
             seed,
             PhysicsConfig::default(),
@@ -180,7 +199,7 @@ mod tests {
 
     #[test]
     fn constructors() {
-        let v = EnergySource::hydrothermal((100.0, 0.0), 0.8, 15.0);
+        let v = EnergySource::hydrothermal((100.0, 0.0, 0.0), 0.8, 15.0);
         assert_eq!(v.kind, SourceKind::Hydrothermal);
         assert!(!v.surface_only);
         let s = EnergySource::solar_uv(0.7, true);
@@ -191,14 +210,14 @@ mod tests {
     #[test]
     fn vent_heats_cells_within_radius_by_falloff() {
         let mut w = world(1);
-        // 10 A cells; vent at (55, 55), a cell center, radius 15.
+        // 10 A cells; vent at (55, 55, 55), a cell center, radius 15.
         w.energy_sources
-            .push(EnergySource::hydrothermal((55.0, 55.0), 0.8, 15.0));
+            .push(EnergySource::hydrothermal((55.0, 55.0, 55.0), 0.8, 15.0));
         energy().update(&mut w);
         // Sample by cell center (5 A offset in a 10 A grid).
-        let center = w.temp_field.get(55.0, 55.0); // cell (5, 5): vent sits here
-        let near = w.temp_field.get(65.0, 55.0); // cell (6, 5): d = 10
-        let far = w.temp_field.get(25.0, 55.0); // cell (2, 5): d = 30 > radius
+        let center = w.temp_field.get(55.0, 55.0, 55.0); // the vent's own cell
+        let near = w.temp_field.get(65.0, 55.0, 55.0); // d = 10
+        let far = w.temp_field.get(25.0, 55.0, 55.0); // d = 30 > radius
         assert!(center > near, "center {center} should exceed near {near}");
         assert!(near > 0.0, "in-radius cells must gain heat, got {near}");
         assert_eq!(far, 0.0, "out-of-radius cells must be untouched");
@@ -210,12 +229,12 @@ mod tests {
     fn convection_lifts_atoms_within_radius() {
         let mut w = world(1);
         w.energy_sources
-            .push(EnergySource::hydrothermal((50.0, 50.0), 0.8, 15.0));
-        let lifted = w.spawn_atom(ElementId(0), 50.0, 52.0);
-        let outside = w.spawn_atom(ElementId(0), 90.0, 90.0);
+            .push(EnergySource::hydrothermal((50.0, 50.0, 50.0), 0.8, 15.0));
+        let lifted = w.spawn_atom(ElementId(0), 50.0, 50.0, 52.0);
+        let outside = w.spawn_atom(ElementId(0), 90.0, 90.0, 90.0);
         energy().update(&mut w);
-        assert!(w.atom(lifted).vy > 0.0, "atom in radius should rise");
-        assert_eq!(w.atom(outside).vy, 0.0);
+        assert!(w.atom(lifted).vz > 0.0, "atom in radius should rise");
+        assert_eq!(w.atom(outside).vz, 0.0);
     }
 
     #[test]
@@ -223,14 +242,16 @@ mod tests {
         let mut w = world(1);
         w.energy_sources.push(EnergySource::solar_uv(0.7, true));
         energy().update(&mut w);
-        // surface_threshold 0.9 of 100 A: cells centered above y = 90.
-        let top = w.uv_field.get(50.0, 95.0);
-        let bottom = w.uv_field.get(50.0, 15.0);
+        // surface_threshold 0.9 of 100 A: cells centered above z = 90
+        // (the vertical axis is z since the 3D port).
+        let top = w.uv_field.get(50.0, 50.0, 95.0);
+        let bottom = w.uv_field.get(50.0, 50.0, 15.0);
         assert_eq!(top, 0.7);
         assert_eq!(bottom, 0.0);
-        // Only the last rows qualify: 10x10 grid, row 9 (center 95).
+        // Only the top layer qualifies: 10x10x10 grid, layer 9
+        // (center 95).
         let count = w.uv_field.data.iter().filter(|v| **v == 0.7).count();
-        assert_eq!(count, 10, "exactly one row of cells is surface");
+        assert_eq!(count, 100, "exactly one layer of cells is surface");
     }
 
     #[test]
@@ -238,11 +259,11 @@ mod tests {
         let mut w = world(1);
         w.energy_sources.push(EnergySource::solar_uv(0.7, true));
         energy().update(&mut w);
-        assert_eq!(w.uv_field.get(50.0, 95.0), 0.7);
+        assert_eq!(w.uv_field.get(50.0, 50.0, 95.0), 0.7);
         // Remove the source: next update must zero the field again.
         w.energy_sources.clear();
         energy().update(&mut w);
-        assert_eq!(w.uv_field.get(50.0, 95.0), 0.0);
+        assert_eq!(w.uv_field.get(50.0, 50.0, 95.0), 0.0);
     }
 
     #[test]
@@ -262,14 +283,14 @@ mod tests {
         let mut w = world(1);
         w.energy_sources.push(EnergySource {
             kind: SourceKind::Radiation,
-            position: (50.0, 50.0),
+            position: (50.0, 50.0, 50.0),
             intensity: 0.5,
             radius: 10.0,
             surface_only: false,
         });
-        let a = w.spawn_atom(ElementId(0), 50.0, 50.0);
+        let a = w.spawn_atom(ElementId(0), 50.0, 50.0, 50.0);
         energy().update(&mut w);
-        assert_eq!(w.atom(a).vy, 0.0);
+        assert_eq!(w.atom(a).vz, 0.0);
         assert!(w.temp_field.data.iter().all(|v| *v == 0.0));
     }
 }

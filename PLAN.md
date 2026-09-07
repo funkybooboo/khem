@@ -22,7 +22,7 @@ So the build order is deliberately backwards from the founding
 conversation: kernel before language, physics before parsers, evidence
 before specs.
 
-## Where this repo stands (2026-09-07)
+## Where this repo stands (2026-09-08)
 
 - Phase 1, the kernel, is built and runs end to end: tick loop,
   physics, chemistry, energy, observer with union-find molecule
@@ -41,8 +41,19 @@ before specs.
   cross-seam formation matches the law's own expectation under
   the composition-conditioned census, the wrap-aware index
   verified pair-for-pair complete against brute force).
-  Next: the 3D port (phase 2). Ladder, rules, and pass history:
-  docs/plans/phase-1-kernel.md.
+  The 3D port's substrate diff landed 2026-09-08 (phase 2,
+  ADR-0013): z/vz on atoms, the 3-torus Wrap, Grid3D with a
+  6-connected stencil, a 3-cell spatial hash, the VSEPR geometry
+  factor scoring 3D directions (the tetrahedral ideal now
+  literally expressible), the vertical axis moved to z (vent
+  convection up, UV on the top layer), the pond re-seeded as the
+  60x60x15 A slab at the same 3432-atom budget, NDJSON v:2
+  (additive z/world_depth), and the golden hash re-cut. Perf
+  honestly re-measured: 11.7 t/s at 3.4k atoms (2D: ~60; phase 3
+  owns the target's levers). Next: the K1 re-climb in 3D, one
+  gate per commit. Ladder, rules, and pass history:
+  docs/plans/phase-1-kernel.md; port decisions:
+  docs/plans/phase-2-3d-port.md.
 - Findings F1-F20 live in docs/research/abstraction-notes.md;
   all resolved through K1.5; the newest is F20 (the mirrored
   VSEPR anchor - a seam-straddling bond's raw direction scored
@@ -68,7 +79,7 @@ before specs.
 |-------|------|--------|
 | 0 - literature grounding | [phase-0-research.md](docs/plans/phase-0-research.md) | notes + bibliography landed; re-opens before detector design |
 | 1 - physics/chemistry kernel | [phase-1-kernel.md](docs/plans/phase-1-kernel.md) | K1 passed (K1.1-K1.5, 2026-09-07); K2-K5 climb after the port |
-| 2 - the 3D port | [phase-2-3d-port.md](docs/plans/phase-2-3d-port.md) | next: K1.5 passed, unblocked; before K2 tuning |
+| 2 - the 3D port | [phase-2-3d-port.md](docs/plans/phase-2-3d-port.md) | substrate diff landed 2026-09-08; K1 re-climb open |
 | 3 - runtime hardening | [phase-3-hardening.md](docs/plans/phase-3-hardening.md) | not started; cheap items landed early with phase 1 |
 | 4 - the khem language | [phase-4-language.md](docs/plans/phase-4-language.md) | spec-only; gated on K1-K5 |
 | 5 - experiments and the thesis | [phase-5-experiments.md](docs/plans/phase-5-experiments.md) | gated on phases 3-4 |
@@ -152,8 +163,8 @@ answer it when we get there, not before.
 | K3 mechanism: which bonds pair bases, how the duplex releases (the thermal window), and whether adjacent paired nucleotides reach ligation distance - all undesigned or uncalculated | K3.1-K3.4 | the K3 mechanism memo, before K3 starts (it feeds the port's grammar decisions) | phase-1-kernel.md (K3 note); phase-0 re-open |
 | Turnover mechanisms: decay (UV photolysis is the honest candidate, undeclared) and material feed (no mechanism at all) | K5.2 | the turnover memo, before K5 | phase-1-kernel.md (K5.2 note); phase-0 re-open |
 | Perf target re-derivation: ~60 t/s measured at 3.4k atoms extrapolates to ~20 t/s at 10k vs spec 13's >500 t/s (~25x), the port's ~3x pair cost lands on top, and the named levers look like 5-10x; whether the E-gates need that target at all is unexamined | phase-3 perf pass | re-derive spec 13 from the E-gates' real requirements before the perf pass; the layout-bundle question decides with the port | phase-3-hardening.md; phase-2-3d-port.md |
-| Port re-climb observability: no viewer exists, and the 3D K1.4 retune happens without one | phase 2 | decide the debugging surface before the re-climb starts | phase-2-3d-port.md |
-| The port's own open decisions (NDJSON encoding, world shape, rotation grammar, density, layout bundling) | phase 2 | the port phase, in order | phase-2-3d-port.md, "Decisions this phase owns" |
+| Port re-climb observability: no viewer exists, and the 3D K1.4 retune happens without one | phase 2 | ANSWERED at the port (2026-09-08): harness-side statistics - per-layer field sums, projected distance histograms, the event census; no viewer work. The re-climb gates add the probes they need as harness code | phase-2-3d-port.md |
+| The port's own open decisions (NDJSON encoding, world shape, rotation grammar, density, layout bundling) | phase 2 | NDJSON v:2 + coordinate grammar + density + observability DECIDED at the port (2026-09-08); world shape provisional (slab) pending K1.1/K1.4 evidence; layout bundling open pending the perf re-derivation | phase-2-3d-port.md, "Decisions this phase owns" |
 
 ## Open decisions (owner: nate)
 

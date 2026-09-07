@@ -1,5 +1,14 @@
 //! NDJSON serialization of events: one JSON object per line, no
-//! wrapping array (runtime spec 3.1), schema v:1 (3.3).
+//! wrapping array (runtime spec 3.1), schema v:2 (3.3).
+//!
+//! Schema v:2 (the 3D port, ADR-0013/phase 2): the stream grew
+//! `z` on the bond events and `world_depth` on start - additive
+//! fields, but the v bump is deliberate: the world model changed
+//! dimensionality, and a consumer that silently ignored the new
+//! fields would mis-model geometry from x/y alone. No external
+//! consumer existed when the port landed (the cheap moment, per
+//! the port plan); 2D v:1 streams are recoverable from git
+//! history. Within v:2 the contract only grows additively.
 //!
 //! Hand-rolled deliberately (decision 2026-09-05): the event set is
 //! small and fixed, the workspace stays zero-registry-dependency,
@@ -40,8 +49,9 @@ pub fn emit(event: &Event) -> String {
             bond_count,
             world_width,
             world_height,
+            world_depth,
         } => {
-            out.push_str("{\"v\":1,\"type\":\"start\",\"tick\":0");
+            out.push_str("{\"v\":2,\"type\":\"start\",\"tick\":0");
             let _ = write!(out, ",\"khem_version\":\"{khem_version}\"");
             let _ = write!(out, ",\"run_name\":\"{}\"", escape(run_name));
             let _ = write!(out, ",\"world_name\":\"{}\"", escape(world_name));
@@ -50,6 +60,7 @@ pub fn emit(event: &Event) -> String {
             let _ = write!(out, ",\"bond_count\":{bond_count}");
             let _ = write!(out, ",\"world_width\":{}", num(*world_width));
             let _ = write!(out, ",\"world_height\":{}", num(*world_height));
+            let _ = write!(out, ",\"world_depth\":{}", num(*world_depth));
             out.push('}');
         }
         Event::Tick {
@@ -57,7 +68,7 @@ pub fn emit(event: &Event) -> String {
             timing,
             stats,
         } => {
-            out.push_str("{\"v\":1,\"type\":\"tick\"");
+            out.push_str("{\"v\":2,\"type\":\"tick\"");
             let _ = write!(out, ",\"tick\":{tick}");
             let _ = write!(out, ",\"elapsed_ms\":{}", timing.elapsed_ms);
             let _ = write!(out, ",\"ticks_per_sec\":{}", num64(timing.ticks_per_sec));
@@ -94,8 +105,9 @@ pub fn emit(event: &Event) -> String {
             energy,
             x,
             y,
+            z,
         } => {
-            out.push_str("{\"v\":1,\"type\":\"bond_formed\"");
+            out.push_str("{\"v\":2,\"type\":\"bond_formed\"");
             let _ = write!(out, ",\"tick\":{tick},\"bond_id\":{bond_id}");
             let _ = write!(out, ",\"atom_a\":{},\"atom_b\":{}", atom_a.0, atom_b.0);
             let _ = write!(
@@ -105,7 +117,13 @@ pub fn emit(event: &Event) -> String {
                 element(*elem_b).symbol
             );
             let _ = write!(out, ",\"order\":{order},\"energy\":{}", num(*energy));
-            let _ = write!(out, ",\"x\":{},\"y\":{}", num(*x), num(*y));
+            let _ = write!(
+                out,
+                ",\"x\":{},\"y\":{},\"z\":{}",
+                num(*x),
+                num(*y),
+                num(*z)
+            );
             out.push('}');
         }
         Event::BondBroken {
@@ -116,8 +134,9 @@ pub fn emit(event: &Event) -> String {
             energy_released,
             x,
             y,
+            z,
         } => {
-            out.push_str("{\"v\":1,\"type\":\"bond_broken\"");
+            out.push_str("{\"v\":2,\"type\":\"bond_broken\"");
             let _ = write!(out, ",\"tick\":{tick},\"bond_id\":{bond_id}");
             let _ = write!(
                 out,
@@ -127,10 +146,11 @@ pub fn emit(event: &Event) -> String {
             );
             let _ = write!(
                 out,
-                ",\"energy_released\":{},\"x\":{},\"y\":{}",
+                ",\"energy_released\":{},\"x\":{},\"y\":{},\"z\":{}",
                 num(*energy_released),
                 num(*x),
-                num(*y)
+                num(*y),
+                num(*z)
             );
             out.push('}');
         }
@@ -139,7 +159,7 @@ pub fn emit(event: &Event) -> String {
             timing,
             reason,
         } => {
-            out.push_str("{\"v\":1,\"type\":\"end\"");
+            out.push_str("{\"v\":2,\"type\":\"end\"");
             let _ = write!(out, ",\"tick\":{tick}");
             let _ = write!(out, ",\"elapsed_ms\":{}", timing.elapsed_ms);
             let _ = write!(out, ",\"reason\":\"{reason}\"");
@@ -252,13 +272,14 @@ mod tests {
             bond_count: 2000,
             world_width: 150.0,
             world_height: 150.0,
+            world_depth: 40.0,
         };
         assert_eq!(
             emit(&event),
-            "{\"v\":1,\"type\":\"start\",\"tick\":0,\"khem_version\":\"0.1.0\",\
+            "{\"v\":2,\"type\":\"start\",\"tick\":0,\"khem_version\":\"0.1.0\",\
              \"run_name\":\"experiment_1\",\"world_name\":\"primordial_pond\",\
              \"seed\":42,\"atom_count\":3000,\"bond_count\":2000,\
-             \"world_width\":150,\"world_height\":150}"
+             \"world_width\":150,\"world_height\":150,\"world_depth\":40}"
         );
     }
 
@@ -274,7 +295,7 @@ mod tests {
         };
         let line = emit(&event);
         assert!(line.starts_with(
-            "{\"v\":1,\"type\":\"tick\",\"tick\":1000,\"elapsed_ms\":124,\
+            "{\"v\":2,\"type\":\"tick\",\"tick\":1000,\"elapsed_ms\":124,\
              \"ticks_per_sec\":8064.5,\"atom_count\":3000,\"bond_count\":2000"
         ));
         assert!(line.contains("\"temp_min\":30.1,\"temp_max\":39.9,\"temp_avg\":35"));
@@ -297,12 +318,13 @@ mod tests {
             energy: 799.0,
             x: 45.2,
             y: 123.7,
+            z: 12.4,
         };
         assert_eq!(
             emit(&formed),
-            "{\"v\":1,\"type\":\"bond_formed\",\"tick\":1247,\"bond_id\":4521,\
+            "{\"v\":2,\"type\":\"bond_formed\",\"tick\":1247,\"bond_id\":4521,\
              \"atom_a\":442,\"atom_b\":891,\"elem_a\":\"C\",\"elem_b\":\"O\",\
-             \"order\":2,\"energy\":799,\"x\":45.2,\"y\":123.7}"
+             \"order\":2,\"energy\":799,\"x\":45.2,\"y\":123.7,\"z\":12.4}"
         );
         let broken = Event::BondBroken {
             tick: 1248,
@@ -312,12 +334,13 @@ mod tests {
             energy_released: 399.5,
             x: 45.3,
             y: 123.8,
+            z: 12.4,
         };
         assert_eq!(
             emit(&broken),
-            "{\"v\":1,\"type\":\"bond_broken\",\"tick\":1248,\"bond_id\":4521,\
+            "{\"v\":2,\"type\":\"bond_broken\",\"tick\":1248,\"bond_id\":4521,\
              \"elem_a\":\"C\",\"elem_b\":\"O\",\"energy_released\":399.5,\
-             \"x\":45.3,\"y\":123.8}"
+             \"x\":45.3,\"y\":123.8,\"z\":12.4}"
         );
     }
 
@@ -333,7 +356,7 @@ mod tests {
         };
         assert_eq!(
             emit(&event),
-            "{\"v\":1,\"type\":\"end\",\"tick\":1000,\"elapsed_ms\":2000,\
+            "{\"v\":2,\"type\":\"end\",\"tick\":1000,\"elapsed_ms\":2000,\
              \"reason\":\"max_ticks_reached\"}"
         );
     }
@@ -349,10 +372,11 @@ mod tests {
             bond_count: 0,
             world_width: f32::NAN,
             world_height: f32::INFINITY,
+            world_depth: f32::NEG_INFINITY,
         };
         let line = emit(&event);
         assert!(line.contains("\"run_name\":\"weird \\\"name\\\"\\\\\\n\""));
-        assert!(line.contains("\"world_width\":0,\"world_height\":0"));
+        assert!(line.contains("\"world_width\":0,\"world_height\":0,\"world_depth\":0"));
         // -0.0 normalizes; non-finite guards to 0.
         assert_eq!(num(-0.0), "0");
         assert_eq!(num(f32::NAN), "0");
@@ -371,6 +395,7 @@ mod tests {
                 bond_count: 0,
                 world_width: 1.0,
                 world_height: 1.0,
+                world_depth: 1.0,
             },
             Event::Tick {
                 tick: 10,
@@ -392,7 +417,7 @@ mod tests {
         for event in &events {
             let line = emit(event);
             assert!(!line.contains('\n'), "embedded newline in {line}");
-            assert!(line.starts_with("{\"v\":1,"));
+            assert!(line.starts_with("{\"v\":2,"));
             assert!(line.ends_with('}'));
         }
     }

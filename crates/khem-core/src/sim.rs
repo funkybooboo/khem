@@ -164,21 +164,21 @@ mod tests {
     use crate::observer::ObserverConfig;
     use crate::world::{BoundaryType, ElementId};
 
-    /// Recorded 2026-09-07, after the K1.4 reactive-balance commit:
-    /// steric-contact capture (bond_form_factor 1.5 - a bond may only
-    /// be born where it can live; kills F18's phantom/wide captures),
-    /// base_formation_rate 0.001 -> 0.01 (contact capture cut the
-    /// formation count 2.7x; the free population now constructs to
-    /// exhaustion in-run), and the thermal-release RESERVOIR with a
-    /// bounded drain (F19: the instant cell dump was a bomb - the
-    /// pond vaporized ~500 ticks after reaching steady state; the
-    /// release_field grid joined the hash with this change).
-    /// Previous values: 0x6239_1611_1731_3A86 (the K1.3 substrate),
+    /// Recorded 2026-09-08, the 3D port commit (phase 2,
+    /// ADR-0013): every number changes by design - positions and
+    /// velocities carry z/vz (now hashed), the pond re-seeded as
+    /// the 60x60x15 slab, the Langevin bath draws three components
+    /// per atom (RNG stream shifts), the diffusion stencil is
+    /// 6-connected, the VSEPR geometry factor scores 3D directions,
+    /// and the NDJSON schema is v:2. The re-climb re-runs the K1
+    /// gates one per commit on this substrate.
+    /// Previous values: 0xC2DA_83B1_D546_6D7C (the K1.4/K1.5 2D
+    /// substrate), 0x6239_1611_1731_3A86 (the K1.3 substrate),
     /// 0x0896_8E9C_98C9_54F6 (pre-hash-field-state),
     /// 0xDD4E_87CD_A7FD_94CE (the K1.1 substrate, 2026-09-05).
     /// Pre-fix values live in git history.
     /// Update ONLY with a justification in the commit message.
-    const GOLDEN_HASH: u64 = 0xC2DA_83B1_D546_6D7C;
+    const GOLDEN_HASH: u64 = 0x4B84_4F68_14CC_5899;
 
     fn observer(interval: u64) -> Observer {
         Observer::new(ObserverConfig {
@@ -194,15 +194,16 @@ mod tests {
         let mut w = WorldState::new(
             50.0,
             50.0,
+            50.0,
             BoundaryType::Wrap,
             seed,
             PhysicsConfig::default(),
         );
         for i in 0..4 {
-            w.spawn_atom(ElementId(3), 10.0 + i as f32, 10.0);
-            w.spawn_atom(ElementId(0), 20.0 + i as f32, 20.0);
+            w.spawn_atom(ElementId(3), 10.0 + i as f32, 10.0, 10.0);
+            w.spawn_atom(ElementId(0), 20.0 + i as f32, 20.0, 20.0);
         }
-        w.temp_field.set(25.0, 25.0, 35.0);
+        w.temp_field.set(25.0, 25.0, 25.0, 35.0);
         w
     }
 
@@ -276,14 +277,14 @@ mod tests {
 
     #[test]
     fn full_loop_is_deterministic_per_seed() {
-        fn run(seed: u64) -> Vec<(f32, f32)> {
+        fn run(seed: u64) -> Vec<(f32, f32, f32)> {
             let mut w = small_world(seed);
             let mut sim = Sim::new(PhysicsConfig::default(), observer(1000));
             let _ = sim.start(&w);
             for _ in 0..50 {
                 sim.tick(&mut w);
             }
-            w.atoms.iter().map(|a| (a.x, a.y)).collect()
+            w.atoms.iter().map(|a| (a.x, a.y, a.z)).collect()
         }
         // Same seed: identical trajectories through the whole loop
         // (timing fields differ but are not part of the trajectory).
@@ -303,8 +304,10 @@ mod tests {
                 for v in [
                     atom.x.to_bits() as u64,
                     atom.y.to_bits() as u64,
+                    atom.z.to_bits() as u64,
                     atom.vx.to_bits() as u64,
                     atom.vy.to_bits() as u64,
+                    atom.vz.to_bits() as u64,
                     atom.bond_count as u64,
                     u64::from(atom.alive),
                     atom.element.0 as u64,
@@ -413,21 +416,32 @@ mod tests {
             base_formation_rate: 1.0,
             ..PhysicsConfig::default()
         };
-        let mut w = WorldState::new(50.0, 50.0, BoundaryType::Wrap, 3, config);
-        let a = w.spawn_atom(ElementId(0), 10.0, 10.0);
-        w.spawn_atom(ElementId(0), 12.0, 10.0);
-        // Capturable speed: |v_rel| stays under max_form_speed
-        // after damping, and the post-tick separation (~1.1 A)
-        // sits inside the steric-contact cap (H-H r_eq 1.06, cap
-        // 1.59) - formation only happens at contact now (F18).
+        let mut w = WorldState::new(50.0, 50.0, 50.0, BoundaryType::Wrap, 3, config);
+        let a = w.spawn_atom(ElementId(0), 10.0, 10.0, 10.0);
+        let b = w.spawn_atom(ElementId(0), 11.8, 10.0, 10.0);
+        // Capturable speed: a closes at ~0.45 A/tick (vx 1 vs 0.5,
+        // both damped), staying under max_form_speed against the
+        // bath's noise, and the pair enters the steric-contact cap
+        // (H-H r_eq 1.06, cap 1.59) within a couple of ticks -
+        // formation only happens at contact now (F18). One tick is
+        // not enough in 3D: the bath's two extra noise components
+        // can push the pair past the capture gate for a tick, so
+        // the law is asserted over a short window (a bond can only
+        // form through the REBUILT index either way - the initial
+        // 1.8 A gap sits outside the cap).
         w.atom_mut(a).vx = 1.0;
-        w.temp_field.set(12.0, 10.0, 43.6);
+        w.atom_mut(b).vx = 0.5;
+        w.temp_field.set(11.0, 10.0, 10.0, 43.6);
         let mut sim = Sim::new(config, observer(1000));
         let _ = sim.start(&w);
-        let events = sim.tick(&mut w);
-        assert!(
-            events.iter().any(|e| matches!(e, Event::BondFormed { .. })),
-            "moved atom must bond through the rebuilt index"
-        );
+        let mut bonded = false;
+        for _ in 0..5 {
+            let events = sim.tick(&mut w);
+            if events.iter().any(|e| matches!(e, Event::BondFormed { .. })) {
+                bonded = true;
+                break;
+            }
+        }
+        assert!(bonded, "moved atom must bond through the rebuilt index");
     }
 }

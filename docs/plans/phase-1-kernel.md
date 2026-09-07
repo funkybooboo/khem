@@ -88,8 +88,12 @@ optional follow-up. Current bindings:
 
 K1.1-K1.5 passed 2026-09-05/07 (thermostat, force sanity, water
 persistence, reactive balance, seam symmetry); MILESTONE K1 IS
-CLOSED - the 3D port (phase 2, ADR-0013) is next. The findings
-that shaped them: F6-F11, F17, F18, F19, F20.
+CLOSED in 2D. The 3D port's substrate diff landed 2026-09-08
+(phase 2, ADR-0013); the re-validation contract now binds: K1.1
+re-climbs first in 3D, then the rest in order, one gate per
+commit, the 2D pass records as the dimension-agnostic regression
+reference. The findings that shaped them: F6-F11, F17, F18, F19,
+F20.
 
 ### K1.1 - thermostat: PASSED
 

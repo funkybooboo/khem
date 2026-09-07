@@ -1,5 +1,9 @@
 //! World state and core data types: `AtomId`, `BondId`, `ElementId`,
-//! `AtomState`, `BondState`, `WorldState`, `Grid2D`, `BoundaryType`.
+//! `AtomState`, `BondState`, `WorldState`, `Grid3D`, `BoundaryType`.
+//!
+//! The substrate is 3D (the phase-2 port, ADR-0013): positions and
+//! velocities carry z, fields carry layers, and Wrap is the 3-torus
+//! with three seam pairs. 2D survives in git history.
 //!
 //! Design rules (runtime spec section 4): flat arrays indexed by
 //! integer ID - no per-atom heap allocation, no pointers,
@@ -52,9 +56,11 @@ pub struct AtomState {
     /// Position, angstroms.
     pub x: f32,
     pub y: f32,
+    pub z: f32,
     /// Velocity, angstroms per tick.
     pub vx: f32,
     pub vy: f32,
+    pub vz: f32,
     /// Currently held bonds; only the first `bond_count` slots are
     /// valid.
     pub bonds: [Option<BondId>; MAX_BONDS],
@@ -64,14 +70,16 @@ pub struct AtomState {
 
 impl AtomState {
     /// A new live atom at rest.
-    pub fn new(id: AtomId, element: ElementId, x: f32, y: f32) -> Self {
+    pub fn new(id: AtomId, element: ElementId, x: f32, y: f32, z: f32) -> Self {
         Self {
             id,
             element,
             x,
             y,
+            z,
             vx: 0.0,
             vy: 0.0,
+            vz: 0.0,
             bonds: [None; MAX_BONDS],
             bond_count: 0,
             alive: true,
@@ -141,66 +149,77 @@ impl BondState {
 }
 
 /// Field values (temperature, pressure, UV) on a grid coarser than
-/// atom positions (runtime spec 4.8). Flat index = col + row * cols.
+/// atom positions (runtime spec 4.8). Flat index =
+/// col + row * cols + layer * cols * rows - the 2D flat index plus
+/// a layer stride (the phase-2 port's one structural change to the
+/// grid; the cell values and the wrap semantics are unchanged).
 ///
-/// Indices wrap, like the Wrap boundary: the tick order normalizes
-/// positions (boundary step) before any field access, so wrapping is
-/// safe for every boundary type.
+/// Indices wrap on every axis, like the Wrap boundary: the tick
+/// order normalizes positions (boundary step) before any field
+/// access, so wrapping is safe for every boundary type.
 #[derive(Debug, Clone)]
-pub struct Grid2D {
+pub struct Grid3D {
     pub data: Vec<f32>,
     pub cols: u32,
     pub rows: u32,
+    pub layers: u32,
     /// Cell size, angstroms.
     pub cell_width: f32,
     pub cell_height: f32,
+    pub cell_depth: f32,
 }
 
-impl Grid2D {
-    /// A zeroed grid covering `width` x `height` angstroms.
+impl Grid3D {
+    /// A zeroed grid covering `width` x `height` x `depth` angstroms.
     ///
     /// # Panics
     /// Panics if `cell_size` is not positive.
-    pub fn new(width: f32, height: f32, cell_size: f32) -> Self {
+    pub fn new(width: f32, height: f32, depth: f32, cell_size: f32) -> Self {
         assert!(cell_size > 0.0, "cell size must be positive");
         let cols = Self::cells_across(width, cell_size);
         let rows = Self::cells_across(height, cell_size);
+        let layers = Self::cells_across(depth, cell_size);
         Self {
-            data: vec![0.0; (cols * rows) as usize],
+            data: vec![0.0; (cols * rows * layers) as usize],
             cols,
             rows,
+            layers,
             cell_width: cell_size,
             cell_height: cell_size,
+            cell_depth: cell_size,
         }
     }
 
     /// Cell coordinates for a world position, wrapping at the grid
-    /// edges.
-    pub fn cell(&self, x: f32, y: f32) -> (u32, u32) {
+    /// edges on every axis.
+    pub fn cell(&self, x: f32, y: f32, z: f32) -> (u32, u32, u32) {
         let cx = (x / self.cell_width).floor().rem_euclid(self.cols as f32) as u32;
         let cy = (y / self.cell_height).floor().rem_euclid(self.rows as f32) as u32;
-        (cx, cy)
+        let cz = (z / self.cell_depth).floor().rem_euclid(self.layers as f32) as u32;
+        (cx, cy, cz)
     }
 
     /// Flat index for a world position.
-    pub fn index(&self, x: f32, y: f32) -> usize {
-        let (c, r) = self.cell(x, y);
-        c as usize + r as usize * self.cols as usize
+    pub fn index(&self, x: f32, y: f32, z: f32) -> usize {
+        let (c, r, l) = self.cell(x, y, z);
+        c as usize
+            + r as usize * self.cols as usize
+            + l as usize * self.cols as usize * self.rows as usize
     }
 
-    pub fn get(&self, x: f32, y: f32) -> f32 {
-        self.data[self.index(x, y)]
+    pub fn get(&self, x: f32, y: f32, z: f32) -> f32 {
+        self.data[self.index(x, y, z)]
     }
 
-    pub fn set(&mut self, x: f32, y: f32, value: f32) {
-        let i = self.index(x, y);
+    pub fn set(&mut self, x: f32, y: f32, z: f32, value: f32) {
+        let i = self.index(x, y, z);
         self.data[i] = value;
     }
 
     /// Adds energy to a cell. Bond events release and absorb heat
     /// through this (runtime spec 7.1, 7.2).
-    pub fn add(&mut self, x: f32, y: f32, amount: f32) {
-        let i = self.index(x, y);
+    pub fn add(&mut self, x: f32, y: f32, z: f32, amount: f32) {
+        let i = self.index(x, y, z);
         self.data[i] += amount;
     }
 
@@ -229,8 +248,9 @@ pub struct WorldState {
     /// World dimensions, angstroms.
     pub width: f32,
     pub height: f32,
+    pub depth: f32,
     pub boundary: BoundaryType,
-    pub temp_field: Grid2D,
+    pub temp_field: Grid3D,
     /// The thermal-release reservoir (finding F19's fix, spec 6.2):
     /// thermal bond breaks COMMIT their released heat here, and
     /// the physics bath drains each cell into `temp_field` at
@@ -244,14 +264,14 @@ pub struct WorldState {
     /// steady-state temperature (measured, K1.4 probe). The
     /// bounded drain holds a cell at ~+20 C above its neighbors
     /// even under a full-cap stream, so the feedback cannot close.
-    pub release_field: Grid2D,
+    pub release_field: Grid3D,
     /// Declared environment setpoints, degrees: cells relax toward
     /// their setpoint at field_relax_rate (spec 6.2, the environment
     /// reservoir). 0 = no setpoint declared = no relaxation
     /// (phase-1 sentinel; phase 4 regions always declare).
-    pub setpoint_field: Grid2D,
-    pub pressure_field: Grid2D,
-    pub uv_field: Grid2D,
+    pub setpoint_field: Grid3D,
+    pub pressure_field: Grid3D,
+    pub uv_field: Grid3D,
     pub energy_sources: Vec<EnergySource>,
     pub element_table: Arc<Vec<ElementProperties>>,
     pub spatial_index: SpatialIndex,
@@ -266,6 +286,7 @@ impl WorldState {
     pub fn new(
         width: f32,
         height: f32,
+        depth: f32,
         boundary: BoundaryType,
         seed: u64,
         config: PhysicsConfig,
@@ -276,15 +297,22 @@ impl WorldState {
             bonds: Vec::new(),
             width,
             height,
+            depth,
             boundary,
-            temp_field: Grid2D::new(width, height, config.field_cell_size),
-            release_field: Grid2D::new(width, height, config.field_cell_size),
-            setpoint_field: Grid2D::new(width, height, config.field_cell_size),
-            pressure_field: Grid2D::new(width, height, config.field_cell_size),
-            uv_field: Grid2D::new(width, height, config.field_cell_size),
+            temp_field: Grid3D::new(width, height, depth, config.field_cell_size),
+            release_field: Grid3D::new(width, height, depth, config.field_cell_size),
+            setpoint_field: Grid3D::new(width, height, depth, config.field_cell_size),
+            pressure_field: Grid3D::new(width, height, depth, config.field_cell_size),
+            uv_field: Grid3D::new(width, height, depth, config.field_cell_size),
             energy_sources: Vec::new(),
             element_table: Arc::new(ELEMENTS.to_vec()),
-            spatial_index: SpatialIndex::new(config.spatial_cell_size, width, height, boundary),
+            spatial_index: SpatialIndex::new(
+                config.spatial_cell_size,
+                width,
+                height,
+                depth,
+                boundary,
+            ),
             rng: Rng::new(seed),
             event_queue: Vec::new(),
         }
@@ -301,9 +329,9 @@ impl WorldState {
 
     /// Adds a live atom at rest. Its id is its index; compaction
     /// remaps ids later (runtime spec 5.2).
-    pub fn spawn_atom(&mut self, element: ElementId, x: f32, y: f32) -> AtomId {
+    pub fn spawn_atom(&mut self, element: ElementId, x: f32, y: f32, z: f32) -> AtomId {
         let id = AtomId(self.atoms.len() as u32);
-        self.atoms.push(AtomState::new(id, element, x, y));
+        self.atoms.push(AtomState::new(id, element, x, y, z));
         id
     }
 
@@ -340,23 +368,26 @@ impl WorldState {
         &mut self.bonds[id.0 as usize]
     }
 
-    /// Shortest displacement from (ax, ay) to (bx, by), honoring
-    /// the boundary: the minimum-image convention (standard for
-    /// periodic MD) for Wrap - a pair 1 A apart across the seam
+    /// Shortest displacement from (ax, ay, az) to (bx, by, bz),
+    /// honoring the boundary: the minimum-image convention (standard
+    /// for periodic MD) applied on every axis for Wrap - the 3-torus
+    /// has three seam pairs, and a pair 1 A apart across any seam
     /// reads as 1 A, not width-1 - and the raw delta for Wall and
     /// Open, where positions never wrap and opposite walls really
     /// are far apart. Every pairwise rule (spring forces,
-    /// chemistry distance checks, bond midpoints) must use this;
-    /// using raw deltas in a Wrap world shreds seam-crossing
-    /// molecules (finding F10).
-    pub fn delta(&self, ax: f32, ay: f32, bx: f32, by: f32) -> (f32, f32) {
-        let (dx, dy) = (bx - ax, by - ay);
+    /// chemistry distance checks, bond midpoints, VSEPR anchor
+    /// directions) must use this; using raw deltas in a Wrap world
+    /// shreds seam-crossing molecules (finding F10) and mirrors
+    /// seam-straddling anchors (F20).
+    pub fn delta(&self, ax: f32, ay: f32, az: f32, bx: f32, by: f32, bz: f32) -> (f32, f32, f32) {
+        let (dx, dy, dz) = (bx - ax, by - ay, bz - az);
         if self.boundary != BoundaryType::Wrap {
-            return (dx, dy);
+            return (dx, dy, dz);
         }
         (
             dx - self.width * (dx / self.width).round(),
             dy - self.height * (dy / self.height).round(),
+            dz - self.depth * (dz / self.depth).round(),
         )
     }
 
@@ -387,7 +418,9 @@ impl WorldState {
             .filter(|a| a.alive)
             .map(|a| {
                 let m = self.element(a.element).mass as f64;
-                0.5 * m * (a.vx as f64).powi(2) + 0.5 * m * (a.vy as f64).powi(2)
+                0.5 * m * (a.vx as f64).powi(2)
+                    + 0.5 * m * (a.vy as f64).powi(2)
+                    + 0.5 * m * (a.vz as f64).powi(2)
             })
             .sum()
     }
@@ -400,8 +433,8 @@ impl WorldState {
             .filter(|b| b.alive)
             .map(|b| {
                 let (a, c) = (self.atom(b.atom_a), self.atom(b.atom_b));
-                let (dx, dy) = self.delta(a.x, a.y, c.x, c.y);
-                (dx * dx + dy * dy).sqrt()
+                let (dx, dy, dz) = self.delta(a.x, a.y, a.z, c.x, c.y, c.z);
+                (dx * dx + dy * dy + dz * dz).sqrt()
             })
             .collect()
     }
@@ -456,7 +489,7 @@ mod tests {
 
     #[test]
     fn atom_bond_slots() {
-        let mut a = AtomState::new(AtomId(0), ElementId(0), 0.0, 0.0);
+        let mut a = AtomState::new(AtomId(0), ElementId(0), 0.0, 0.0, 0.0);
         assert_eq!(a.bond_count, 0);
         assert!(a.push_bond(BondId(0)));
         assert!(a.push_bond(BondId(1)));
@@ -469,7 +502,7 @@ mod tests {
 
     #[test]
     fn atom_bond_capacity() {
-        let mut a = AtomState::new(AtomId(0), ElementId(0), 0.0, 0.0);
+        let mut a = AtomState::new(AtomId(0), ElementId(0), 0.0, 0.0, 0.0);
         for i in 0..MAX_BONDS as u32 {
             assert!(a.push_bond(BondId(i)));
         }
@@ -479,22 +512,25 @@ mod tests {
 
     #[test]
     fn grid_shape_and_wrap() {
-        let g = Grid2D::new(200.0, 100.0, 10.0);
-        assert_eq!((g.cols, g.rows), (20, 10));
-        assert_eq!(g.index(0.0, 0.0), 0);
-        // wrap: -5 A is equivalent to 195 A -> col 19
-        assert_eq!(g.index(-5.0, 0.0), 19);
-        assert_eq!(g.index(0.0, -5.0), 9 * 20);
-        let mut g = Grid2D::new(100.0, 100.0, 10.0);
-        g.set(12.0, 15.0, 5.0);
-        g.add(12.0, 15.0, 1.5);
-        assert_eq!(g.get(12.0, 15.0), 6.5);
+        let g = Grid3D::new(200.0, 100.0, 50.0, 10.0);
+        assert_eq!((g.cols, g.rows, g.layers), (20, 10, 5));
+        assert_eq!(g.index(0.0, 0.0, 0.0), 0);
+        // wrap on every axis: -5 A is equivalent to 195/95/45 A
+        assert_eq!(g.index(-5.0, 0.0, 0.0), 19);
+        assert_eq!(g.index(0.0, -5.0, 0.0), 9 * 20);
+        assert_eq!(g.index(0.0, 0.0, -5.0), 4 * 200);
+        // The layer stride: layer 4, row 9, col 19 is the last cell.
+        assert_eq!(g.index(195.0, 95.0, 45.0), 20 * 10 * 5 - 1);
+        let mut g = Grid3D::new(100.0, 100.0, 100.0, 10.0);
+        g.set(12.0, 15.0, 7.0, 5.0);
+        g.add(12.0, 15.0, 7.0, 1.5);
+        assert_eq!(g.get(12.0, 15.0, 7.0), 6.5);
     }
 
     #[test]
     #[should_panic(expected = "cell size must be positive")]
     fn grid_rejects_nonpositive_cell_size() {
-        let _ = Grid2D::new(100.0, 100.0, 0.0);
+        let _ = Grid3D::new(100.0, 100.0, 100.0, 0.0);
     }
 
     #[test]
@@ -503,12 +539,13 @@ mod tests {
         let mut w = WorldState::new(
             200.0,
             200.0,
+            200.0,
             BoundaryType::Wrap,
             1,
             PhysicsConfig::default(),
         );
-        let a = w.spawn_atom(ElementId(0), 0.0, 0.0);
-        let b = w.spawn_atom(ElementId(0), 1.0, 0.0);
+        let a = w.spawn_atom(ElementId(0), 0.0, 0.0, 0.0);
+        let b = w.spawn_atom(ElementId(0), 1.0, 0.0, 0.0);
         let _ = w.form_bond(a, b, 0, 1.0);
     }
 
@@ -517,6 +554,7 @@ mod tests {
         let w = WorldState::new(
             200.0,
             100.0,
+            100.0,
             BoundaryType::Wrap,
             42,
             PhysicsConfig::default(),
@@ -524,6 +562,8 @@ mod tests {
         assert_eq!(w.tick, 0);
         assert_eq!(w.element_table.len(), 10);
         assert_eq!(w.temp_field.cols, 20);
+        assert_eq!(w.temp_field.layers, 10);
+        assert_eq!(w.depth, 100.0);
         assert_eq!(w.spatial_index.cell_size(), 5.0);
         assert_eq!(w.element(ElementId(1)).symbol, "C");
     }
@@ -533,12 +573,13 @@ mod tests {
         let mut w = WorldState::new(
             200.0,
             200.0,
+            200.0,
             BoundaryType::Wrap,
             1,
             PhysicsConfig::default(),
         );
-        let a = w.spawn_atom(ElementId(0), 0.0, 0.0);
-        let b = w.spawn_atom(ElementId(1), 1.0, 0.0);
+        let a = w.spawn_atom(ElementId(0), 0.0, 0.0, 0.0);
+        let b = w.spawn_atom(ElementId(1), 1.0, 0.0, 0.0);
         assert_eq!(a, AtomId(0));
         assert_eq!(b, AtomId(1));
         assert_eq!(w.atom(b).element, ElementId(1));
@@ -549,14 +590,15 @@ mod tests {
         let mut w = WorldState::new(
             200.0,
             200.0,
+            200.0,
             BoundaryType::Wrap,
             1,
             PhysicsConfig::default(),
         );
         // Hydrogen: max_bonds 1
-        let a = w.spawn_atom(ElementId(0), 0.0, 0.0);
-        let b = w.spawn_atom(ElementId(0), 1.0, 0.0);
-        let c = w.spawn_atom(ElementId(0), 2.0, 0.0);
+        let a = w.spawn_atom(ElementId(0), 0.0, 0.0, 0.0);
+        let b = w.spawn_atom(ElementId(0), 1.0, 0.0, 0.0);
+        let c = w.spawn_atom(ElementId(0), 2.0, 0.0, 0.0);
         assert!(w.form_bond(a, b, 1, 436.0).is_some());
         // a and b are both full now (max_bonds 1)
         assert!(w.form_bond(a, c, 1, 436.0).is_none());
@@ -574,17 +616,44 @@ mod tests {
         let mut w = WorldState::new(
             200.0,
             200.0,
+            200.0,
             BoundaryType::Wrap,
             1,
             PhysicsConfig::default(),
         );
         // Carbon: max_bonds 4, so capacity is not the rejector here
-        let a = w.spawn_atom(ElementId(1), 0.0, 0.0);
-        let b = w.spawn_atom(ElementId(1), 1.0, 0.0);
+        let a = w.spawn_atom(ElementId(1), 0.0, 0.0, 0.0);
+        let b = w.spawn_atom(ElementId(1), 1.0, 0.0, 0.0);
         assert!(w.form_bond(a, b, 1, 346.0).is_some());
         // reversed atom order is still a duplicate
         assert!(w.form_bond(b, a, 1, 346.0).is_none());
         // same pair, different order, is still a duplicate
         assert!(w.form_bond(a, b, 2, 614.0).is_none());
+    }
+
+    #[test]
+    fn delta_is_minimum_image_on_every_axis() {
+        // The 3-torus has three seam pairs; each folds independently.
+        let w = WorldState::new(
+            100.0,
+            100.0,
+            100.0,
+            BoundaryType::Wrap,
+            1,
+            PhysicsConfig::default(),
+        );
+        let (dx, dy, dz) = w.delta(0.0, 0.0, 0.0, 99.0, 99.0, 99.0);
+        assert_eq!((dx, dy, dz), (-1.0, -1.0, -1.0));
+        // Wall/Open worlds never fold: opposite walls are far apart.
+        let w = WorldState::new(
+            100.0,
+            100.0,
+            100.0,
+            BoundaryType::Wall,
+            1,
+            PhysicsConfig::default(),
+        );
+        let (dx, dy, dz) = w.delta(0.0, 0.0, 0.0, 99.0, 0.0, 0.0);
+        assert_eq!((dx, dy, dz), (99.0, 0.0, 0.0));
     }
 }

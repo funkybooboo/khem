@@ -206,7 +206,9 @@ pub struct PhysicsConfig {
     /// READ by any system: compaction is phase-3 work, so this only
     /// pins the spec 11 value until the compactor lands.
     pub compaction_interval: u32,
-    /// Fraction of world height counted as surface for solar UV.
+    /// Fraction of world depth counted as surface for solar UV (z,
+    /// the vertical axis since the 3D port; was the height/y
+    /// fraction in 2D).
     pub surface_threshold: f32,
     pub uv_sensitivity: UvSensitivity,
 }

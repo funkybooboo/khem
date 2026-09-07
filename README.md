@@ -1,7 +1,9 @@
 # khem
 
-khem simulates 2D worlds of atoms - real elements, real
-chemistry, thermodynamics deciding what forms and what breaks.
+khem simulates 3D worlds of atoms - real elements, real
+chemistry, thermodynamics deciding what forms and what breaks
+(2D through the K1 gates; the 3D port landed 2026-09-08,
+ADR-0013).
 The runtime has no concept of a cell, a genome, or reproduction:
 if anything alive appears, it built itself from the rules.
 
@@ -131,10 +133,12 @@ VSEPR anchor (F20) the raw statistics could not see. The .kem
 language is
 spec-only - the parser is built only after the gates pass,
 because a language on a dead substrate is worthless.
-Dimensionality is decided: the K1 gates land in 2D, then the 3D
-port runs as its own phase before K2 (ADR-0013) - so vesicles,
-base pairs, and carbon get true geometry instead of 2D shadows
-before anything tunes against it.
+Dimensionality is decided and DONE: the K1 gates landed in 2D,
+then the 3D port ran as its own phase before K2 (ADR-0013,
+landed 2026-09-08) - so vesicles, base pairs, and carbon get
+true geometry instead of 2D shadows before anything tunes
+against it. The K1 ladder now re-climbs in 3D, one gate per
+commit.
 
 ## Documentation
 
