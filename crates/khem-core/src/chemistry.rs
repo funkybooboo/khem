@@ -27,8 +27,10 @@
 //!   an observer/bin concern, applied when the stream is written.
 //!
 //! RNG discipline (ADR-0005): after the physics system's draws,
-//! break_bonds consumes exactly one uniform per LIVE bond per tick,
-//! in BondId order; form_bonds consumes exactly one uniform per
+//! break_bonds consumes exactly one uniform per live bond per tick,
+//! in BondId order - EXCEPT bonds the mechanical overstretch rule
+//! breaks first: those break deterministically BEFORE the roll and
+//! draw nothing. form_bonds consumes exactly one uniform per
 //! ELIGIBLE pair, in iterating-AtomId order, candidates in spatial
 //! scan order. Ineligible bonds and pairs draw nothing. Tests that
 //! call form_bonds must rebuild the spatial index first (G07: the

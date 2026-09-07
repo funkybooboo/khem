@@ -158,7 +158,9 @@ pub struct PhysicsConfig {
     pub spatial_cell_size: f32,
     /// Field grid cell size, angstroms.
     pub field_cell_size: f32,
-    /// Ticks between dead-entity compactions.
+    /// Ticks between dead-entity compactions (spec 5.2). NOT YET
+    /// READ by any system: compaction is phase-2 work, so this only
+    /// pins the spec 11 value until the compactor lands.
     pub compaction_interval: u32,
     /// Fraction of world height counted as surface for solar UV.
     pub surface_threshold: f32,

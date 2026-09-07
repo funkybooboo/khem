@@ -41,7 +41,7 @@ options:
 
 exit codes (runtime spec section 2.3):
   0  success
-  1  validation error (bad .kem files)
+  1  validation error (bad .kem files or bad command line)
   2  runtime error
   3  user interrupt";
 

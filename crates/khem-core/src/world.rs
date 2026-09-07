@@ -36,14 +36,15 @@ pub struct ElementId(pub u8);
 
 /// One atom. Fixed size, no heap allocation (runtime spec 4.4).
 ///
-/// Dead atoms are flagged (`alive = false`) and compacted periodically
-/// by the tick loop, never removed immediately - removal would
-/// invalidate IDs.
+/// Dead atoms are flagged (`alive = false`) and never removed
+/// immediately - removal would invalidate IDs. Periodic compaction
+/// is phase-2 work (spec 5.2: not yet implemented); until it lands,
+/// dead slots accumulate and every system skips them.
 ///
 /// The bond slots are `Option` rather than the spec's raw
 /// `[BondId; 6]`: an empty slot must be representable and a sentinel
-/// id would be unidiomatic. Revise the spec wording at phase-1
-/// review if this sticks.
+/// id would be unidiomatic. (The spec wording was synced to this
+/// deviation on 2026-09-05.)
 #[derive(Debug, Clone)]
 pub struct AtomState {
     pub id: AtomId,

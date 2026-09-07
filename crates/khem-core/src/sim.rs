@@ -3,17 +3,21 @@
 //! bond breaking -> bond formation -> observe -> event flush.
 //!
 //! [`Sim`] drives the tick steps of spec 5.1 exactly, in order;
-//! [`TICK_ORDER`] keeps the order as inspectable data, and the test
-//! asserts the loop is its implementation. Systems read previous-
-//! tick state and write current-tick state; no system reads another
-//! system's writes within a tick. This fixed order is what makes
-//! runs deterministic and later parallelizable (guarantees G02,
-//! G14; ADR-0005). The force/motion pair is sub-stepped
-//! `integration_substeps` times per tick (spec 6.5, gate K1.3):
-//! the tick stays dt = 1 for chemistry, the thermostat, and the
-//! fields, while the short-range dynamics resolve at dt_sub =
-//! 1/n - the fix that lets bond springs sit at real-water well
-//! depths and removes the velocity clamp (F13's tunneling mint).
+//! [`TICK_ORDER`] keeps the order as inspectable data, pinned by
+//! test as the contract. `Sim::tick` is that contract's single
+//! implementation - the binding between the two is kept in step
+//! by review, not by the compiler: v0.1 does not spy-instrument
+//! the loop (the systems are not injectable through `Sim::new`).
+//! Systems read previous-tick state and write current-tick state;
+//! no system reads another system's writes within a tick. This
+//! fixed order is what makes runs deterministic and later
+//! parallelizable (guarantees G02, G14; ADR-0005). The force/motion
+//! pair is sub-stepped `integration_substeps` times per tick
+//! (spec 6.5, gate K1.3): the tick stays dt = 1 for chemistry, the
+//! thermostat, and the fields, while the short-range dynamics
+//! resolve at dt_sub = 1/n - the fix that lets bond springs sit at
+//! real-water well depths and removes the velocity clamp (F13's
+//! tunneling mint).
 //!
 //! I/O boundary: [`Sim`] produces events and never touches streams;
 //! the khem bin serializes (ndjson) and writes stdout, which keeps
@@ -198,6 +202,8 @@ mod tests {
 
     #[test]
     fn tick_order_is_fixed() {
+        // Pins the CONTRACT as data; it cannot see Sim::tick itself
+        // (module doc: the loop is not spy-instrumented in v0.1).
         assert_eq!(TICK_ORDER.len(), 11);
         assert_eq!(TICK_ORDER[0], "EnergySystem::update");
         assert_eq!(TICK_ORDER[1], "PhysicsSystem::apply_bath");

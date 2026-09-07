@@ -65,7 +65,7 @@ argument is accepted but not read (the parser is phase 3), and
 ### 2.3 Exit codes
 
     0   success (simulation completed, or --check passed)
-    1   validation error (bad .kem files)
+    1   validation error (bad .kem files or bad command line)
     2   runtime error (crash during simulation)
     3   user interrupt (SIGINT / ctrl-c)  [phase 2: v0.1 phase-1
         builds do not trap signals; ctrl-c kills the process]
@@ -328,8 +328,10 @@ RNG draw discipline (pinned by the phase-1 kernel, ADR-0005): the
 physics system draws first - exactly two normal draws per live atom
 per tick, in AtomId order, inside the once-per-tick bath step
 (dead atoms draw nothing; zero-temperature atoms draw no-op
-samples). Bond breaking draws exactly one uniform per live bond per
-tick, in BondId order. Formation draws exactly one uniform per
+samples). Bond breaking draws exactly one uniform per live bond
+per tick, in BondId order, except bonds the mechanical overstretch
+rule breaks first: those break deterministically before the roll
+and draw nothing. Formation draws exactly one uniform per
 eligible pair, in iterating-AtomId order with candidates in spatial
 scan order; ineligible pairs draw nothing. The integration
 sub-steps draw nothing.
