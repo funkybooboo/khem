@@ -6,9 +6,10 @@ phase 2, plan file docs/plans/phase-2-3d-port.md; the body's
 phase numbers predate the renumbering - hardening is now
 phase 3, the language phase 4; the decision is unchanged.
 K1.5 passed 2026-09-07 - K1 closed in 2D, the port is unblocked.
-The port's substrate diff landed 2026-09-08; the K1 re-climb
-in 3D follows - decisions and landing evidence in the plan
-file)
+The port's substrate diff landed 2026-09-08 and the K1 ladder
+re-climbed in 3D the same day - all five gates, harness
+evidence, phase 2's exit criterion met; decisions and evidence
+in docs/plans/phase-2-3d-port.md)
 
 ## Context
 

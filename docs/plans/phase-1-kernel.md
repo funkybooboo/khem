@@ -125,7 +125,8 @@ fraction of the 72-cell field, honest G06 balance, recorded for
 K1.4's ledger. The port commit's first bar scaling ([1.2, 2.1])
 double-counted the dimension - the coupling RATIO is
 dimension-normalized by construction and the first sample
-(1.042) falsified it in one read.
+(1.042) falsified it in one read. THE K1 LADDER IS NOW CLOSED
+IN 3D TOO: see the K1.5 entry below for the close's evidence.
 
 ### K1.2 - force sanity: PASSED
 
@@ -313,6 +314,27 @@ cancels marginally over the candidate distribution):
 K1.5 is the 2D ladder's close: the 3D port follows (phase 2,
 ADR-0013) and re-climbs K1.1-K1.5 in 3D - all three seams -
 before K2; K2-K5 then climb in 3D.
+
+RE-CLIMBED AND PASSED IN 3D 2026-09-08 - all three seams, and
+the re-climb's audit earned its keep exactly as the 2D one did:
+the bars passed (pooled seam/bulk efficiency 1.287 inside
+[0.6, 1.4], gathering completeness pair-for-pair every tick of
+both seeds), but the per-axis census exposed a signal the 2D
+pooled classes averaged away - axis 0 (the outer candidate-scan
+loop) at z +2.9 pooled. The probe chain: windowed S/E refuted
+contention-monotonicity; the double-census (pre-tick vs
+post-tick E) agreed within 0.5%, refuting the mid-pass-state
+timing artifact; the SCAN-ORDER REVERSAL (a probe build, the
+physics unchanged) moved the excess to axis 2 and dropped the
+pooled ratio to 1.047 - a real seam asymmetry survives scan
+reversal, the measured excess follows the scan. THE SUBSTRATE'S
+SEAMS ARE SYMMETRIC; the signal is the census model's mid-pass
+anchor-state offset (the 2D gate's documented "+6%, anchors
+were freer before the pass filled them"), exposed per-axis by
+the 3D class split - recorded as F21 (RESOLVED, by
+falsification). K1 IS CLOSED IN 3D: K1.1-K1.5 all re-climbed
+with harness evidence; the 3D port's exit criterion is met;
+K2 climbs in 3D.
 
 ## Milestone K2 - self-assembly: membranes are consequences, not rules
 

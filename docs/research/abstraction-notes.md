@@ -347,7 +347,7 @@ measured:
   with their rationale in docs/plans/phase-2-3d-port.md,
   "Decisions this phase owns".
 
-## Resolution log (2026-09-08, the 3D re-climb: K1.1-K1.4)
+## Resolution log (2026-09-08, the 3D re-climb: K1.1-K1.5)
 
 - Gate K1.1 PASSED in 3D - the port's first re-climbed gate, and
   the run falsified one port-commit claim in its first sample,
@@ -420,6 +420,58 @@ measured:
   closes on the slab: vent flux 0.454 degrees-sum/tick, every
   1k window's five columns (vent, relax, absorb, release,
   thermo residual) explain the measured delta.
+
+- Gate K1.5 PASSED in 3D - all three seams - and its audit
+  found, chased, and falsified a signal the 2D gate could never
+  have resolved. The bars passed (pooled seam S=132 E=107.7 z
+  +2.34, bulk S=1025 E=1076.6 z -1.57, efficiency ratio 1.287
+  in [0.6, 1.4]; gathering completeness pair-for-pair every
+  tick, zero lost pairs), but the ratio sat ~3 sigma of its own
+  noise above 1.0 where the 2D pass measured 0.935, and the new
+  per-axis census showed the shape: axis 0 (x - the OUTER
+  candidate-scan loop) z +2.9 pooled, axis 1 +0.5, axis 2 +0.1.
+  The 2D seam class was too thin (E ~29/seed) to split; the 3D
+  beaker's seam class is 10% of eligible pairs and the split
+  was affordable - and it exposed an ordering that matched the
+  lexicographic scan.
+
+  The probe chain, recorded because the negatives are evidence
+  too: (1) windowed S/E - the excess is NOT contention-monotone
+  (the 8-12k window measured 0.95/1.00, dead symmetric; 12-16k
+  swung back to 1.34/1.11) - refuting simple construction-burst
+  priority; (2) the double-census - E accumulated against the
+  pre-tick and post-tick states agreed within 0.5% (seam 54.2
+  vs 53.9) - refuting the mid-pass-state timing artifact;
+  (3) the SCAN-ORDER REVERSAL - a probe build with the
+  candidate iteration reversed (the physics unchanged: per-pair
+  Bernoulli draws, the same eligibility gates) moved the excess
+  to axis 2 (pooled efficiency 1.248, z +0.97/+0.82 per seed)
+  and dropped axis 0 to neutral (1.020), pooled ratio
+  1.287 -> 1.047. A real seam asymmetry survives scan reversal;
+  the measured excess follows the scan. THE SUBSTRATE'S SEAMS
+  ARE SYMMETRIC.
+
+  - F21 (RESOLVED same day, by falsification): the 3D
+    seam-census efficiency excess is a SCAN-ORDER artifact of
+    the census model, not substrate behavior: mid-pass
+    ANCHOR-STATE evolution - bonds formed earlier in a pass
+    change the anchor's geometry factor and order preference
+    for its later candidates (higher p when freer), and the
+    post-tick census cannot see which candidates drew before
+    or after the fills. The error's sign follows candidate
+    scan position, and the per-axis seam classes sit at
+    different scan positions. The 2D gate's documented "+6%,
+    anchors/orders were freer before the pass filled them"
+    offset is the SAME mechanism at pooled scale - the 2D
+    seam class (E ~29/seed, 1 sigma ~19%) could never have
+    resolved the ~+20% axis gradient inside it, and its pooled
+    0.935 is consistent with the gradient averaging out. The
+    gate's bar holds under both scan orders; the reversal is
+    the falsification that settles the claim. Left as a
+    methodology note for future census gates (K2+ beakers):
+    per-axis splits expose scan-order artifacts - either
+    reverse the scan as a falsification probe when a class
+    excess appears, or instrument the mid-pass anchor state.
 
 ## Findings first analyzed before measurement
 

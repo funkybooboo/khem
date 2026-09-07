@@ -126,7 +126,17 @@ dimension-agnostic regression reference:
    0, tail active (42 formations / 6 thermal). No constant
    needed retuning: the 2D-tuned set carried the 3D substrate
    as the port plan's test vector predicted.
-5. K1.5 seam symmetry: all three seams.
+5. K1.5 seam symmetry: all three seams. PASSED 2026-09-08 -
+and the re-climb's audit earned its keep: the bars passed
+(pooled ratio 1.287 in [0.6, 1.4], gathering completeness
+pair-for-pair every tick), but the per-axis census exposed a
+scan-order-shaped excess (axis 0 z +2.9) that three probes
+chased into a falsification: the SCAN-ORDER REVERSAL moved the
+excess to axis 2 and dropped the pooled ratio to 1.047 - the
+substrate's seams are symmetric, the signal is the census
+model's mid-pass anchor-state offset (F21, RESOLVED by
+falsification; the 2D gate's documented +6% offset is the same
+mechanism at pooled scale).
 
 Each pass records the 2D-versus-3D number pair - what moved and
 why is the port's evidence.
@@ -191,9 +201,22 @@ STILL OPEN (unchanged):
   baseline.
 - No viewer work; khem-view is future either way.
 
-## Exit
+## Exit - MET (2026-09-08, the same day the port landed)
 
-All five K1 gates re-passed in 3D with harness evidence; the
-ledger closes in 3D; perf re-measured; code and specs change in
-the same commits (the agreement rule). Phase 1 resumes - K2
-climbs in 3D.
+All five K1 gates re-passed in 3D with harness evidence, one
+gate per commit (the port's substrate diff, then K1.1, K1.2+K1.3,
+K1.4, K1.5 with F21 - git history carries them); the ledger
+closes in 3D
+(K1.4: every 1k window's five columns explain the delta, vent
+0.454 degrees-sum/tick); perf re-measured (11.7 t/s at 3.4k
+atoms, recorded with the mechanism); code and specs changed in
+the same commits throughout (the agreement rule). The
+re-climb's own measured lessons: the K1.1 coupling RATIO is
+dimension-normalized by construction (the port's [1.2, 2.1]
+scaling was falsified in one sample), the slab's 72-cell field
+dips the construction refrigeration ~2x deeper (K1.4's F6
+floor 10 -> 5 C on the same drain), the K1.4 stationarity
+windows passed unchanged, water persistence and the bond band
+are dimension-agnostic to the digit, and the K1.5 per-axis
+census exposed the scan-order artifact the 2D pooled classes
+averaged away (F21). Phase 1 resumes - K2 climbs in 3D.

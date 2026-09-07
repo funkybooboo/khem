@@ -73,11 +73,12 @@
 //!   and falsified the scaling immediately - the ratio is not an
 //!   absolute KE level. The K1.1 re-climb commit carries the
 //!   correction with its measured evidence.)
-//! - K1.5's beaker is PROVISIONALLY sized (a 30 A cube, the 2D
-//!   beaker's free mix): in 3D a 4 A seam band is a large
-//!   surface fraction of any affordable box - the class split
-//!   (per-axis seams versus bulk), the sizing, and the bars are
-//!   the re-climb commit's measured work.
+//! - K1.5 re-climbed with the per-axis census (each seam class
+//!   against the bulk) and a probe chain that falsified its own
+//!   first signal: the pooled seam excess is a scan-order
+//!   artifact of the census model (F21, resolved by reversal -
+//!   see the gate's doc comment), the substrate's seams are
+//!   symmetric, and the bars hold under both scan orders.
 
 use khem_core::config::PhysicsConfig;
 use khem_core::observer::Event;
@@ -1312,16 +1313,54 @@ fn k1_4_reactive_balance() {
 /// asymmetric formation cannot pass honest gates (K2-K5 all run
 /// Wrap worlds; the 3D port re-climbs this gate on three seams).
 ///
-/// 3D PORT NOTE (2026-09-08): the paragraphs below describe the
-/// 2D beaker and its measured pass; they are the regression
-/// reference. The 3D beaker is PROVISIONAL (30x30x30 A, the same
-/// free mix, any-axis seam classification) - in 3D a 4 A seam
-/// band is a large surface fraction of any affordable box, so
-/// the seam/bulk volume split differs from 2D by construction.
-/// The re-climb commit owns: the per-axis seam split (x/y/z
-/// versus bulk), the beaker sizing, and the bars, re-measured
-/// with 3D evidence - conditioned on sum-p from the start (the
-/// 2D probe's lesson; see the module doc).
+/// 3D RE-CLIMB PASS (2026-09-08) - and the re-climb's audit
+/// earned its keep again, exactly as the 2D one did (F20): the
+/// gate's bars passed, but the per-axis census exposed a signal
+/// the 2D pooled classes averaged away, and the probe chain
+/// ended in a falsification that PROVED the substrate's seam
+/// symmetry rather than merely failing to refute it. The
+/// record (seeds 42+137 pooled, 30x30x30 beaker - in 3D a
+/// 4 A seam band is a large surface fraction of any affordable
+/// box, so the seam class is ~10% of eligible pairs where the
+/// 2D beaker's was ~4%: better statistics, same conditioning):
+///
+/// - GATHERING COMPLETENESS: F11's law held pair-for-pair
+///   against brute force at every tick of both runs, all three
+///   seams - zero lost pairs.
+/// - FORMATION SYMMETRY, CONDITIONED: pooled seam S=132
+///   E=107.7 (z +2.34), bulk S=1025 E=1076.6 (z -1.57),
+///   seam/bulk efficiency ratio 1.287 - inside the bar [0.6,
+///   1.4], but ~3 sigma of its own noise, unlike the 2D pass's
+///   0.935. The per-axis split showed the shape: axis 0 (x,
+///   the OUTER candidate-scan loop) z +2.9 pooled, axis 1
+///   z +0.5, axis 2 z +0.1 - an ordering matching the
+///   lexicographic scan.
+/// - THE PROBE CHAIN: (1) windowed S/E - the excess is NOT
+///   contention-monotone (the 8-12k window measured 0.95/1.00
+///   dead-symmetric; 12-16k swung back), refuting simple
+///   construction-burst priority; (2) the DOUBLE-CENSUS -
+///   E accumulated against both the pre-tick and post-tick
+///   states agreed within 0.5% (seam 54.2 vs 53.9), refuting
+///   the mid-pass-state timing artifact; (3) the SCAN-ORDER
+///   REVERSAL - a probe build with the candidate iteration
+///   reversed (the physics unchanged, per-pair Bernoulli
+///   draws) moved the excess to axis 2 (z +0.97/+0.82, pooled
+///   efficiency 1.248) and dropped axis 0 to neutral
+///   (1.020), pooled ratio 1.287 -> 1.047. A REAL seam
+///   asymmetry survives scan reversal; the measured excess
+///   follows the scan. THE SUBSTRATE'S SEAMS ARE SYMMETRIC.
+/// - The mechanism, identified and documented as F21
+///   (RESOLVED, by falsification): mid-pass ANCHOR-STATE
+///   evolution - bonds formed earlier in a pass change the
+///   anchor's geometry factor and order preference for its
+///   LATER candidates (the 2D gate's documented "+6%,
+///   anchors/orders were freer before the pass filled them"
+///   offset, now exposed per-axis because the 3D census splits
+///   the seam class by scan position). The census conditions
+///   on the post-tick state and cannot see it; the error's
+///   sign follows candidate scan position. The gate's bar
+///   holds under BOTH scan orders (1.287, 1.047), and the
+///   reversal is the falsification that settles the claim.
 ///
 /// The pond CANNOT supply this measurement: its free-atom
 /// sprinkle carries a 2 A margin, so a free pair straddling the
@@ -1406,9 +1445,20 @@ fn k1_5_seam_symmetry() {
     let config = PhysicsConfig::default();
     let chem = khem_core::Chemistry::new(config);
 
-    // One beaker run: returns (E_seam, E_bulk, S_seam, S_bulk);
-    // the gathering law is asserted every tick inside.
-    let run = |seed: u64| -> (f64, f64, u64, u64) {
+    // One beaker run: returns the pooled classes plus the
+    // per-axis seam census (a pair folding on two axes - a
+    // corner pair - counts once per folded axis; the axis
+    // classes overlap by construction and are reported as the
+    // per-seam evidence, while the POOLED seam class - any
+    // folded axis, each pair once - stays the gate's primary
+    // bar). The gathering law is asserted every tick inside.
+    #[derive(Default, Clone, Copy)]
+    struct Axis {
+        elig: u64,
+        exp: f64,
+        forms: u64,
+    }
+    let run = |seed: u64| -> (f64, f64, u64, u64, [Axis; 3]) {
         // 3D PORT (provisional sizing; see the module doc): the
         // 2D beaker's free mix in a 30 A cube. In 3D a 4 A seam
         // band is a large surface fraction of any affordable box,
@@ -1441,22 +1491,30 @@ fn k1_5_seam_symmetry() {
         let mut exp_bulk: f64 = 0.0;
         let mut form_seam: u64 = 0;
         let mut form_bulk: u64 = 0;
+        let mut axes = [Axis::default(); 3];
 
         eprintln!("K1.5 beaker seed {seed}: 760 free atoms, 30x30x30 Wrap, 55 C");
         for t in 1..=20_000u64 {
             let events = sim.tick(&mut world);
 
-            // Formations, classified by the pair's own geometry
-            // (provisional any-axis fold; see above).
+            // Formations, classified by the pair's own geometry:
+            // pooled (any folded axis) and per-axis.
             for event in &events {
                 if let Event::BondFormed { atom_a, atom_b, .. } = event {
                     let (a, b) = (world.atom(*atom_a), world.atom(*atom_b));
                     let (raw_dx, raw_dy, raw_dz) = (b.x - a.x, b.y - a.y, b.z - a.z);
                     let (dx, dy, dz) = world.delta(a.x, a.y, a.z, b.x, b.y, b.z);
-                    if (dx != raw_dx) || (dy != raw_dy) || (dz != raw_dz) {
+                    let folds = [dx != raw_dx, dy != raw_dy, dz != raw_dz];
+                    let any_fold = folds.iter().any(|f| *f);
+                    if any_fold {
                         form_seam += 1;
                     } else {
                         form_bulk += 1;
+                    }
+                    for (ax, folded) in folds.iter().enumerate() {
+                        if *folded {
+                            axes[ax].forms += 1;
+                        }
                     }
                 }
             }
@@ -1520,14 +1578,20 @@ fn k1_5_seam_symmetry() {
                         // lower id, and the geometry factor anchors
                         // on it (7.2).
                         let p = chem.pair_probability(&world, a.id, b.id).p;
-                        // Provisional classification (any-axis fold);
-                        // the re-climb splits per-axis seams.
-                        if (dx != raw_dx) || (dy != raw_dy) || (dz != raw_dz) {
+                        let folds = [dx != raw_dx, dy != raw_dy, dz != raw_dz];
+                        let any_fold = folds.iter().any(|f| *f);
+                        if any_fold {
                             elig_seam += 1;
                             exp_seam += f64::from(p);
                         } else {
                             elig_bulk += 1;
                             exp_bulk += f64::from(p);
+                        }
+                        for (ax, folded) in folds.iter().enumerate() {
+                            if *folded {
+                                axes[ax].elig += 1;
+                                axes[ax].exp += f64::from(p);
+                            }
                         }
                     }
                 }
@@ -1551,25 +1615,51 @@ fn k1_5_seam_symmetry() {
                 );
             }
         }
-        (exp_seam, exp_bulk, form_seam, form_bulk)
+        (exp_seam, exp_bulk, form_seam, form_bulk, axes)
     };
 
     let mut exp = (0.0f64, 0.0f64);
     let mut forms = (0u64, 0u64);
+    let mut axis_total = [Axis::default(); 3];
     for seed in [42u64, 137] {
-        let (es, eb, fs, fb) = run(seed);
+        let (es, eb, fs, fb, axes) = run(seed);
         let z_seam = (fs as f64 - es) / es.sqrt();
         let z_bulk = (fb as f64 - eb) / eb.sqrt();
         eprintln!(
             "seed {seed}: seam S={fs} E={es:.1} z {z_seam:+.2}; \
              bulk S={fb} E={eb:.1} z {z_bulk:+.2}",
         );
+        for ax in 0..3 {
+            let a = &axes[ax];
+            let z = if a.exp > 0.0 {
+                (a.forms as f64 - a.exp) / a.exp.sqrt()
+            } else {
+                0.0
+            };
+            eprintln!(
+                "  axis {ax}: S={} E={:.1} z {z:+.2} (elig {})",
+                a.forms, a.exp, a.elig
+            );
+            axis_total[ax].elig += a.elig;
+            axis_total[ax].exp += a.exp;
+            axis_total[ax].forms += a.forms;
+        }
         exp.0 += es;
         exp.1 += eb;
         forms.0 += fs;
         forms.1 += fb;
     }
     let (exp_seam, exp_bulk, form_seam, form_bulk) = (exp.0, exp.1, forms.0, forms.1);
+    // The per-seam record: each axis's efficiency ratio against
+    // the bulk (the classes overlap on corner pairs by
+    // construction; the POOLED ratio below is the gate's bar).
+    for (ax, a) in axis_total.iter().enumerate() {
+        let ratio = (a.forms as f64 / a.exp) / (form_bulk as f64 / exp_bulk);
+        eprintln!(
+            "axis {ax} pooled: S={} E={:.1} efficiency vs bulk {ratio:.3}",
+            a.forms, a.exp
+        );
+    }
     let z_seam = (form_seam as f64 - exp_seam) / exp_seam.sqrt();
     let z_bulk = (form_bulk as f64 - exp_bulk) / exp_bulk.sqrt();
     // THE seam-symmetry statistic: the classes' formation

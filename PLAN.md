@@ -50,9 +50,19 @@ before specs.
   60x60x15 A slab at the same 3432-atom budget, NDJSON v:2
   (additive z/world_depth), and the golden hash re-cut. Perf
   honestly re-measured: 11.7 t/s at 3.4k atoms (2D: ~60; phase 3
-  owns the target's levers). Next: the K1 re-climb in 3D, one
-  gate per commit. Ladder, rules, and pass history:
-  docs/plans/phase-1-kernel.md; port decisions:
+  owns the target's levers). The K1 ladder then RE-CLIMBED in
+  3D the same day (one gate per commit, the re-validation
+  contract at full force): K1.1 coupling 1.037-1.121 with the
+  horizon riding the measured 25k settle, K1.2/K1.3
+  dimension-agnostic to the digit (probe 0.334/0.578; intact
+  1025/1024, zero O-H breaks), K1.4 with one bar re-derived
+  (the F6 floor 10 -> 5 C: the same drain over half the cells;
+  O-O thermal 12 at age 10,117 ticks), K1.5 all three seams -
+  the per-axis census exposed a scan-order artifact (F21,
+  resolved by reversal falsification), the substrate's seams
+  are symmetric. PHASE 2 IS COMPLETE; K2 climbs in 3D next.
+  Ladder, rules, and pass history:
+  docs/plans/phase-1-kernel.md; port decisions and evidence:
   docs/plans/phase-2-3d-port.md.
 - Findings F1-F20 live in docs/research/abstraction-notes.md;
   all resolved through K1.5; the newest is F20 (the mirrored
@@ -78,8 +88,8 @@ before specs.
 | Phase | Plan | Status |
 |-------|------|--------|
 | 0 - literature grounding | [phase-0-research.md](docs/plans/phase-0-research.md) | notes + bibliography landed; re-opens before detector design |
-| 1 - physics/chemistry kernel | [phase-1-kernel.md](docs/plans/phase-1-kernel.md) | K1 passed (K1.1-K1.5, 2026-09-07); K2-K5 climb after the port |
-| 2 - the 3D port | [phase-2-3d-port.md](docs/plans/phase-2-3d-port.md) | substrate diff landed 2026-09-08; K1 re-climb open |
+| 1 - physics/chemistry kernel | [phase-1-kernel.md](docs/plans/phase-1-kernel.md) | K1 passed in 2D (2026-09-07) and re-climbed in 3D (2026-09-08); K2 climbs next, in 3D |
+| 2 - the 3D port | [phase-2-3d-port.md](docs/plans/phase-2-3d-port.md) | COMPLETE 2026-09-08: substrate ported, K1.1-K1.5 re-climbed in 3D, exit criterion met |
 | 3 - runtime hardening | [phase-3-hardening.md](docs/plans/phase-3-hardening.md) | not started; cheap items landed early with phase 1 |
 | 4 - the khem language | [phase-4-language.md](docs/plans/phase-4-language.md) | spec-only; gated on K1-K5 |
 | 5 - experiments and the thesis | [phase-5-experiments.md](docs/plans/phase-5-experiments.md) | gated on phases 3-4 |
