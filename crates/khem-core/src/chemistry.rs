@@ -188,18 +188,31 @@ fn ideal_angle(world: &WorldState, a: AtomId, candidate_order: u8) -> Option<f32
 /// Extracted as its own method so the probability LAWS are
 /// directly testable (order preference, temperature optimum,
 /// electronegativity bonus, geometry gate) without statistical
-/// sampling.
-struct PairOutcome {
-    order: u8,
+/// sampling - and, since K1.5, as a read-only DIAGNOSTIC for
+/// harnesses: gate K1.5's census conditions on the realized
+/// candidate pool (sum of p per class vs actual formations),
+/// which raw eligible counts cannot do honestly - the classes'
+/// pools co-evolve with the run and cluster on shared atoms
+/// (measured: the thin seam class's composition drifts with
+/// slot-rich edge atoms, and the unconditioned rate ratio carries
+/// noise far beyond Poisson across seeds).
+///
+/// `a` is the geometry anchor: chemistry attempts each unordered
+/// pair from the lower AtomId (7.2); callers conditioning on the
+/// same pool must pass the pair in the same order chemistry
+/// would.
+#[derive(Debug, Clone, Copy)]
+pub struct PairOutcome {
+    pub order: u8,
     /// Bond energy, kJ/mol.
-    energy: f32,
+    pub energy: f32,
     /// Formation probability this tick.
-    p: f32,
+    pub p: f32,
     /// Midpoint via the minimum-image delta (F10); field reads
     /// wrap, so the midpoint may fall outside [0, width)
     /// harmlessly.
-    mx: f32,
-    my: f32,
+    pub mx: f32,
+    pub my: f32,
 }
 
 /// The v0.1 chemistry implementation (runtime spec 10.4: exactly one).
@@ -258,8 +271,10 @@ impl Chemistry {
     /// probability (spec 7.2). Callers have already checked
     /// eligibility (alive, capacity, distance, capture speed, not
     /// bonded); this computes the chemistry and the midpoint for
-    /// heat exchange.
-    fn pair_probability(&self, world: &WorldState, a: AtomId, b: AtomId) -> PairOutcome {
+    /// heat exchange. Read-only against the given state (no RNG
+    /// draw, no mutation) - the diagnostic surface gate K1.5's
+    /// census conditions on; see [`PairOutcome`].
+    pub fn pair_probability(&self, world: &WorldState, a: AtomId, b: AtomId) -> PairOutcome {
         let atom_a = world.atom(a);
         let atom_b = world.atom(b);
         let (a_el, b_el) = (atom_a.element, atom_b.element);
@@ -325,7 +340,13 @@ impl Chemistry {
                 bond.atom_a
             };
             let o = world.atom(other);
-            let theta = (o.y - ay).atan2(o.x - ax);
+            // The existing bond's direction is the minimum-image
+            // direction (spec 6.3: every pair rule; finding F20):
+            // a seam-straddling bond's raw delta reads mirrored
+            // (pi off in the crossing axis), and candidates would
+            // score against a phantom ideal.
+            let (dx, dy) = world.delta(ax, ay, o.x, o.y);
+            let theta = dy.atan2(dx);
             let delta = angdist(candidate_angle, theta + ideal)
                 .min(angdist(candidate_angle, theta - ideal));
             let score = (-delta * delta / (2.0 * sigma * sigma)).exp();
@@ -556,6 +577,48 @@ mod tests {
         // Unknown order for a known pair: single * order.
         assert_eq!(bond_energy(o, o, 2), 498.0); // O=O is in the table
         assert_eq!(bond_energy(h, h, 2), 872.0);
+    }
+
+    #[test]
+    fn geometry_anchor_reads_the_minimum_image_direction() {
+        // F20 law: the VSEPR anchor - the direction of an existing
+        // bond - is the MINIMUM-IMAGE direction. A bonded pair
+        // straddling the Wrap seam (O at x=0.5, H across at x=99.4
+        // of a 100 A world: the true bond points at 180 degrees,
+        // the raw delta reads angle 0) must score the direction at
+        // the TRUE ideal (104.5 degrees off the real bond, i.e.
+        // 75.5 degrees) near 1.0, and the direction ideal only
+        // against the MIRRORED anchor (104.5 degrees) low.
+        // Pre-fix this was inverted: the phantom direction scored
+        // 1.0, the true one 0.63.
+        let config = PhysicsConfig::default();
+        let mut w = world(6);
+        let o = w.spawn_atom(element_id("O").unwrap(), 0.5, 50.0);
+        let h = w.spawn_atom(element_id("H").unwrap(), 99.4, 50.0);
+        w.form_bond(o, h, 1, 463.0);
+        let chem = chemistry(config);
+        let at_true_ideal = chem.geometry_factor(&w, o, 75.5f32.to_radians(), 1);
+        let at_mirrored_ideal = chem.geometry_factor(&w, o, 104.5f32.to_radians(), 1);
+        assert!(
+            at_true_ideal > 0.99,
+            "the ideal off the true bond direction must score ~1, \
+             got {at_true_ideal}"
+        );
+        assert!(
+            at_mirrored_ideal < 0.7,
+            "the mirrored anchor's ideal must score low, got {at_mirrored_ideal}"
+        );
+        // A bulk anchor (same geometry away from the seam) agrees
+        // with the raw delta, so the fix changes nothing there.
+        let mut b = world(6);
+        let ob = b.spawn_atom(element_id("O").unwrap(), 50.0, 50.0);
+        let hb = b.spawn_atom(element_id("H").unwrap(), 51.1, 50.0);
+        b.form_bond(ob, hb, 1, 463.0);
+        let bulk = chem.geometry_factor(&b, ob, 104.5f32.to_radians(), 1);
+        assert!(
+            bulk > 0.99,
+            "bulk anchor must score its ideal ~1, got {bulk}"
+        );
     }
 
     #[test]

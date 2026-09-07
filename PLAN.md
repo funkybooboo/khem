@@ -30,20 +30,24 @@ before specs.
   bin streaming real output. Canonical specs (docs/specs/) and
   ten ADRs (docs/adr/) stay synced with the code; the founding
   conversation lives in git history only.
-- The gate ladder is climbing: K1.1-K1.4 PASSED (thermostat,
-  force sanity, water persistence, reactive balance - the pond's
+- The K1 ladder is CLOSED: K1.1-K1.5 PASSED (thermostat,
+  force sanity, water persistence, reactive balance, seam
+  symmetry - the pond's
   1024 waters hold intact and the free-atom beaker settles to a
   stationary molecule-size distribution over 20k-tick vented
   runs: weak O-O bonds flicker at the measured 10k-tick
   Boltzmann scale, strong ones persist, the field recovers to its
-  35 C setpoint). Next: K1.5 seam symmetry, then the 3D port
-  (phase 2). Ladder, rules, and pass history:
+  35 C setpoint; and a Wrap world's seam is not special -
+  cross-seam formation matches the law's own expectation under
+  the composition-conditioned census, the wrap-aware index
+  verified pair-for-pair complete against brute force).
+  Next: the 3D port (phase 2). Ladder, rules, and pass history:
   docs/plans/phase-1-kernel.md.
-- Findings F1-F19 live in docs/research/abstraction-notes.md;
-  all resolved through K1.4; the newest are F18 (wide-capture
-  churn - fixed by steric-contact formation) and F19 (the
-  thermal-release bomb - fixed by the rate-capped release
-  reservoir).
+- Findings F1-F20 live in docs/research/abstraction-notes.md;
+  all resolved through K1.5; the newest is F20 (the mirrored
+  VSEPR anchor - a seam-straddling bond's raw direction scored
+  candidates against a phantom ideal; fixed with the
+  minimum-image direction).
 - Dimensionality is decided (ADR-0013): 2D carries the K1 gates -
   the F18 fix is dimension-generic, and the 2D passes become the
   port's regression vector - then the 3D port lands before K2
@@ -63,8 +67,8 @@ before specs.
 | Phase | Plan | Status |
 |-------|------|--------|
 | 0 - literature grounding | [phase-0-research.md](docs/plans/phase-0-research.md) | notes + bibliography landed; re-opens before detector design |
-| 1 - physics/chemistry kernel | [phase-1-kernel.md](docs/plans/phase-1-kernel.md) | in progress: K1.1-K1.4 passed, K1.5 next; K2-K5 climb after the port |
-| 2 - the 3D port | [phase-2-3d-port.md](docs/plans/phase-2-3d-port.md) | planned; gated on K1.5, before K2 tuning |
+| 1 - physics/chemistry kernel | [phase-1-kernel.md](docs/plans/phase-1-kernel.md) | K1 passed (K1.1-K1.5, 2026-09-07); K2-K5 climb after the port |
+| 2 - the 3D port | [phase-2-3d-port.md](docs/plans/phase-2-3d-port.md) | next: K1.5 passed, unblocked; before K2 tuning |
 | 3 - runtime hardening | [phase-3-hardening.md](docs/plans/phase-3-hardening.md) | not started; cheap items landed early with phase 1 |
 | 4 - the khem language | [phase-4-language.md](docs/plans/phase-4-language.md) | spec-only; gated on K1-K5 |
 | 5 - experiments and the thesis | [phase-5-experiments.md](docs/plans/phase-5-experiments.md) | gated on phases 3-4 |

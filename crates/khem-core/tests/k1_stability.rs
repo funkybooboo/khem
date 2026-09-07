@@ -31,12 +31,25 @@
 //!   persist, no runaway crosslinking, no frozen inertness, and
 //!   formation refrigeration stays bounded and recovers (tail
 //!   avg ~35.5 C against the 35 C setpoint). 20k-tick run.
+//! - `k1_5_seam_symmetry` (gate K1.5, PASSED 2026-09-07, the K1
+//!   close): a Wrap world's seam is not special - cross-seam
+//!   formation is symmetric with the bulk. Measured on a
+//!   dedicated hot free-atom beaker (the pond cannot supply the
+//!   seam population: its sprinkle carries a 2 A margin and its
+//!   waters are saturated) as the composition-conditioned
+//!   Poisson z per class - actual formations vs the sum of the
+//!   real formation probability over each class's eligible pool
+//!   (the unconditioned rate ratio is pool-composition noise;//!   see the test's doc comment) - with the wrap-aware index
+//!   verified pair-for-pair complete against brute force at every
+//!   tick of the run (F11's law). Run: `mise exec -- cargo test
+//!   --release -p khem-core --test k1_stability k1_5 -- --ignored
+//!   --nocapture`.
 //! - `k1_diagnostics` (the K1 rollup): the honest measurement
 //!   after 2000 ticks - water survival, bond activity, geometry,
-//!   energy. Its bars pass as of the K1.4 commit (the
+//!   energy. Its bars pass as of the K1.5 commit (the
 //!   broken-ever bar moved to K1.4's census: thermal breaks live
-//!   at the Boltzmann scale, past this window); the ladder's
-//!   remaining K1 sub-gate (K1.5) owns the finer criteria.
+//!   at the Boltzmann scale, past this window); the sub-gates
+//!   (K1.2-K1.5) own the finer criteria.
 //!
 //! Findings and gate history live in
 //! docs/research/abstraction-notes.md.
@@ -45,7 +58,7 @@ use khem_core::config::PhysicsConfig;
 use khem_core::observer::Event;
 use khem_core::pond::{self, water_intact};
 use khem_core::{
-    BondId, BoundaryType, ElementId, Observer, ObserverConfig, Sim, WorldState, bond_energy,
+    AtomId, BondId, BoundaryType, ElementId, Observer, ObserverConfig, Sim, WorldState, bond_energy,
 };
 
 const WATERS: usize = pond::POND_WATERS;
@@ -191,6 +204,12 @@ fn phase1_loop_smoke() {
 ///   drift measured +14.5% against the 15% bar: a pass by 0.5%
 ///   is a flaky gate, so the windows ride the true steady tail
 ///   (the same ticks K1.4 measures its stationarity on).
+///
+/// RE-VALIDATED 2026-09-07 in K1.5's commit (F20's min-image
+/// anchor fix moves the pond trajectory through its
+/// seam-crossing anchored formation draws): PASS - coupling
+/// 1.055-1.158 at every sample, steady-tail KE +1.7%, bond
+/// length +0.3%.
 #[test]
 #[ignore] // explicit: cargo test --release -- --ignored --nocapture
 fn k1_1_thermostat_flatness() {
@@ -303,7 +322,10 @@ fn k1_1_thermostat_flatness() {
 /// springs); re-run PASS in K1.4's commit (steric-contact births
 /// tighten the band further: measured probe 0.33 vs the bound
 /// 0.58, band mean ratio 1.003-1.014, p95 1.15-1.23, every sample
-/// inside [0.8, 1.5]).
+/// inside [0.8, 1.5]); re-run PASS in K1.5's commit (F20's anchor
+/// fix moves the pond trajectory: measured probe 0.334 vs the
+/// bound 0.578, band mean ratio 1.003-1.014, p95 <= 1.21, every
+/// sample inside [0.8, 1.5]).
 ///
 /// Two measurements:
 ///
@@ -416,7 +438,9 @@ fn k1_2_force_sanity() {
 /// self-assembled water persists too), ZERO O-H breaks of any
 /// kind, 28 runtime O-H formations, 2 weak-pair (O-O/N-N)
 /// thermal breaks late in the run - the first flicker events,
-/// K1.4's material.
+/// K1.4's material. Re-run PASS in K1.5's commit (F20's anchor
+/// fix moves the pond trajectory): intact 1024/1024 flat, ZERO
+/// O-H breaks of any kind.
 ///
 /// Measurement over the same 10k-tick vented pond as K1.1/K1.2
 /// (seed 42), every bond event classified by channel: a broken
@@ -597,6 +621,16 @@ fn k1_3_water_persistence() {
 ///   criterion), phantom formations are 0 (F18's fix), and
 ///   mechanical breaks are collision outliers only (measured 1;
 ///   bar <= 3).
+///
+/// RE-VALIDATED 2026-09-07 in K1.5's commit (F20's min-image
+/// anchor fix moves the pond trajectory through its
+/// seam-crossing anchored formation draws; the event counts move
+/// with it, the bars hold with margin): field min avg 12.2 C ->
+/// tail avg 35.9 C; stationarity windows 2-5 -0.5%, bonds +0.3%,
+/// clusters +1; largest 38, 21+ bucket 1, bonds 2416; weak
+/// thermal 8 (O-O mean age 9,432 ticks), strong thermal 0,
+/// seeded 0, mechanical 2, phantoms 0; tail active (21
+/// formations, 4 thermal, 1 mechanical over 15k-20k).
 ///
 /// The measurement classifies every bond event of the run and
 /// keeps the field's energy ledger per 1k-tick window. The field's
@@ -1152,6 +1186,302 @@ fn k1_4_reactive_balance() {
     assert!(
         mech_total <= 3,
         "K1.4 FAIL: {mech_total} mechanical breaks - churn is back"
+    );
+}
+
+// ---- Gate K1.5: seam symmetry -----------------------------------------
+
+/// K1.5 SEAM CORRECTNESS (gate ladder, the K1 close): a Wrap
+/// world's seam is not special - cross-seam formation is symmetric
+/// with the bulk. Promoted from phase 3 because a Wrap world with
+/// asymmetric formation cannot pass honest gates (K2-K5 all run
+/// Wrap worlds; the 3D port re-climbs this gate on three seams).
+///
+/// The pond CANNOT supply this measurement: its free-atom
+/// sprinkle carries a 2 A margin, so a free pair straddling the
+/// seam starts 4 A apart - past every capture cap (steric contact
+/// ~1.5-2.3 A) - and its saturated waters never form bonds at
+/// all; the cross-seam population only builds after atoms have
+/// diffused to the seam, too thin to compare rates on. The gate
+/// runs a dedicated BEAKER instead: the pond's own free-atom mix
+/// and monolayer density (760 atoms in 60x60 A = 0.21 atoms/A^2),
+/// a uniform 55 C setpoint, and NO vent - the pond's vent plume
+/// sits against its y-seam, and any temperature gradient would
+/// confound the seam/bulk split with a t_factor bias, so a
+/// uniform field is non-negotiable; in the beaker the seam is the
+/// ONLY possible asymmetry source. 55 C because the weak-pair
+/// break channel runs ~30x the pond's 35 C rate (O-O lifetimes
+/// ~370 ticks vs ~10k), so the run accumulates construction
+/// volume and real break/re-form cycling before the strong-bonded
+/// population locks up. TWO seeds (42, 137), pooled.
+///
+/// Measurements:
+///
+/// - GATHERING COMPLETENESS (the law, G07's seam half, F11):
+///   every tick of both runs, for every unordered live pair within
+///   the minimum-image search radius, BOTH atoms' index queries
+///   must find the partner - the index is a pure accelerator in
+///   Wrap worlds, never a filter. Brute force is the reference.
+/// - FORMATION SYMMETRY, COMPOSITION-CONDITIONED (the dynamics):
+///   every eligible pair (spec 7.2's gates mirrored here: alive,
+///   capacity on both sides, minimum-image distance inside the
+///   search radius AND the steric-contact cap, capture speed, not
+///   already bonded to each other) is classified SEAM (the
+///   minimum-image delta differs from the raw delta: the pair
+///   straddles a boundary) or BULK, and contributes its REAL
+///   formation probability (Chemistry::pair_probability, the same
+///   law chemistry draws against, the anchor passed the same way)
+///   to the class's expected count E. Actual formations S come
+///   from the events. The bar is the classes' formation efficiency
+///   ratio (S/E seam vs bulk): the seam class's formations must
+///   match the law's expectation under the SAME probability law
+///   the bulk runs.
+///
+/// WHY CONDITIONED, not the raw rate ratio S/eligible: the classes'
+/// eligible pools CO-EVOLVE with the run and CLUSTER on shared
+/// atoms - the seam class is a thin slice (a handful of edge atoms
+/// supply many of its pairs), so its composition drifts as those
+/// atoms keep or lose slots, and an unconditioned rate ratio
+/// carries noise far beyond Poisson (measured, this gate's probe:
+/// pooled raw ratio 0.78 with per-seed draws 1.01 and 0.58, while
+/// the expected-p-per-pair already differed by class the same
+/// 0.77 - the pool's composition, dominated by low-probability
+/// C-double keys at the run's sagged temperatures, was the whole
+/// story; the formation path itself was class-symmetric
+/// throughout). Conditioning on sum-p absorbs composition and
+/// temperature drift exactly and leaves only the Bernoulli draws.
+///
+/// The measured profile (2026-09-07, seeds 42+137 pooled): seam
+/// S=57 E=57.7 z=-0.09; bulk S=1443 E=1365 z=+2.1; the bar - the
+/// seam/bulk formation EFFICIENCY RATIO (S/E per class) - measured
+/// 0.935 against a 1-sigma of ~0.13: symmetric. Both classes'
+/// z sit positive: the census conditions on the POST-TICK state
+/// while chemistry drew against the MID-PASS state (the tick's
+/// own formation absorption cooled cells, and anchors/orders were
+/// freer before the pass filled them), so the census under-models
+/// attempt-p by ~6% - class-symmetric by construction, which is
+/// exactly why the gate bars the ratio, not the absolute z (a
+/// +-4 z tripwire stays to catch a real census-vs-law divergence).
+/// The F11 failure mode (a non-folding index) still reads as a
+/// total deficit: S_seam ~ 0 against E_seam ~ 58 pooled.
+///
+/// The census runs on the post-tick state, which is exactly the
+/// state chemistry saw in POSITIONS and VELOCITIES: chemistry is
+/// the last mutating step of the tick and the observer only
+/// reads (G03). The divergences are the tick's own mid-pass
+/// effects: pairs whose atoms filled mid-pass leave the census
+/// entirely (sub-percent, seam-symmetric), and the pairs that
+/// stay are modeled on the POST-TICK field and bond states while
+/// the draws happened against the MID-PASS ones - the ~6%
+/// class-symmetric model offset below.
+#[test]
+#[ignore] // explicit: cargo test --release -- --ignored --nocapture
+fn k1_5_seam_symmetry() {
+    let config = PhysicsConfig::default();
+    let chem = khem_core::Chemistry::new(config);
+
+    // One beaker run: returns (E_seam, E_bulk, S_seam, S_bulk);
+    // the gathering law is asserted every tick inside.
+    let run = |seed: u64| -> (f64, f64, u64, u64) {
+        let mut world = WorldState::new(60.0, 60.0, BoundaryType::Wrap, seed, config);
+        world.temp_field.data.fill(55.0);
+        world.setpoint_field.data.fill(55.0);
+        // The pond's free-atom mix (pond FREE_ATOMS proportions,
+        // doubled), sprinkled uniformly from the world RNG. 60x60
+        // A: small enough that the seam band (within
+        // bond_search_radius of an edge, 25% of the area) carries a
+        // real population, large enough that the bulk dominates and
+        // field cells dwarf the caps.
+        let mix = [("H", 200u32), ("C", 160), ("N", 160), ("O", 240)];
+        for (symbol, count) in mix {
+            let el = khem_core::elements::element_id(symbol).expect("element in table");
+            for _ in 0..count {
+                let x = world.rng.f01() as f32 * world.width;
+                let y = world.rng.f01() as f32 * world.height;
+                world.spawn_atom(el, x, y);
+            }
+        }
+        let mut sim = Sim::new(config, observer(seed, 100_000));
+        let _ = sim.start(&world);
+
+        let radius = config.bond_search_radius;
+        let radius2 = radius * radius;
+        let mut elig_seam: u64 = 0;
+        let mut elig_bulk: u64 = 0;
+        let mut exp_seam: f64 = 0.0;
+        let mut exp_bulk: f64 = 0.0;
+        let mut form_seam: u64 = 0;
+        let mut form_bulk: u64 = 0;
+
+        eprintln!("K1.5 beaker seed {seed}: 760 free atoms, 60x60 Wrap, 55 C");
+        for t in 1..=20_000u64 {
+            let events = sim.tick(&mut world);
+
+            // Formations, classified by the pair's own geometry.
+            for event in &events {
+                if let Event::BondFormed { atom_a, atom_b, .. } = event {
+                    let (a, b) = (world.atom(*atom_a), world.atom(*atom_b));
+                    let (raw_dx, raw_dy) = (b.x - a.x, b.y - a.y);
+                    let (dx, dy) = world.delta(a.x, a.y, b.x, b.y);
+                    if dx != raw_dx || dy != raw_dy {
+                        form_seam += 1;
+                    } else {
+                        form_bulk += 1;
+                    }
+                }
+            }
+
+            // Census + the gathering law, on the post-tick state
+            // (the state chemistry saw; see the doc comment).
+            let n = world.atoms.len();
+            let queries: Vec<Vec<AtomId>> = world
+                .atoms
+                .iter()
+                .map(|a| world.spatial_index.neighbors(a.x, a.y, radius))
+                .collect();
+            for (i, a) in world.atoms.iter().enumerate() {
+                if !a.alive {
+                    continue;
+                }
+                let a_free = world.element(a.element).max_bonds as i32 - a.bond_count as i32;
+                for j in (i + 1)..n {
+                    let b = &world.atoms[j];
+                    if !b.alive {
+                        continue;
+                    }
+                    let (raw_dx, raw_dy) = (b.x - a.x, b.y - a.y);
+                    let (dx, dy) = world.delta(a.x, a.y, b.x, b.y);
+                    let d2 = dx * dx + dy * dy;
+                    if d2 > radius2 {
+                        continue;
+                    }
+                    // Gathering law: both sides must find the pair.
+                    assert!(
+                        queries[i].contains(&b.id) && queries[j].contains(&a.id),
+                        "K1.5 FAIL: index lost a close pair at tick {t}: \
+                         atoms ({}, {}) at ({:.2}, {:.2}) vs ({:.2}, {:.2}), \
+                         minimum-image distance {:.2}",
+                        a.id.0,
+                        b.id.0,
+                        a.x,
+                        a.y,
+                        b.x,
+                        b.y,
+                        d2.sqrt()
+                    );
+                    // Eligibility census (spec 7.2 gates, mirrored).
+                    if a_free <= 0 {
+                        continue;
+                    }
+                    let b_free = world.element(b.element).max_bonds as i32 - b.bond_count as i32;
+                    if b_free <= 0 {
+                        continue;
+                    }
+                    let r_eq = world.element(a.element).radius + world.element(b.element).radius;
+                    let cap = config.bond_form_factor * r_eq;
+                    let (rvx, rvy) = (b.vx - a.vx, b.vy - a.vy);
+                    if d2 <= cap * cap
+                        && rvx * rvx + rvy * rvy <= config.max_form_speed * config.max_form_speed
+                        && !world.is_bonded(a.id, b.id)
+                    {
+                        // The anchor (lower AtomId) is passed first:
+                        // chemistry attempts the pair from the
+                        // lower id, and the geometry factor anchors
+                        // on it (7.2).
+                        let p = chem.pair_probability(&world, a.id, b.id).p;
+                        if dx != raw_dx || dy != raw_dy {
+                            elig_seam += 1;
+                            exp_seam += f64::from(p);
+                        } else {
+                            elig_bulk += 1;
+                            exp_bulk += f64::from(p);
+                        }
+                    }
+                }
+            }
+
+            if t.is_multiple_of(2000) {
+                let free = world
+                    .atoms
+                    .iter()
+                    .filter(|a| a.alive && a.bond_count == 0)
+                    .count();
+                let avg: f32 =
+                    world.temp_field.data.iter().sum::<f32>() / world.temp_field.data.len() as f32;
+                eprintln!(
+                    "seed {seed} t={t} elig seam/bulk {elig_seam}/{} \
+                     form seam/bulk {form_seam}/{} free {free} bonds {} \
+                     field {avg:.1}",
+                    elig_bulk,
+                    form_bulk,
+                    world.live_bond_count()
+                );
+            }
+        }
+        (exp_seam, exp_bulk, form_seam, form_bulk)
+    };
+
+    let mut exp = (0.0f64, 0.0f64);
+    let mut forms = (0u64, 0u64);
+    for seed in [42u64, 137] {
+        let (es, eb, fs, fb) = run(seed);
+        let z_seam = (fs as f64 - es) / es.sqrt();
+        let z_bulk = (fb as f64 - eb) / eb.sqrt();
+        eprintln!(
+            "seed {seed}: seam S={fs} E={es:.1} z {z_seam:+.2}; \
+             bulk S={fb} E={eb:.1} z {z_bulk:+.2}",
+        );
+        exp.0 += es;
+        exp.1 += eb;
+        forms.0 += fs;
+        forms.1 += fb;
+    }
+    let (exp_seam, exp_bulk, form_seam, form_bulk) = (exp.0, exp.1, forms.0, forms.1);
+    let z_seam = (form_seam as f64 - exp_seam) / exp_seam.sqrt();
+    let z_bulk = (form_bulk as f64 - exp_bulk) / exp_bulk.sqrt();
+    // THE seam-symmetry statistic: the classes' formation
+    // efficiencies under the same law-model. The census-model
+    // offset (see the doc comment: the census conditions on the
+    // post-tick state, chemistry drew against the mid-pass state)
+    // is class-symmetric by construction and cancels here.
+    let ratio = (form_seam as f64 / exp_seam) / (form_bulk as f64 / exp_bulk);
+    eprintln!(
+        "\nK1.5 pooled: seam S={form_seam} E={exp_seam:.1} z {z_seam:+.2}; \
+         bulk S={form_bulk} E={exp_bulk:.1} z {z_bulk:+.2}; \
+         seam/bulk efficiency ratio {ratio:.3} (the bar)"
+    );
+
+    // PASS bars (set from the measured profile; see the commit):
+    // the pooled expectation must carry enough signal that the
+    // ratio means something (E_seam ~ 58 pooled makes |z| = 3 a
+    // ~40% asymmetry - F11's total suppression is z ~ -7.5), the
+    // per-class z is a DIVERGENCE tripwire at +-4 (the known
+    // class-symmetric census-model offset measures ~+6% pooled,
+    // z ~ +2: a real census-vs-law divergence sits far beyond
+    // it), and the seam/bulk efficiency ratio - the gate's claim
+    // - must sit inside the band. The ratio's Poisson noise at
+    // the measured counts is ~0.13 (1 sigma), so [0.6, 1.4] is
+    // ~3 sigma: F11 (ratio ~ 0) and any doubled asymmetry fail
+    // decisively.
+    assert!(
+        exp_seam >= 40.0,
+        "K1.5 FAIL: only {exp_seam:.1} expected cross-seam formations - \
+         the beaker cannot see the seam"
+    );
+    assert!(
+        form_seam >= 20,
+        "K1.5 FAIL: only {form_seam} cross-seam formations - \
+         the beaker cannot see the seam"
+    );
+    assert!(
+        z_bulk.abs() <= 4.0 && z_seam.abs() <= 4.0,
+        "K1.5 FAIL: census diverged from the law - seam z {z_seam:+.2}, \
+         bulk z {z_bulk:+.2} (the model offset is ~+6%; see the doc comment)"
+    );
+    assert!(
+        (0.6..=1.4).contains(&ratio),
+        "K1.5 FAIL: seam/bulk formation efficiency ratio {ratio:.3} - \
+         the seam is special"
     );
 }
 

@@ -107,9 +107,10 @@ in the runtime - it is something the chemistry must do alone.
 ## Status
 
 The engine is built and streams real output - every number above
-came off an actual run. The gate ladder is climbing: the
+came off an actual run. The K1 gate ladder is closed: the
 thermostat (K1.1), force-sanity (K1.2), water-persistence
-(K1.3), and reactive-balance (K1.4) sub-gates are measured
+(K1.3), reactive-balance (K1.4), and seam-symmetry (K1.5)
+sub-gates are measured
 passes - the pond's 1024 waters hold intact (which took
 sub-stepped integration and real-water-stiff bonds; the failing
 substrate measured 1482 bombardment breaks and only 206 waters
@@ -123,8 +124,11 @@ born past their own break length, silently refrigerating the
 field) and the thermal-release bomb (the break's heat dumped
 instantly into one cell vaporized the whole pond once the field
 first reached its true steady state - now thermalized at a
-bounded rate). K1's last open gate: cross-seam formation
-symmetry (K1.5). The .kem language is
+bounded rate). K1 is closed: the last gate, cross-seam
+formation symmetry (K1.5), passed 2026-09-07 - a Wrap world's
+seam is not special; the audit also fixed a seam-mirrored
+VSEPR anchor (F20) the raw statistics could not see. The .kem
+language is
 spec-only - the parser is built only after the gates pass,
 because a language on a dead substrate is worthless.
 Dimensionality is decided: the K1 gates land in 2D, then the 3D

@@ -1,12 +1,21 @@
 # Phase 2 - the 3D port
 
-Gated on K1.5 (phase 1's K gates close in 2D); lands before K2
+Gated on K1.5 - PASSED 2026-09-07, K1 closed in 2D; this phase
+is unblocked and next. Lands before K2
 tuning, phase-3 save/load, and the phase-4 parser. The WHY is
 ADR-0013; the timing in one line: the re-validation contract makes
 any dimension change a full ladder re-climb wherever it lands, and
 this window is the last one where nothing downstream has encoded
 2D yet - K2 rates, the save format, the grammar, and the event
 fields all come after.
+
+K1.5's own lesson for the re-climb: the seam gate's classes get
+THINNER in 3D (three seams, a cross-seam band that is a surface
+rather than an edge), and its unconditioned rate ratio measured
+0.58-1.01 across seeds even in 2D - pool-composition noise, not
+substrate asymmetry. The 3D re-climb conditions on sum-p from the
+start (Chemistry::pair_probability is the exposed census helper);
+it does not re-learn the lesson by failing it.
 
 ## Preconditions
 

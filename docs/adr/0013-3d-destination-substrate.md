@@ -4,7 +4,8 @@ Date: 2026-09-07 (owner decision)
 Status: Accepted (renumbered 2026-09-07: the port phase is
 phase 2, plan file docs/plans/phase-2-3d-port.md; the body's
 phase numbers predate the renumbering - hardening is now
-phase 3, the language phase 4; the decision is unchanged)
+phase 3, the language phase 4; the decision is unchanged.
+K1.5 passed 2026-09-07 - K1 closed in 2D, the port is unblocked)
 
 ## Context
 

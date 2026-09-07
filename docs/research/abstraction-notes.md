@@ -218,6 +218,78 @@ run by channel):
   ~189 s at the K1.3 commit. Perf drifts with the substrate; the
   phase-2 perf pass owns the target.
 
+## Resolution log (2026-09-07, K1.5 session)
+
+- F20 (RESOLVED, K1.5's commit): the mirrored VSEPR anchor.
+  The geometry factor scored each existing bond's direction from
+  the RAW delta, so a bond straddling the Wrap seam read mirrored
+  (pi off in the crossing axis) and its atom's candidates scored
+  against a phantom ideal - the one raw-delta pair rule left in
+  the chemistry path (spec 6.3 says every pair rule uses the
+  minimum image; 7.2 synced to name it). Found by audit while
+  writing the seam gate, not by the rate statistics: the bias
+  cancels marginally over the candidate distribution (a
+  mirrored anchor inflates and deflates opposite-side candidates
+  in compensating measure), and the beaker's measured ratio was
+  ~0.78 pooled both pre- and post-fix. Pinned by a deterministic
+  law test: a seam-straddling anchor scores its true ideal ~1.0
+  and the mirrored phantom's ideal 0.63 (inverted pre-fix). The
+  100-tick golden pond run draws no seam-straddling anchored
+  formation, so the golden hash is unchanged; the 20k harness
+  runs do diverge bitwise (re-validated below).
+- Gate K1.5 PASS, seam symmetry, and two measurement lessons
+  that outlive the gate:
+  - The pond cannot measure the seam. Its free-atom sprinkle
+    carries a 2 A margin, so a free pair across the seam starts
+    4 A apart - past every capture cap - and its saturated
+    waters never form bonds. Cross-seam statistics need a
+    dedicated beaker (pond free-atom mix, pond monolayer
+    density, uniform setpoint, NO vent: the pond's vent plume
+    sits against its y-seam and any temperature gradient
+    confounds the seam/bulk split with a t_factor bias).
+  - An unconditioned class-rate ratio is the wrong statistic on
+    a co-evolving population. The raw seam/bulk formations-per-
+    eligible-pair ratio measured ~0.78 pooled with per-seed
+    draws 0.58-1.01 - and the channel diagnostic attributed the
+    whole deficit to pool composition: the seam class is a thin
+    slice whose eligible pairs cluster on a handful of shared
+    edge atoms, so its composition drifts as those atoms keep
+    slots (enriched in low-probability C-double pairs at the
+    run's sagged temperatures; expected-p per pair already 0.77
+    by class while the formation path itself was
+    class-symmetric throughout). The honest bar conditions on
+    the realized pool: actual formations vs the sum of the
+    REAL formation probability per class
+    (Chemistry::pair_probability,
+    exposed read-only for exactly this - spec 7.2
+    diagnostic, the Observer::molecule_sizes precedent). Pooled
+    measured: seam S=57 E=57.7 z=-0.09, bulk S=1443 E=1365
+    z=+2.1, efficiency ratio 0.935 (1-sigma ~0.13) - symmetric.
+    (Both z's sit positive by ~6%: the census conditions on the
+    post-tick state while chemistry drew against the mid-pass
+    state - a class-symmetric model offset; bar the ratio, not
+    the absolute z.) The 3D re-climb will hit the same trap on
+    three thinner seam classes; condition, don't ratio.
+  - A controlled pair-lattice probe (isolated pairs at rest at
+    contact) is UNUSABLE on a torus: excluded-volume repulsion
+    pushes a straddling pair apart AROUND the circle - they
+    re-encounter coherently every ~W/v ticks (measured: seam
+    pairs formed 20x bulk) - while bulk pairs drift apart
+    forever. Thermal gas or nothing.
+- K1.1-K1.4 + the K1 rollup re-validated in the same commit per
+  the re-validation contract (F20 moves every long pond run
+  bitwise through its first seam-crossing anchored formation
+  draw; the K1.4 event counts move with the trajectory, the
+  bars hold with margin): all PASS - K1.1 coupling 1.055-1.158
+  at every sample, steady-tail KE +1.7%/bond length +0.3%; K1.2
+  probe 0.334 vs the 0.578 bound, band mean 1.003-1.014, p95
+  <= 1.21; K1.3 intact 1024/1024 flat, ZERO O-H breaks of any
+  kind; K1.4 field min avg 12.2 C -> tail avg 35.9 C, 2-5
+  window -0.5%, bonds +0.3%, weak thermal 8 (O-O mean age
+  9,432 ticks - the ladder's scale), strong thermal 0, seeded
+  0, mechanical 2, phantoms 0, tail active (21 formations,
+  4 thermal over 15k-20k).
+
 ## Findings first analyzed before measurement
 
 - F1  Literal kB (0.008314) with pond temperatures (15-80 C) makes

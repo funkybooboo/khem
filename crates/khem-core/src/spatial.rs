@@ -176,6 +176,58 @@ mod tests {
     }
 
     #[test]
+    fn wrap_queries_find_every_close_pair_both_ways() {
+        // F11's law as an always-on property: in a Wrap world the
+        // index is a pure accelerator, never a filter - for ANY
+        // configuration, every live pair within the minimum-image
+        // query radius is found by both sides' queries. Brute force
+        // is the reference. Half the atoms sit in the x-seam band,
+        // where the folded cells are. (Gate K1.5 runs this same law
+        // exhaustively, every tick of its beaker; this pins it
+        // always-on for any future index change.)
+        let (w, h) = (60.0, 40.0);
+        let mut rng = crate::rng::Rng::new(1234);
+        let mut atoms = Vec::new();
+        for i in 0..150u32 {
+            let x = if i % 2 == 0 {
+                rng.f01() as f32 * 4.0 // the x = 0 seam band
+            } else {
+                rng.f01() as f32 * w
+            };
+            let y = rng.f01() as f32 * h;
+            atoms.push(atom(i, x, y));
+        }
+        let mut idx = SpatialIndex::new(5.0, w, h, BoundaryType::Wrap);
+        idx.rebuild(&atoms);
+        let min_image = |ax: f32, ay: f32, bx: f32, by: f32| {
+            let (dx, dy) = (bx - ax, by - ay);
+            (dx - w * (dx / w).round(), dy - h * (dy / h).round())
+        };
+        let mut checked = 0;
+        for (i, a) in atoms.iter().enumerate() {
+            for (j, b) in atoms.iter().enumerate().skip(i + 1) {
+                let (dx, dy) = min_image(a.x, a.y, b.x, b.y);
+                if dx * dx + dy * dy >= 4.0 * 4.0 {
+                    continue;
+                }
+                checked += 1;
+                assert!(
+                    idx.neighbors(a.x, a.y, 4.0).contains(&AtomId(j as u32)),
+                    "query from atom {i} lost atom {j}"
+                );
+                assert!(
+                    idx.neighbors(b.x, b.y, 4.0).contains(&AtomId(i as u32)),
+                    "query from atom {j} lost atom {i}"
+                );
+            }
+        }
+        assert!(
+            checked >= 10,
+            "probe too sparse: only {checked} close pairs"
+        );
+    }
+
+    #[test]
     fn degenerate_grids_yield_each_cell_once() {
         // 1x1 grid with a span larger than the grid: duplicates
         // must be suppressed.

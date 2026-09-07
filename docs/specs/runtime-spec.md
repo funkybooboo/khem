@@ -276,7 +276,11 @@ Rebuilt inside the sub-step loop and again after boundary
 application (5.1); rebuild is O(n), queries are O(1) average. Wrap-aware (2026-09-05, finding F11): cell
 coordinates fold at the grid edges in Wrap worlds so seam-crossing
 candidates are found - consistent with the minimum-image chemistry
-that evaluates them; Wall and Open use raw coordinates.
+that evaluates them; Wall and Open use raw coordinates. The index
+is a pure accelerator, never a filter: every pair within the
+minimum-image query radius is found by both sides' queries (a law,
+pinned always-on in the spatial tests and measured pair-for-pair
+against brute force by gate K1.5, 2026-09-07).
 
     SpatialIndex { cells: HashMap<(i32, i32), Vec<AtomId>>,
                    cell_size: f32 }
@@ -562,12 +566,16 @@ documented asymmetry). Eligibility, checked before the RNG draw:
   Otherwise the ideal adjacent-bond angle comes from the 7.4 table
   for the atom's coordination state (doubles shift carbon to
   120/180, nitrogen to 120); the candidate is scored against each
-  existing bond's direction, ideal angle to either side, by a
-  gaussian in angular deviation with sigma = geometry_sigma; the
-  best-scoring existing bond anchors the factor. The 3D table
-  values are scoring ideals, not enforced angles - 109.5 cannot
-  exist four ways in 2D - and effective geometry emerges from the
-  competition (water's 104.5 fits and matters most).
+  existing bond's MINIMUM-IMAGE direction (6.3: every pair rule; a
+  seam-straddling bond's raw direction reads mirrored - pi off in
+  the crossing axis - and candidates would score against a
+  phantom ideal; finding F20, fixed 2026-09-07 with gate K1.5),
+  ideal angle to either side, by a gaussian in angular deviation
+  with sigma = geometry_sigma; the best-scoring existing bond
+  anchors the factor. The 3D table values are scoring ideals,
+  not enforced angles - 109.5 cannot exist four ways in 2D - and
+  effective geometry emerges from the competition (water's 104.5
+  fits and matters most).
 - temperature_factor: gaussian in T around the pair's optimum
   t_opt = t_opt_scale * bond_energy (stronger bonds tolerate
   hotter formation), width t_width.
@@ -580,6 +588,18 @@ increment both bond_counts, absorb bond.energy * formation_fraction
 from the local temperature field at the minimum-image midpoint. The
 field may go negative; kicks clamp at zero T and diffusion smooths
 (formation refrigerates a source-less pond - finding F6, measured).
+
+Diagnostic surface (added 2026-09-07 with gate K1.5):
+`Chemistry::pair_probability` exposes the law read-only - order,
+energy, p_form, and the minimum-image midpoint for a checked-
+eligible pair, with the anchor passed first (the lower AtomId,
+7.2's documented asymmetry). No RNG draw, no mutation. Gate K1.5's
+census conditions on the realized candidate pool with it (sum of
+p per class vs actual formations); the raw formations-per-
+eligible-pair ratio is pool-composition noise on a co-evolving
+population (measured: per-seed draws 0.58-1.01 in a beaker whose
+formation path was class-symmetric throughout) and is reported,
+not barred.
 
 ### 7.3 Bond energy table (kJ/mol, real values)
 

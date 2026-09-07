@@ -76,8 +76,8 @@ optional follow-up. Current bindings:
   the whole K1 ladder re-run in 3D, gate by gate, in order, with
   the 2D pass records as the dimension-agnostic regression
   reference (ledger closure, coupling law, band bounds). K1.5
-  still lands in 2D first: K1.4's F18/F19 fixes are
-  dimension-generic (and more needed in 3D), and porting a
+  landed in 2D first (PASSED 2026-09-07): K1.4's F18/F19 fixes
+  are dimension-generic (and more needed in 3D), and porting a
   substrate with known open pathologies makes 3D failures
   unattributable.
 - no soft spot exists only in prose: every known limitation
@@ -86,9 +86,10 @@ optional follow-up. Current bindings:
 
 ## Milestone K1 - stability: the substrate holds together
 
-K1.1-K1.4 passed 2026-09-05/07 (thermostat, force sanity, water
-persistence, reactive balance); K1.5 remains. The findings that
-shaped them: F6-F11, F17, F18, F19.
+K1.1-K1.5 passed 2026-09-05/07 (thermostat, force sanity, water
+persistence, reactive balance, seam symmetry); MILESTONE K1 IS
+CLOSED - the 3D port (phase 2, ADR-0013) is next. The findings
+that shaped them: F6-F11, F17, F18, F19, F20.
 
 ### K1.1 - thermostat: PASSED
 
@@ -196,16 +197,73 @@ The attack found and fixed two structural findings:
 K1.1 re-ran in the same commit per the contract (the binding
 above): PASS after the windows rode the measured steady tail.
 
-### K1.5 - seam correctness: OPEN (next)
+### K1.5 - seam correctness: PASSED
 
 The spatial index wraps in Wrap worlds (F11) - cross-seam
 formation is symmetric with the bulk. Originally queued for
 phase 3; promoted, because a Wrap world with asymmetric formation
 cannot pass honest gates.
 
+PASSED 2026-09-07 (k1_5_seam_symmetry, release --ignored, two
+seeds pooled). The pond cannot supply the measurement - its
+free-atom sprinkle carries a 2 A margin (a free pair across the
+seam starts 4 A apart, past every capture cap) and its waters
+are saturated - so the gate runs a dedicated beaker: the pond's
+free-atom mix and monolayer density, uniform 55 C, no vent (the
+pond's vent plume sits against its y-seam; any temperature
+gradient confounds the seam/bulk split). Every bar measured:
+
+- GATHERING COMPLETENESS (F11's law, the mechanism): every tick,
+  every live pair within the minimum-image search radius is
+  found by BOTH sides' index queries, brute force the reference
+  - the index is a pure accelerator in Wrap worlds, never a
+  filter. The pre-fix failure mode (a non-folding index)
+  suppresses cross-seam formation totally; this law catches it
+  exactly, with zero formations.
+- FORMATION SYMMETRY, COMPOSITION-CONDITIONED: the bar is the
+  classes' formation efficiency ratio - actual formations vs the
+  sum of the REAL formation probability
+  (Chemistry::pair_probability, exposed read-only for this
+  census) over each class's eligible pool. Measured pooled
+  (seeds 42+137): seam S=57 E=57.7 z=-0.09; bulk S=1443
+  E=1365 z=+2.1; ratio 0.935 against a 1-sigma of ~0.13 - the
+  seam class's formations match the law's expectation under the
+  same probability law the bulk runs. (Both classes' z sit
+  positive by the same ~6%: the census conditions on the
+  post-tick state while chemistry drew against the mid-pass
+  state - the tick's own absorption cooled cells, anchors and
+  orders were freer - a class-symmetric model offset, which is
+  exactly why the bar is the ratio, not the absolute z.)
+
+The probe earned its keep before the pass: the UNCONDITIONED
+rate ratio (formations per eligible pair, seam/bulk) measured
+~0.78 pooled with per-seed draws from 0.58 to 1.01 - and the
+channel diagnostic showed why it must not be barred: the seam
+class is a thin slice whose eligible pool co-evolves with the
+run and clusters on shared atoms (slot-rich edge atoms
+dominated it; composition-enriched in low-probability C-double
+pairs at the run's sagged temperatures, expected-p per pair
+already 0.77 by class while the formation path itself was
+class-symmetric throughout). Conditioning on sum-p absorbs
+composition and temperature drift exactly; only the Bernoulli
+draws remain.
+
+The audit that accompanied the gate found one real seam bug,
+found by law rather than by the rate statistics (its bias
+cancels marginally over the candidate distribution):
+
+- F20 (the mirrored VSEPR anchor): the geometry factor scored
+  each existing bond's direction from the RAW delta, so a
+  bond straddling the Wrap seam read mirrored (pi off) and its
+  atom's candidates scored against a phantom ideal. Fixed with
+  the minimum-image direction (spec 6.3's every-pair-rule
+  law; 7.2 synced); pinned by a deterministic law test (the
+  seam-straddling anchor scores its true ideal ~1.0 and the
+  mirrored phantom's ideal 0.63, inverted pre-fix).
+
 K1.5 is the 2D ladder's close: the 3D port follows (phase 2,
-ADR-0013) and re-climbs K1.1-K1.5 in 3D before K2; K2-K5 then
-climb in 3D.
+ADR-0013) and re-climbs K1.1-K1.5 in 3D - all three seams -
+before K2; K2-K5 then climb in 3D.
 
 ## Milestone K2 - self-assembly: membranes are consequences, not rules
 
