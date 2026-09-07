@@ -104,10 +104,54 @@ pub struct PhysicsConfig {
     /// the spec's formula uses this constant but section 11 omits
     /// it; revision adds it here. Pure tuning knob.
     pub vent_heat_rate: f32,
-    /// Bond-formation search radius, angstroms.
+    /// Bond-formation search radius, angstroms. The candidate
+    /// GATHERING radius only: a pair must additionally pass the
+    /// per-pair capture contact (`bond_form_factor`), so this caps
+    /// the spatial query, not the chemistry.
     pub bond_search_radius: f32,
-    /// Per eligible pair per tick.
+    /// Per-pair formation cap: candidate pairs must sit within
+    /// `bond_form_factor * r_eq` - bonds form at steric contact,
+    /// never at multiples of their own length. Added 2026-09-07
+    /// with gate K1.4 (finding F18): pairs formed inside the search
+    /// radius but past the 7.1 break length are phantom captures -
+    /// the mechanical rule kills them on the next chemistry pass,
+    /// and each cycle silently keeps the absorbed
+    /// formation_fraction * E (measured: 123 of 373 formations in
+    /// the 10k-tick K1.4 probe, a standing refrigeration machine);
+    /// wide-but-legal captures mint the birth-stretch spring PE
+    /// that flings the pair into a mechanical break within ticks
+    /// (measured: 40 more). 1.5 puts capture exactly at the
+    /// excluded-volume standoff (non_bonded_margin * r_eq): a bond
+    /// forms where the atoms touch.
+    pub bond_form_factor: f32,
+    /// Per eligible pair per tick, at steric contact (7.2).
+    /// Retuned 2026-09-07 from 0.001 with gate K1.4: the original
+    /// value was tuned when "eligible" meant anywhere inside the
+    /// 4 A search disc, and the contact capture (bond_form_factor,
+    /// F18's fix) cut the formation count 2.7x - construction of
+    /// the free population was still unfinished after 10k ticks
+    /// (131 free atoms, size distribution not stationary). At
+    /// 0.01 the free population is consumed within ~4k ticks and
+    /// the weak-pair flicker (O-O form/thermal-break cycling in
+    /// the vent plume) is measurable in the stationary tail; the
+    /// measured profile lives in the K1.4 harness evidence.
     pub base_formation_rate: f32,
+    /// Thermalization rate of the bond-break heat reservoir
+    /// (finding F19's fix, spec 6.2): each cell drains at most this
+    /// many degrees into its temperature cell per tick. The
+    /// thermal break's release (release_fraction * E) used to land
+    /// in the cell as a delta function - one O-H release is ~139
+    /// degrees, and the spike broke the neighboring waters' O-H
+    /// bonds (p_break is exponential in T), each secondary break
+    /// re-spiking the cell: measured, the pond reached its
+    /// steady-state 35 C and vaporized within ~500 ticks (every
+    /// bond, field at 1771 C). The bounded drain holds a cell at
+    /// ~+20 C above its neighbors even under a full-cap stream and
+    /// cuts the cascade to ~1e-4 expected secondaries per break,
+    /// closing the feedback loop while conserving the full release
+    /// into the field (F7's cycle law, just spread over
+    /// E/0.3/cap ticks).
+    pub release_rate_cap: f32,
     /// Fraction of bond energy released into the temperature field
     /// on breaking (spec 7.1). Set equal to formation_fraction in
     /// the 2026-09-05 tuning: the spec's 0.5/0.3 asymmetry created
@@ -183,8 +227,10 @@ impl Default for PhysicsConfig {
             convection_rate: 0.001,
             vent_heat_rate: 0.1,
             bond_search_radius: 4.0,
-            base_formation_rate: 0.001,
+            bond_form_factor: 1.5,
+            base_formation_rate: 0.01,
             release_fraction: 0.3,
+            release_rate_cap: 2.0,
             formation_fraction: 0.3,
             en_bonus: 0.1,
             geometry_sigma: 30.0,
@@ -225,8 +271,11 @@ mod tests {
             c.release_fraction, c.formation_fraction,
             "cycle conservation"
         );
+        assert_eq!(c.release_rate_cap, 2.0);
         assert_eq!(c.diffusion_rate, 0.1);
         assert_eq!(c.bond_search_radius, 4.0);
+        assert_eq!(c.bond_form_factor, 1.5);
+        assert_eq!(c.base_formation_rate, 0.01);
         assert_eq!(c.formation_fraction, 0.3);
         assert_eq!(c.convection_rate, 0.001);
         assert_eq!(c.vent_heat_rate, 0.1);

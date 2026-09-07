@@ -247,6 +247,9 @@ The complete mutable simulation state:
         height:         f32
         boundary:       BoundaryType
         temp_field:     Grid2D
+        release_field:  Grid2D     // committed bond-break heat,
+                                   // drained into temp_field at
+                                   // release_rate_cap (6.2; F19)
         setpoint_field: Grid2D     // declared environment setpoints;
                                    // 0 = none (6.2)
         pressure_field: Grid2D
@@ -381,7 +384,21 @@ docs/research/abstraction-notes.md).
 
 Executes at the start of PhysicsSystem::apply_bath, before
 the kicks sample the field (5.1 names no slot for it; the kernel
-pinned this one). Per cell, 4-connected neighbors, wrapped at the
+pinned this one). FIRST, the thermal-release reservoir drains:
+each cell moves at most release_rate_cap degrees of committed
+bond-break heat (7.1) from release_field into its temperature
+cell - a finite thermalization rate (finding F19: the
+instantaneous dump was a bomb. One O-H release is ~139 degrees;
+spiked into a water-lattice cell it lifted local p_break through
+the exponential, broke the neighbors' O-H bonds, and each
+secondary break re-spiked the cell - measured, the pond reached
+its steady-state 35 C and every bond broke within ~500 ticks,
+field at 1771 C. The bounded drain holds a cell at ~+20 C above
+its neighbors even under a full-cap stream, and cuts the cascade
+to ~1e-4 expected secondaries per break - the feedback cannot
+close - while conserving the full release into the field (F7's
+cycle law, spread over E/0.3/cap ticks). Then diffusion, per
+cell, 4-connected neighbors, wrapped at the
 grid edges (grids wrap like the Wrap boundary, 4.8). After
 diffusion, cells with a declared setpoint (> 0 in
 setpoint_field) relax toward it at field_relax_rate - the
@@ -394,7 +411,7 @@ declares 35 C everywhere.
 
     T_new = T * (1 - diffusion_rate) + mean(T_neighbors) * diffusion_rate
 
-diffusion_rate default 0.1.
+diffusion_rate default 0.1. release_rate_cap default 2.0.
 
 ### 6.3 Bond forces
 
@@ -505,8 +522,11 @@ stretch to multiples of their length (measured without the rule:
 
 T <= 0 gives p_break 0. UV photolysis (8.2) is folded into the same
 per-bond roll as one combined probability; if rng < p: flag the bond
-dead, decrement both atoms' bond_count, release bond.energy *
-release_fraction into the local temperature field at the midpoint.
+dead, decrement both atoms' bond_count, and COMMIT bond.energy *
+release_fraction to release_field at the midpoint - the bath
+carries it into the temperature field at release_rate_cap (6.2:
+finite thermalization; the instantaneous cell dump was a
+detonation feedback, F19).
 
 ### 7.2 Bond formation
 
@@ -520,6 +540,14 @@ documented asymmetry). Eligibility, checked before the RNG draw:
     - bond capacity on both sides
     - minimum-image distance within the search radius
     - not already bonded to each other
+    - steric contact: the pair sits within bond_form_factor *
+      r_eq - bonds form where the atoms touch, never at
+      multiples of their own length. A bond born past the 7.1
+      break length is a phantom the next pass kills silently,
+      keeping its absorbed formation heat; a wide-but-legal birth
+      mints the stretch PE that flings the pair into a
+      mechanical break within ticks (finding F18; measured 123 +
+      40 of 373 formations in the 10k-tick K1.4 probe)
     - capture: relative speed below max_form_speed - a pair
       flying past cannot bond (it would have to absorb their
       relative KE as stretch and become a comet; F14)
@@ -738,12 +766,27 @@ measurements that changed them:
     vent_heat_rate          0.1      // used by 8.1's formula; was
                                      // missing from this block
 
-    bond_search_radius      4.0      // angstroms
-    base_formation_rate     0.001    // per eligible pair per tick
+    bond_search_radius      4.0      // angstroms; candidate
+                                     // GATHERING radius only
+    bond_form_factor       1.5      // steric contact cap (7.2):
+                                     // pairs bond within this
+                                     // multiple of r_eq - a
+                                     // bond may only be born
+                                     // where it can live (F18)
+    base_formation_rate     0.01     // per eligible pair per tick
+                                     // at steric contact; retuned
+                                     // from 0.001 with K1.4 when
+                                     // capture moved from the
+                                     // 4 A disc to contact
     release_fraction        0.3      // == formation_fraction; the
                                      // literal 0.5 vs 0.3 minted
                                      // 0.2*E per form+break cycle
                                      // (F7)
+    release_rate_cap       2.0      // degrees per cell per tick:
+                                     // thermalization rate of the
+                                     // committed break heat (6.2,
+                                     // F19 - the instant dump was
+                                     // a bomb)
     formation_fraction      0.3
     en_bonus                0.1
     max_form_speed          1.5      // capture gate (7.2): no

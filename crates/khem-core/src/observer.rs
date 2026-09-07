@@ -140,8 +140,11 @@ impl Observer {
     /// Molecule detection (spec 9.2): connected components of live
     /// atoms over live bonds, union-find with path halving, bonds
     /// visited in BondId order for determinism. Returns component
-    /// sizes, one per live atom.
-    fn molecule_sizes(world: &WorldState) -> Vec<u32> {
+    /// sizes, one per live atom. Public: the spec 9.2 diagnostic
+    /// behind `stats`'s buckets - the K1 harness reads the full
+    /// distribution (largest molecule, growth trend) that the four
+    /// buckets flatten away.
+    pub fn molecule_sizes(world: &WorldState) -> Vec<u32> {
         let n = world.atoms.len();
         let mut parent: Vec<u32> = (0..n as u32).collect();
         for bond in &world.bonds {

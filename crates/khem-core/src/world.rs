@@ -231,6 +231,20 @@ pub struct WorldState {
     pub height: f32,
     pub boundary: BoundaryType,
     pub temp_field: Grid2D,
+    /// The thermal-release reservoir (finding F19's fix, spec 6.2):
+    /// thermal bond breaks COMMIT their released heat here, and
+    /// the physics bath drains each cell into `temp_field` at
+    /// `release_rate_cap` per tick - a finite thermalization rate
+    /// instead of an instantaneous cell dump. One O-H release is
+    /// ~139 degrees (four cells' thermal energy); deposited as a
+    /// delta function it spikes a water-lattice cell to ~175 C,
+    /// where exp(-E/(kB*T)) breaks the neighbors' O-H bonds and
+    /// each secondary break re-spikes the cell - a detonation that
+    /// vaporized the whole pond within ~500 ticks of reaching its
+    /// steady-state temperature (measured, K1.4 probe). The
+    /// bounded drain holds a cell at ~+20 C above its neighbors
+    /// even under a full-cap stream, so the feedback cannot close.
+    pub release_field: Grid2D,
     /// Declared environment setpoints, degrees: cells relax toward
     /// their setpoint at field_relax_rate (spec 6.2, the environment
     /// reservoir). 0 = no setpoint declared = no relaxation
@@ -264,6 +278,7 @@ impl WorldState {
             height,
             boundary,
             temp_field: Grid2D::new(width, height, config.field_cell_size),
+            release_field: Grid2D::new(width, height, config.field_cell_size),
             setpoint_field: Grid2D::new(width, height, config.field_cell_size),
             pressure_field: Grid2D::new(width, height, config.field_cell_size),
             uv_field: Grid2D::new(width, height, config.field_cell_size),

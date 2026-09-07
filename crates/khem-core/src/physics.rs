@@ -1,12 +1,19 @@
 //! The physics system: the Langevin thermostat (velocities relax
-//! toward the local field temperature, spec 6.1), temperature
-//! diffusion and setpoint relaxation, smooth two-way Hooke bond
-//! springs, non-bonded excluded volume, pressure-gradient forces,
-//! sub-stepped integration, boundary conditions.
+//! toward the local field temperature, spec 6.1), the bounded-rate
+//! drain of the thermal-release reservoir and temperature diffusion
+//! and setpoint relaxation, smooth two-way Hooke bond springs,
+//! non-bonded excluded volume, pressure-gradient forces, sub-stepped
+//! integration, boundary conditions.
 //!
 //! Phase-1 placement decisions, to fold into the spec at revision
 //! (ADR-0006: specs are drafts until validated):
 //!
+//! - The release reservoir drain (F19's fix, spec 6.2) runs at the
+//!   top of [`PhysicsSystem::apply_bath`], before diffusion: bond-break
+//!   heat committed by chemistry enters the temperature field at
+//!   `release_rate_cap` per cell per tick instead of as a delta
+//!   function (the instantaneous dump was a bomb - see
+//!   [`crate::world::WorldState::release_field`]).
 //! - Temperature diffusion (spec 6.2) runs at the top of
 //!   [`PhysicsSystem::apply_bath`], before the kicks sample the
 //!   field; spec 5.1 names no slot for it.
@@ -101,6 +108,26 @@ impl Physics {
             fx: Vec::new(),
             fy: Vec::new(),
             diffused: Vec::new(),
+        }
+    }
+
+    /// Drain of the thermal-release reservoir (spec 6.2, F19's
+    /// fix): each cell moves at most `release_rate_cap` degrees of
+    /// committed break-heat into its temperature cell per tick -
+    /// the finite thermalization rate that keeps one O-H release
+    /// (~139 degrees) from spiking a water-lattice cell into the
+    /// p_break runaway (see WorldState::release_field). Runs before
+    /// diffusion so the drained heat spreads the same tick.
+    fn drain_release_reservoir(&self, world: &mut WorldState) {
+        let cap = self.config.release_rate_cap;
+        for i in 0..world.release_field.data.len() {
+            // Chemistry commits only positive releases; the reservoir
+            // holds no other state.
+            let drained = world.release_field.data[i].min(cap).max(0.0);
+            if drained > 0.0 {
+                world.release_field.data[i] -= drained;
+                world.temp_field.data[i] += drained;
+            }
         }
     }
 
@@ -394,6 +421,7 @@ impl Physics {
 
 impl PhysicsSystem for Physics {
     fn apply_bath(&mut self, world: &mut WorldState) {
+        self.drain_release_reservoir(world);
         self.diffuse_temperature(world);
         self.thermal_bath(world);
     }
@@ -692,6 +720,51 @@ mod tests {
             "seam b pushed short way, got {}",
             w.atom(b).vx
         );
+    }
+
+    #[test]
+    fn release_reservoir_drains_at_a_bounded_rate() {
+        // F19 law: break heat enters the field through the bounded
+        // drain, never as a cell spike. An empty world (no atoms, no
+        // sources): the bath's other steps conserve the field sum
+        // (diffusion) or touch nothing (no atoms, no setpoints), so
+        // the drain is the only mover.
+        let config = PhysicsConfig::default();
+        let mut w = world(1, BoundaryType::Wrap);
+        let committed = 139.0; // one O-H release at fraction 0.3
+        w.release_field.set(50.0, 50.0, committed);
+        let mut sys = physics();
+        sys.apply_bath(&mut w);
+        // Exactly the cap moved in one tick (diffusion then spreads
+        // the installment - the field SUM is what the drain moved);
+        // the rest waits in the reservoir.
+        let moved: f32 = w.temp_field.data.iter().sum();
+        assert!((moved - config.release_rate_cap).abs() < 1e-4);
+        // The installment bounds the cell's excursion: no cell rose
+        // more than the cap in one tick (a delta-function dump would
+        // have put all 139 in at once). Sustained accumulation in
+        // this sink-less test world is honest diffusion physics;
+        // the pond's boundedness regression is the harness's.
+        let max_cell = w.temp_field.data.iter().copied().fold(0.0f32, f32::max);
+        assert!(
+            max_cell <= config.release_rate_cap + 1e-4,
+            "cell rose to {max_cell} in one tick"
+        );
+        assert_eq!(
+            w.release_field.get(50.0, 50.0),
+            committed - config.release_rate_cap
+        );
+        // The full amount lands after committed/cap ticks; no cell
+        // ever spiked - each 2-degree installment diffuses away
+        // before the next arrives.
+        let ticks = (committed / config.release_rate_cap).ceil() as usize;
+        for _ in 1..ticks {
+            sys.apply_bath(&mut w);
+        }
+        let residue: f32 = w.release_field.data.iter().sum();
+        assert!(residue.abs() < 1e-3, "residue {residue}");
+        let gained: f32 = w.temp_field.data.iter().sum();
+        assert!((gained - committed).abs() < 1e-2, "gained {gained}");
     }
 
     #[test]

@@ -135,27 +135,68 @@ run by channel):
   steady tail (6.25k-8k vs 8.25k-10k: KE +10.6%, bond length
   +0.3%). Golden hash consciously updated
   (0xDD4E_87CD_A7FD_94CE -> 0x0896_8E9C_98C9_54F6).
-- F18 (OPEN, owned by K1.4): wide-capture churn. Pairs formed
+- F18 RESOLVED (K1.4, 2026-09-07): wide-capture churn. Pairs formed
   inside bond_search_radius (4 A) but beyond the 7.1 break
   length (2.5 * r_eq) are phantom captures - they break
   silently on the next chemistry pass, and each such cycle
-  absorbs formation_fraction * E from the field with no return
-  (measured: 26 of 41 runtime-formed O-H pairs broke
+  absorbs formation_fraction * E from the field with no
+  return (measured: 26 of 41 runtime-formed O-H pairs broke
   mechanically; the spring PE minted at wide-capture formation
-  flings them at up to ~4.2 A/tick relative). Corollary measured
-  in the same run: the old substrate's refrigeration machine
-  (shatter feeding formations, each absorbing 0.3*E, field
-  avg -162 C) starved itself under the K1.3 substrate - the
-  field now RECOVERS to ~26-28 C vs the 35 C setpoint over ~6k
-  ticks instead of sitting at -162. K1.4 owns whether the
-  residual deficit closes and the molecule-size distribution
-  settles; its levers include the search radius, the formation
-  fractions, and the vent/setpoint balance.
+  flings them at up to ~4.2 A/tick relative). The K1.4 probe
+  quantified the full channel: 123 phantom formations of 373
+  (33%) plus 40 wide-legal births flinging to mechanical breaks
+  at age 1-2 ticks - together a standing refrigeration machine
+  that held the field 8-12 C below setpoint and killed the
+  thermal break channel (zero thermal breaks in 10k ticks: at
+  10-26 C even O-O's p_break is ~1e-7/tick). The fix is
+  structural, not a retune: formation requires STERIC CONTACT
+  (bond_form_factor 1.5, the excluded-volume standoff - a bond
+  may only be born where it can live), which killed both
+  channels (measured post-fix: 0 phantoms, 1 mechanical break in
+  20k ticks) and moved the honest formation rate with it
+  (base_formation_rate 0.001 -> 0.01: the old value was tuned
+  for the 4 A disc; contact capture cut the formation count
+  2.7x and left construction unfinished at 10k ticks).
+- F19 (RESOLVED same day, K1.4's commit): the thermal-release
+  bomb. Removing F18's refrigeration let the field reach its
+  true steady state (35 C) for the first time - and the pond
+  VAPORIZED: within ~500 ticks of settling (tick ~13.75k of the
+  20k probe), every one of 2385 bonds broke thermally and the
+  field hit 1771 C; the run then collapsed into a form/break
+  churn at negative field temperatures. Mechanism: the thermal
+  break releases release_fraction * E as a delta function into
+  one 10 A cell (an O-H release is ~139 degrees, ~4 cells'
+  thermal energy), and p_break = exp(-E/(kB*T)) is exponential
+  in T: the spike (~175 C locally) breaks the ~16 neighboring
+  waters' O-H bonds, and each secondary break re-spikes the
+  cell - a detonation front that diffusion carries cell to
+  cell. The old substrate never saw it because F18's churn
+  refrigerated the field below any release (zero thermal breaks
+  ever). The igniter is the re-forming churn itself: a
+  thermally-broken pair lingers and re-bonds at the same
+  midpoint, concentrating repeated spikes on one site until a
+  neighbor water pops. The fix mirrors F8's (give the energy
+  exchange a rate): thermal breaks COMMIT their release to a
+  per-cell reservoir (WorldState::release_field) that the bath
+  drains into T at release_rate_cap (2.0 degrees/cell/tick) - a
+  finite thermalization rate. A cell under a full-cap stream
+  equilibrates ~+20 C above its neighbors (diffusion-limited),
+  cutting the cascade to ~1e-4 expected secondaries per break,
+  while conserving the full release into the field (F7's cycle
+  law holds, spread over E/0.3/cap ticks). Post-fix 20k probe:
+  no detonation, the pond sits at 35 C steady with the weak
+  flicker alive (18 O-O thermal breaks at mean age 10,007
+  ticks - the ladder's ~10k-tick scale measured exactly). This
+  extends F9's design law for the mechanical channel (sinks
+  cannot cascade) to the thermal channel: no energy dump may
+  be instantaneous.
 - Substrate cost measured: 10k-tick pond runs went from ~77 s to
   ~189 s in release (~53 t/s) - 4x force passes plus per-sub-step
   index rebuilds. The phase-2 perf pass owns this
   (docs/plans/phase-2-hardening.md: no optimization before the
   substrate is behaviorally sane; the gates are correctness gates).
+  K1.4 note: the 20k-tick gate runs measure ~57 t/s in release
+  (~350 s); still phase-2 territory.
 
 ## Resolution log (2026-09-07, post-K1.3 quality pass)
 

@@ -373,12 +373,16 @@ impl ChemistrySystem for Chemistry {
             let p_uv = world.uv_field.get(mx, my) * self.config.uv_sensitivity.of_order(order);
             let p = 1.0 - (1.0 - p_break) * (1.0 - p_uv);
             if world.rng.f01() < p as f64 && world.break_bond(BondId(i as u32)) {
-                // Spec 7.1: release stored heat into the field. The
-                // field may go negative where formation absorbed more
-                // than was there; thermal kicks clamp at zero and
-                // diffusion smooths (documented v0 behavior).
+                // Spec 7.1: the released heat COMMITS to the
+                // thermal-release reservoir, not the field cell -
+                // the bath drains it into T at release_rate_cap
+                // (finite thermalization, F19: the instantaneous
+                // dump is a bomb; see WorldState::release_field).
+                // Conservation through the form+break cycle is
+                // unchanged: the full release_fraction * E enters
+                // the field, spread over E/0.3/cap ticks.
                 let released = energy * self.config.release_fraction;
-                world.temp_field.add(mx, my, released);
+                world.release_field.add(mx, my, released);
                 world.event_queue.push(Event::BondBroken {
                     tick: world.tick,
                     bond_id: i as u32,
@@ -446,6 +450,22 @@ impl ChemistrySystem for Chemistry {
                 if dx * dx + dy * dy > radius2 {
                     continue;
                 }
+                // Steric contact (F18's fix, spec 7.2): a bond may
+                // only be born where it can live. Candidates must
+                // sit within bond_form_factor * r_eq - past it, a
+                // birth is a phantom the 7.1 mechanical rule kills
+                // next pass (each such cycle silently keeps the
+                // absorbed formation_fraction * E; measured: 123
+                // of 373 formations in the K1.4 probe) or a wide
+                // capture whose minted birth-stretch spring PE
+                // flings the pair into a mechanical break within
+                // ticks (measured: 40 more). Ineligible pairs draw
+                // nothing (RNG discipline).
+                let r_eq = world.element(a_el).radius + world.element(b_el).radius;
+                let cap = self.config.bond_form_factor * r_eq;
+                if dx * dx + dy * dy > cap * cap {
+                    continue;
+                }
                 if world.is_bonded(a_id, b_id) {
                     continue;
                 }
@@ -497,6 +517,7 @@ mod tests {
     use super::*;
     use crate::elements::element_id;
     use crate::energy::EnergySystem;
+    use crate::physics::PhysicsSystem;
     use crate::world::BoundaryType;
 
     fn world(seed: u64) -> WorldState {
@@ -598,16 +619,21 @@ mod tests {
         }
         assert!(!w.bond(BondId(0)).alive, "weak hot bond must break");
         assert_eq!(w.atom(a).bond_count, 0);
-        // Heat released at the midpoint: energy * release_fraction,
-        // landing in the same 10 A cell the set() warmed. The
-        // expected value is computed from the law, not hand-copied:
-        // the old literal (10_000.5) was wrong and survived only
-        // because the tolerance was +-1.0 on a 10k-scale number.
-        let released = w.temp_field.get(50.5, 50.0);
-        let expected = 10_000.0f32 + 1.0 * config.release_fraction;
+        // The release COMMITS to the thermal-release reservoir
+        // (F19), not the cell: the field temperature is unchanged
+        // at the break moment, and the full release_fraction * E
+        // sits in the reservoir awaiting the bath's bounded drain
+        // (physics owns the drain; the law tests live there).
+        let committed = w.release_field.get(50.5, 50.0);
+        let expected = 1.0 * config.release_fraction;
         assert!(
-            (released - expected).abs() < 1e-2,
-            "released {released}, expected {expected}"
+            (committed - expected).abs() < 1e-2,
+            "committed {committed}, expected {expected}"
+        );
+        let temp = w.temp_field.get(50.5, 50.0);
+        assert!(
+            (temp - 10_000.0).abs() < 1e-2,
+            "cell spiked to {temp} at break"
         );
         // One break event queued.
         assert!(matches!(
@@ -649,7 +675,7 @@ mod tests {
         };
         let mut w = world(3);
         let a = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0);
-        let b = w.spawn_atom(element_id("H").unwrap(), 52.0, 50.0);
+        let b = w.spawn_atom(element_id("H").unwrap(), 51.0, 50.0);
         w.temp_field.set(51.0, 50.0, 43.6);
         rebuild_index(&mut w);
         chemistry(config).form_bonds(&mut w);
@@ -866,6 +892,49 @@ mod tests {
     }
 
     #[test]
+    fn bonds_form_only_at_steric_contact() {
+        // F18 law: a bond may only be born where it can live.
+        // Past bond_form_factor * r_eq no formation happens, however
+        // high the rate. H-O: r_eq 1.19, contact cap 1.785, break
+        // length 2.975, search radius 4.0 - three distinct zones.
+        let config = PhysicsConfig {
+            base_formation_rate: 1.0,
+            ..PhysicsConfig::default()
+        };
+        let o = element_id("O").unwrap();
+        let h = element_id("H").unwrap();
+        // The phantom zone: inside the search radius, PAST the
+        // 7.1 break length. Pre-fix this captured, and the next
+        // pass killed the bond silently - 123 measured.
+        let mut w = world(6);
+        w.spawn_atom(h, 50.0, 50.0);
+        w.spawn_atom(o, 53.2, 50.0);
+        w.temp_field.set(51.0, 50.0, 46.3); // t_opt for O-H
+        rebuild_index(&mut w);
+        chemistry(config).form_bonds(&mut w);
+        assert_eq!(w.bonds.len(), 0, "phantom candidate must not be captured");
+        // The wide-legal zone: past the contact cap but under the
+        // break length - the birth mints fling energy (measured 40
+        // mechanical breaks at age 1-2).
+        let mut w = world(6);
+        w.spawn_atom(h, 50.0, 50.0);
+        w.spawn_atom(o, 52.9, 50.0);
+        w.temp_field.set(51.0, 50.0, 46.3);
+        rebuild_index(&mut w);
+        chemistry(config).form_bonds(&mut w);
+        assert_eq!(w.bonds.len(), 0, "wide candidate must not be captured");
+        // Contact: formation proceeds.
+        let mut w = world(6);
+        let a = w.spawn_atom(h, 50.0, 50.0);
+        w.spawn_atom(o, 51.5, 50.0);
+        w.temp_field.set(51.0, 50.0, 46.3);
+        rebuild_index(&mut w);
+        chemistry(config).form_bonds(&mut w);
+        assert_eq!(w.bonds.len(), 1, "contact candidate must be captured");
+        assert_eq!(w.atom(a).bond_count, 1);
+    }
+
+    #[test]
     fn chemistry_is_deterministic_per_seed() {
         fn run(seed: u64) -> (usize, Vec<bool>) {
             let config = PhysicsConfig::default();
@@ -891,15 +960,16 @@ mod tests {
             ..PhysicsConfig::default()
         };
         let mut w = world(8);
-        // One carbon surrounded by six hydrogens within radius; only
-        // four bonds may form (G04 via form_bond).
+        // One carbon surrounded by six hydrogens within the contact
+        // cap (C-H r_eq 1.30, cap 1.95); only four bonds may form
+        // (G04 via form_bond).
         let c = w.spawn_atom(element_id("C").unwrap(), 50.0, 50.0);
         for i in 0..6 {
             let angle = i as f32 * std::f32::consts::TAU / 6.0;
             w.spawn_atom(
                 element_id("H").unwrap(),
-                50.0 + 3.0 * angle.cos(),
-                50.0 + 3.0 * angle.sin(),
+                50.0 + 1.5 * angle.cos(),
+                50.0 + 1.5 * angle.sin(),
             );
         }
         w.temp_field.set(50.0, 50.0, 46.3);
@@ -957,13 +1027,39 @@ mod tests {
         chemistry(config).break_bonds(&mut w);
         assert!(!w.bond(BondId(0)).alive);
         let after_break: f32 = w.temp_field.data.iter().sum();
-        // The cycle returns exactly the absorbed heat (F7 law:
-        // release_fraction == formation_fraction).
-        let released = after_break - after_set;
+        // The F7 law through the F19 reservoir: the break commits
+        // exactly the absorbed heat (release_fraction ==
+        // formation_fraction) to the release reservoir - the
+        // temperature field is unchanged at the break moment.
+        let committed: f32 = w.release_field.data.iter().sum();
         let expected_release = 436.0 * config.release_fraction;
         assert!(
-            (released - expected_release).abs() < 1e-2,
-            "released {released}"
+            (committed - expected_release).abs() < 1e-2,
+            "committed {committed}"
+        );
+        assert!((after_break - after_set).abs() < 1e-2, "no spike at break");
+        // The bath drains the reservoir into the field at
+        // release_rate_cap per tick; once drained, the cycle has
+        // returned exactly the absorbed heat (F7 conservation, now
+        // spread over E/0.3/cap ticks). The thermostat's own exchange
+        // stays inside the field+KE invariant (its unit test);
+        // here the kick scale is zeroed so the ledger is pure.
+        let quiet = PhysicsConfig {
+            thermal_kick_scale: 1e-9,
+            ..config
+        };
+        let mut sys = crate::physics::Physics::new(quiet);
+        let ticks_needed = (expected_release / quiet.release_rate_cap).ceil() as usize + 5;
+        for _ in 0..ticks_needed {
+            sys.apply_bath(&mut w);
+        }
+        let drained: f32 = w.temp_field.data.iter().sum();
+        let residue: f32 = w.release_field.data.iter().sum();
+        assert!(residue.abs() < 1e-3, "reservoir residue {residue}");
+        assert!(
+            (drained - after_set - expected_release).abs() < 0.1,
+            "returned {:.3}, expected {expected_release}",
+            drained - after_set
         );
         assert_eq!(config.release_fraction, config.formation_fraction);
         assert_eq!(

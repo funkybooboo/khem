@@ -107,16 +107,24 @@ in the runtime - it is something the chemistry must do alone.
 ## Status
 
 The engine is built and streams real output - every number above
-came off an actual run. The gate ladder is partly climbed: the
-thermostat (K1.1), force-sanity (K1.2), and water-persistence
-(K1.3) sub-gates are measured passes - the pond's 1024 waters
-hold intact across 10k-tick runs, which took sub-stepped
-integration and real-water-stiff bonds (the failing substrate
-measured 1482 bombardment breaks and only 206 waters intact).
-K1 is still failing - measured, with causes named: the settled
-field runs below its 35 C setpoint while the free-atom
-chemistry settles (gate K1.4), and cross-seam formation
-symmetry is not yet measured (gate K1.5). The .kem language is
+came off an actual run. The gate ladder is climbing: the
+thermostat (K1.1), force-sanity (K1.2), water-persistence
+(K1.3), and reactive-balance (K1.4) sub-gates are measured
+passes - the pond's 1024 waters hold intact (which took
+sub-stepped integration and real-water-stiff bonds; the failing
+substrate measured 1482 bombardment breaks and only 206 waters
+intact), and the free-atom beaker settles to a stationary
+molecule-size distribution: weak O-O bonds flicker at the
+measured 10k-tick Boltzmann scale, strong ones persist, and the
+field recovers to its 35 C setpoint. The K1.4 attack fixed two
+measured structural bugs: wide-capture churn (bonds used to form
+anywhere inside the 4 A search disc, a third of them phantoms
+born past their own break length, silently refrigerating the
+field) and the thermal-release bomb (the break's heat dumped
+instantly into one cell vaporized the whole pond once the field
+first reached its true steady state - now thermalized at a
+bounded rate). K1's last open gate: cross-seam formation
+symmetry (K1.5). The .kem language is
 spec-only - the parser is built only after the gates pass,
 because a language on a dead substrate is worthless.
 Dimensionality is decided: the K1 gates land in 2D, then the 3D

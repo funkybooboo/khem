@@ -8,7 +8,7 @@ docs/research/references.md is the bibliography (with the
 prior-work table), and docs/research/abstraction-notes.md records,
 for each abstraction khem uses, what prior work supports it, what
 it simplifies away, and what the phase-1 kernel has measured
-against it (findings F1-F18). Phase 0 re-opens at named trigger points (the gap register in
+against it (findings F1-F19). Phase 0 re-opens at named trigger points (the gap register in
 PLAN.md is the index) - each re-open is a short memo against
 the literature before the gate that needs the design pays for
 it instead:

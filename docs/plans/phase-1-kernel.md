@@ -42,7 +42,18 @@ re-run result is part of the later gate's evidence, not an
 optional follow-up. Current bindings:
 
 - K1.1 re-runs in K1.4's commit (K1.4 moves the pond's settled
-  operating temperature; K1.1 passed at the cold ~0.3 C point)
+  operating temperature; K1.1 passed at the cold ~0.3 C point).
+  EXERCISED 2026-09-07, K1.4's commit: the re-run FAILED the
+  6.25k-10k window letter at +14.5% against the 15% bar - a pass
+  by 0.5% is a flaky gate - and the measurement showed why: the
+  K1.4 substrate's construction drain (each persistent bond
+  sequesters 0.3*E until it breaks; the free population is
+  consumed over ~14k ticks) extends the field-recovery transient
+  to ~16k, so the old windows sat mid-recovery (field avg still
+  31.5 C at 10k). Re-validated PASS with the window riding the
+  measured steady tail: run horizon 10k -> 20k, windows
+  16k-17.75k vs 18k-20k (KE/atom +2.3%, mean bond length +0.2%),
+  coupling law 1.08-1.16 at every sample, KE bounded throughout.
 - K1.1 re-runs in any integrator commit (sub-stepping removes
   the velocity clamp and deepens bond wells - K1.3's lever; the
   golden hash forces such commits to be conscious). EXERCISED
@@ -64,8 +75,8 @@ optional follow-up. Current bindings:
   assumptions at once - dimension itself. Its exit criterion is
   the whole K1 ladder re-run in 3D, gate by gate, in order, with
   the 2D pass records as the dimension-agnostic regression
-  reference (ledger closure, coupling law, band bounds). K1.4
-  and K1.5 still land in 2D first: the F18 fix is
+  reference (ledger closure, coupling law, band bounds). K1.5
+  still lands in 2D first: K1.4's F18/F19 fixes are
   dimension-generic (and more needed in 3D), and porting a
   substrate with known open pathologies makes 3D failures
   unattributable.
@@ -75,9 +86,9 @@ optional follow-up. Current bindings:
 
 ## Milestone K1 - stability: the substrate holds together
 
-K1.1-K1.3 passed 2026-09-05/07 (thermostat, force sanity, water
-persistence); K1.4 and K1.5 remain. The findings that shaped them:
-F6-F11, F17, F18.
+K1.1-K1.4 passed 2026-09-05/07 (thermostat, force sanity, water
+persistence, reactive balance); K1.5 remains. The findings that
+shaped them: F6-F11, F17, F18, F19.
 
 ### K1.1 - thermostat: PASSED
 
@@ -134,21 +145,58 @@ not water loss. Spec 5.1/6.1/6.3/6.5/11 synced; golden hash
 consciously updated; K1.1 and K1.2 re-ran in the same commit
 (the contract's integrator binding, above).
 
-### K1.4 - reactive balance: OPEN (next)
+### K1.4 - reactive balance: PASSED
 
 A beaker of free atoms settles to a STATIONARY molecule-size
-distribution - weak bonds break (O-O on a ~10k-tick scale),
-strong ones persist; no runaway crosslinking, no frozen
-inertness; formation refrigeration (F6) stays bounded and
-recovers. Measured context for the attack: the K1.3 substrate
-quiesced the old shatter-fed refrigeration machine (field avg
-went from -162 C to a ~26-28 C recovery vs the 35 C setpoint),
-and finding F18 (wide-capture phantom churn: pairs formed inside
-the 4 A search radius but past the 2.5 * r_eq break length break
-silently, absorbing 0.3 * E per cycle) is the named lever set -
-search radius, formation fractions, vent/setpoint balance.
+distribution - weak bonds break (O-O on a ~10k-tick scale), strong
+ones persist; no runaway crosslinking, no frozen inertness;
+formation refrigeration (F6) stays bounded and recovers. PASSED
+2026-09-07 over a 20k-tick vented run (tests/k1_stability.rs,
+release --ignored), every bar measured:
 
-### K1.5 - seam correctness: OPEN
+- the field dips to avg 12.2 C during the construction burst (each
+  persistent bond sequesters 0.3*E; the free population is
+  consumed over ~14k ticks) and RECOVERS to tail avg 35.6 C
+  against the 35 C setpoint - F6 bounded and recovering;
+- the size distribution is stationary on the tail (16k-18k vs
+  18k-20k: 2-5 bucket -0.0%, free singles -8.8%, bonds +0.4%,
+  cluster count -2 molecules); no runaway (largest molecule 22,
+  21+ bucket 1, bonds 2406);
+- the weak/strong asymmetry measured exactly at the ladder's
+  scale: 18 O-O thermal breaks at mean age 10,007 ticks and 5
+  N-N, ZERO thermal breaks of any strong pair, zero seeded-water
+  breaks, zero phantom formations, one mechanical break (a
+  collision outlier);
+- the tail stays active (29 formations, 11 thermal breaks over
+  15k-20k) - the flicker is alive, no frozen inertness.
+
+The attack found and fixed two structural findings:
+
+- F18 (wide-capture churn): formation used to accept any pair
+  inside the 4 A search disc - 33% of formations were phantoms
+  born past the mechanical break length, each silently keeping
+  the absorbed formation heat, a standing refrigeration machine
+  that held the field 8-12 C below setpoint and killed the
+  thermal break channel. Fix: STERIC CONTACT - a bond may only be
+  born where it can live (bond_form_factor 1.5, the
+  excluded-volume standoff), with base_formation_rate retuned
+  0.001 -> 0.01 for the contact geometry (F1's lesson: the rate
+  was tuned for the wide-disc artifact).
+- F19 (the thermal-release bomb): with the refrigeration gone,
+  the field reached its true 35 C steady state for the first
+  time - and the pond vaporized within ~500 ticks (every bond,
+  field 1771 C): the thermal release was a delta function into
+  one cell, and p_break is exponential in T, so each spike broke
+  the neighbors and each secondary re-spiked. Fix: the release
+  COMMITs to a per-cell reservoir (release_field) that the bath
+  drains at release_rate_cap 2.0 - finite thermalization, F7's
+  cycle conservation preserved, the cascade cut to ~1e-4
+  secondaries per break.
+
+K1.1 re-ran in the same commit per the contract (the binding
+above): PASS after the windows rode the measured steady tail.
+
+### K1.5 - seam correctness: OPEN (next)
 
 The spatial index wraps in Wrap worlds (F11) - cross-seam
 formation is symmetric with the bulk. Originally queued for

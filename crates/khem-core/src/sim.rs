@@ -164,15 +164,21 @@ mod tests {
     use crate::observer::ObserverConfig;
     use crate::world::{BoundaryType, ElementId};
 
-    /// Recorded 2026-09-07, after the K1.3 integrator commit: the
-    /// force/motion pair is sub-stepped 4x per tick (dt_sub =
-    /// 0.25), spring_energy_scale 0.004 -> 0.032 (O-H mechanical
-    /// well ~10 kT -> ~80 kT), and the velocity clamp is REMOVED
-    /// (sub-stepping resolves the tunneling mint the clamp
-    /// guarded). Previous value 0xDD4E_87CD_A7FD_94CE (the K1.1
-    /// substrate, 2026-09-05). Pre-fix values live in git history.
+    /// Recorded 2026-09-07, after the K1.4 reactive-balance commit:
+    /// steric-contact capture (bond_form_factor 1.5 - a bond may only
+    /// be born where it can live; kills F18's phantom/wide captures),
+    /// base_formation_rate 0.001 -> 0.01 (contact capture cut the
+    /// formation count 2.7x; the free population now constructs to
+    /// exhaustion in-run), and the thermal-release RESERVOIR with a
+    /// bounded drain (F19: the instant cell dump was a bomb - the
+    /// pond vaporized ~500 ticks after reaching steady state; the
+    /// release_field grid joined the hash with this change).
+    /// Previous values: 0x6239_1611_1731_3A86 (the K1.3 substrate),
+    /// 0x0896_8E9C_98C9_54F6 (pre-hash-field-state),
+    /// 0xDD4E_87CD_A7FD_94CE (the K1.1 substrate, 2026-09-05).
+    /// Pre-fix values live in git history.
     /// Update ONLY with a justification in the commit message.
-    const GOLDEN_HASH: u64 = 0x6239_1611_1731_3A86;
+    const GOLDEN_HASH: u64 = 0xC2DA_83B1_D546_6D7C;
 
     fn observer(interval: u64) -> Observer {
         Observer::new(ObserverConfig {
@@ -325,6 +331,7 @@ mod tests {
             // step and guards future source additions.
             for field in [
                 &world.temp_field,
+                &world.release_field,
                 &world.setpoint_field,
                 &world.pressure_field,
                 &world.uv_field,
@@ -408,10 +415,11 @@ mod tests {
         };
         let mut w = WorldState::new(50.0, 50.0, BoundaryType::Wrap, 3, config);
         let a = w.spawn_atom(ElementId(0), 10.0, 10.0);
-        w.spawn_atom(ElementId(0), 14.0, 10.0);
+        w.spawn_atom(ElementId(0), 12.0, 10.0);
         // Capturable speed: |v_rel| stays under max_form_speed
-        // after damping. b stays; after one tick a is at ~11,
-        // within the 4 A search radius.
+        // after damping, and the post-tick separation (~1.1 A)
+        // sits inside the steric-contact cap (H-H r_eq 1.06, cap
+        // 1.59) - formation only happens at contact now (F18).
         w.atom_mut(a).vx = 1.0;
         w.temp_field.set(12.0, 10.0, 43.6);
         let mut sim = Sim::new(config, observer(1000));
