@@ -95,6 +95,66 @@ unbuilt items (CLI modes, signals, compaction, save, watch
 conditions). Findings pending decisions (thermostat, F4) are NOT
 in the spec yet - they land when decided.
 
+## Resolution log (2026-09-07, K1.3 session)
+
+The integrator commit that made K1.3 pass, each piece measured
+(the K1.3 probe classified every bond event of a 10k-tick vented
+run by channel):
+
+- F17 RESOLVED: at the dt=1 stability cap the O-H mechanical
+  well (stretch energy at the 7.1 break point) was only ~10 kT -
+  a thermal-speed hydrogen, or one non-bonded shove into a
+  water's H, carried enough to stretch the bond past the break
+  point. Measured failing profile: 1482 O-H breaks in 10k ticks,
+  ALL mechanical (zero thermal - the shatter was pure
+  bombardment, not the Boltzmann channel), 206/1024 waters
+  intact. The fix was the plan's named lever pulled forward from
+  phase 2: integration sub-stepping (4 sub-steps/tick, dt_sub =
+  0.25). The stability bound evaluated at dt_sub admits
+  spring_energy_scale 0.032 (worst formable pair H-H at
+  dt_sub*sqrt(k/mu) = 1.32 < 2), which puts the O-H well at
+  ~80 kT - real water's own ratio - so thermal kicks essentially
+  never reach the break point. Re-measured: 0 seeded-water O-H
+  breaks, intact 1024/1024 flat (one new water even assembled
+  from free atoms). The sub-stepping also resolves the crossings
+  the velocity clamp guarded (F13's mint), so the clamp is
+  DELETED - the re-validation contract's precondition for the
+  E-gates, done early.
+- K1.1 re-validated per the contract (the integrator binding):
+  the original window letter FAILED (+32% KE/atom, 2k-6k vs
+  6k-10k) and the measurement showed why - the quiesced
+  chemistry starved the old refrigeration (F18 below), so the
+  vent + setpoint reservoir warm the field over ~6k ticks and
+  KE/atom rides the recovery. The thermostat itself held
+  perfectly: the coupling ratio KE/atom / (kB * field warm-cell
+  average) measured a constant 1.10-1.13 at every sample through
+  the transient. Re-validated criterion: bounded throughout +
+  the coupling law (ratio in [0.8, 1.4]) + flatness over the
+  steady tail (6.25k-8k vs 8.25k-10k: KE +10.6%, bond length
+  +0.3%). Golden hash consciously updated
+  (0xDD4E_87CD_A7FD_94CE -> 0x0896_8E9C_98C9_54F6).
+- F18 (OPEN, owned by K1.4): wide-capture churn. Pairs formed
+  inside bond_search_radius (4 A) but beyond the 7.1 break
+  length (2.5 * r_eq) are phantom captures - they break
+  silently on the next chemistry pass, and each such cycle
+  absorbs formation_fraction * E from the field with no return
+  (measured: 26 of 41 runtime-formed O-H pairs broke
+  mechanically; the spring PE minted at wide-capture formation
+  flings them at up to ~4.2 A/tick relative). Corollary measured
+  in the same run: the old substrate's refrigeration machine
+  (shatter feeding formations, each absorbing 0.3*E, field
+  avg -162 C) starved itself under the K1.3 substrate - the
+  field now RECOVERS to ~26-28 C vs the 35 C setpoint over ~6k
+  ticks instead of sitting at -162. K1.4 owns whether the
+  residual deficit closes and the molecule-size distribution
+  settles; its levers include the search radius, the formation
+  fractions, and the vent/setpoint balance.
+- Substrate cost measured: 10k-tick pond runs went from ~77 s to
+  ~189 s in release (~53 t/s) - 4x force passes plus per-sub-step
+  index rebuilds. The phase-2 perf pass owns this (PLAN: no
+  optimization before the substrate is behaviorally sane; the
+  gates are correctness gates).
+
 ## Findings first analyzed before measurement
 
 - F1  Literal kB (0.008314) with pond temperatures (15-80 C) makes

@@ -1,14 +1,19 @@
-//! The tick loop and strict system ordering: energy -> velocities ->
-//! positions -> boundary -> spatial index -> bond breaking -> bond
-//! formation -> observe -> event flush.
+//! The tick loop and strict system ordering: energy -> bath ->
+//! (index -> forces -> motion) x substeps -> boundary -> index ->
+//! bond breaking -> bond formation -> observe -> event flush.
 //!
-//! [`Sim`] drives the nine steps of spec 5.1 exactly, in order;
+//! [`Sim`] drives the tick steps of spec 5.1 exactly, in order;
 //! [`TICK_ORDER`] keeps the order as inspectable data, and the test
-//! asserts the loop is its implementation. Systems read
-//! previous-tick state and write current-tick state; no system reads
-//! another system's writes within a tick. This fixed order is what
-//! makes runs deterministic and later parallelizable (guarantees
-//! G02, G14; ADR-0005).
+//! asserts the loop is its implementation. Systems read previous-
+//! tick state and write current-tick state; no system reads another
+//! system's writes within a tick. This fixed order is what makes
+//! runs deterministic and later parallelizable (guarantees G02,
+//! G14; ADR-0005). The force/motion pair is sub-stepped
+//! `integration_substeps` times per tick (spec 6.5, gate K1.3):
+//! the tick stays dt = 1 for chemistry, the thermostat, and the
+//! fields, while the short-range dynamics resolve at dt_sub =
+//! 1/n - the fix that lets bond springs sit at real-water well
+//! depths and removes the velocity clamp (F13's tunneling mint).
 //!
 //! I/O boundary: [`Sim`] produces events and never touches streams;
 //! the khem bin serializes (ndjson) and writes stdout, which keeps
@@ -29,14 +34,23 @@ use crate::observer::{Event, Observer, ObserverSystem, Timing};
 use crate::physics::{Physics, PhysicsSystem};
 use crate::world::WorldState;
 
-/// The nine systems in strict tick order (runtime spec 5.1).
+/// The tick steps in strict order (runtime spec 5.1).
 ///
 /// Kept as data, not control flow, so the order is inspectable and
-/// testable.
-pub const TICK_ORDER: [&str; 9] = [
+/// testable. The three steps marked `(sub)` are the integration
+/// sub-step block: they repeat `integration_substeps` times per
+/// tick, in the listed order. The first sub-step enters with the
+/// index already current (the previous tick's post-boundary
+/// rebuild; the bath moves velocities, not positions), so the
+/// loop rebuilds the index before every sub-step after the first
+/// - mid-tick motion would otherwise make the candidate sets
+///   stale, the exact asymmetry the sub-stepping exists to remove.
+pub const TICK_ORDER: [&str; 11] = [
     "EnergySystem::update",
-    "PhysicsSystem::update_velocities",
-    "PhysicsSystem::update_positions",
+    "PhysicsSystem::apply_bath",
+    "SpatialIndex::rebuild (sub)",
+    "PhysicsSystem::update_velocities (sub)",
+    "PhysicsSystem::update_positions (sub)",
     "PhysicsSystem::apply_boundary",
     "SpatialIndex::rebuild",
     "ChemistrySystem::break_bonds",
@@ -57,6 +71,9 @@ pub struct Sim {
     observer: Observer,
     started: Instant,
     ticks: u64,
+    /// Integration sub-steps per tick (spec 6.5, gate K1.3);
+    /// captured from the config so the loop is inspectable.
+    substeps: u32,
 }
 
 impl Sim {
@@ -64,6 +81,7 @@ impl Sim {
     /// config copy. The observer carries the run metadata
     /// (ObserverConfig) for START/TICK/END composition.
     pub fn new(config: PhysicsConfig, observer: Observer) -> Self {
+        let substeps = config.integration_substeps;
         Self {
             energy: Energy::new(config),
             physics: Physics::new(config),
@@ -71,6 +89,7 @@ impl Sim {
             observer,
             started: Instant::now(),
             ticks: 0,
+            substeps,
         }
     }
 
@@ -82,15 +101,25 @@ impl Sim {
         self.observer.start(world)
     }
 
-    /// Runs one tick (spec 5.1 steps 1-8) and returns the events it
-    /// produced, in order: chemistry's bond events first (they
-    /// happened during the tick), then the observer's tick-boundary
-    /// events. The caller serializes and flushes (step 9).
+    /// Runs one tick (spec 5.1) and returns the events it produced,
+    /// in order: chemistry's bond events first (they happened during
+    /// the tick), then the observer's tick-boundary events. The
+    /// caller serializes and flushes (step 11).
     pub fn tick(&mut self, world: &mut WorldState) -> Vec<Event> {
         world.tick += 1;
         self.energy.update(world);
-        self.physics.update_velocities(world);
-        self.physics.update_positions(world);
+        self.physics.apply_bath(world);
+        for step in 0..self.substeps {
+            // The first sub-step enters with the index current (the
+            // bath moved velocities only); every later sub-step
+            // rebuilds so the non-bonded queries follow the motion
+            // they are resolving (TICK_ORDER's `(sub)` block).
+            if step > 0 {
+                world.spatial_index.rebuild(&world.atoms);
+            }
+            self.physics.update_velocities(world);
+            self.physics.update_positions(world);
+        }
         self.physics.apply_boundary(world);
         world.spatial_index.rebuild(&world.atoms);
         self.chemistry.break_bonds(world);
@@ -131,13 +160,15 @@ mod tests {
     use crate::observer::ObserverConfig;
     use crate::world::{BoundaryType, ElementId};
 
-    /// Recorded 2026-09-05, after the foundation fixes: Langevin
-    /// thermostat (F8), smooth two-way Hooke springs with no hard
-    /// core (F9 revised), non-bonded excluded volume (F4),
-    /// wrap-aware spatial index (F11), setpoint reservoir (K1.1).
-    /// Pre-fix values live in git history. Update ONLY with a
-    /// justification in the commit message.
-    const GOLDEN_HASH: u64 = 0xDD4E_87CD_A7FD_94CE;
+    /// Recorded 2026-09-07, after the K1.3 integrator commit: the
+    /// force/motion pair is sub-stepped 4x per tick (dt_sub =
+    /// 0.25), spring_energy_scale 0.004 -> 0.032 (O-H mechanical
+    /// well ~10 kT -> ~80 kT), and the velocity clamp is REMOVED
+    /// (sub-stepping resolves the tunneling mint the clamp
+    /// guarded). Previous value 0xDD4E_87CD_A7FD_94CE (the K1.1
+    /// substrate, 2026-09-05). Pre-fix values live in git history.
+    /// Update ONLY with a justification in the commit message.
+    const GOLDEN_HASH: u64 = 0x0896_8E9C_98C9_54F6;
 
     fn observer(interval: u64) -> Observer {
         Observer::new(ObserverConfig {
@@ -167,10 +198,17 @@ mod tests {
 
     #[test]
     fn tick_order_is_fixed() {
-        assert_eq!(TICK_ORDER.len(), 9);
+        assert_eq!(TICK_ORDER.len(), 11);
         assert_eq!(TICK_ORDER[0], "EnergySystem::update");
-        assert_eq!(TICK_ORDER[4], "SpatialIndex::rebuild");
-        assert_eq!(TICK_ORDER[8], "EventQueue::flush_to_output");
+        assert_eq!(TICK_ORDER[1], "PhysicsSystem::apply_bath");
+        assert_eq!(TICK_ORDER[2], "SpatialIndex::rebuild (sub)");
+        assert_eq!(TICK_ORDER[4], "PhysicsSystem::update_positions (sub)");
+        assert_eq!(TICK_ORDER[5], "PhysicsSystem::apply_boundary");
+        assert_eq!(TICK_ORDER[6], "SpatialIndex::rebuild");
+        assert_eq!(TICK_ORDER[10], "EventQueue::flush_to_output");
+        // The sub-step block repeats integration_substeps times per
+        // tick; the flat list shows one repetition (const docs).
+        assert!(PhysicsConfig::default().integration_substeps >= 1);
     }
 
     #[test]

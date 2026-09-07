@@ -713,10 +713,14 @@ mod tests {
     #[test]
     fn bond_table_is_symplectic_stable_at_configured_scale() {
         // F2's law, generalized: symplectic Euler is stable for
-        // dt * sqrt(k / reduced_mass) < 2. The worst case is the
-        // lightest pair with the strongest bond. Pin it for every
-        // tabulated pair AND the fallback, at the configured scale.
-        let scale = PhysicsConfig::default().spring_energy_scale;
+        // dt * sqrt(k / reduced_mass) < 2, evaluated at the
+        // integration SUB-step dt_sub = 1/integration_substeps
+        // (spec 6.5, K1.3). The worst case is the lightest pair
+        // with the strongest bond. Pin it for every tabulated pair
+        // AND the fallback, at the configured scale.
+        let config = PhysicsConfig::default();
+        let scale = config.spring_energy_scale;
+        let dt = 1.0 / config.integration_substeps as f32;
         let mass = |id: ElementId| crate::elements::element(id).mass;
         for a in 0..10u8 {
             for b in a..10u8 {
@@ -739,8 +743,9 @@ mod tests {
                     };
                     let w = (energy * scale / mu).sqrt();
                     assert!(
-                        w < 2.0,
-                        "{a}-{b} order {order}: omega {w:.3} violates the bound"
+                        w * dt < 2.0,
+                        "{a}-{b} order {order}: omega*dt_sub {:.3} violates the bound",
+                        w * dt
                     );
                 }
             }

@@ -2,24 +2,36 @@
 //! toward the local field temperature, spec 6.1), temperature
 //! diffusion and setpoint relaxation, smooth two-way Hooke bond
 //! springs, non-bonded excluded volume, pressure-gradient forces,
-//! position updates, boundary conditions.
+//! sub-stepped integration, boundary conditions.
 //!
 //! Phase-1 placement decisions, to fold into the spec at revision
 //! (ADR-0006: specs are drafts until validated):
 //!
 //! - Temperature diffusion (spec 6.2) runs at the top of
-//!   [`PhysicsSystem::update_velocities`], before the kicks sample
-//!   the field; spec 5.1 names no slot for it.
+//!   [`PhysicsSystem::apply_bath`], before the kicks sample the
+//!   field; spec 5.1 names no slot for it.
+//! - The tick is dt = 1 for chemistry, the thermostat, and the
+//!   fields, but the force/integration pair is SUB-STEPPED (spec
+//!   6.5, gate K1.3): `integration_substeps` passes per tick at
+//!   dt_sub = 1/n. This is the proper fix for the tunneling mint
+//!   (F13) - an atom crossing the non-bonded zone in several
+//!   sub-steps samples the force symmetrically - so the velocity
+//!   clamp is gone, and the spring stability bound is evaluated
+//!   at dt_sub, which deepened the bond wells ~n^2: the O-H
+//!   mechanical well is ~80 kT (real water's own ratio), and a
+//!   thermal kick essentially never stretches a bond to the 7.1
+//!   break point.
 //! - Every per-atom effect is computed in read-only passes that
 //!   accumulate into scratch arrays, then applied in one mutable
-//!   pass. The compute/apply split is the shape a V2 region-parallel
-//!   implementation needs, and it keeps each pass free of tangled
-//!   borrows (ADR-0005, runtime spec 10.2).
-//! - Constants are the spec 11 tuned set (2026-09-05, findings
-//!   F1-F16 in docs/research/abstraction-notes.md): the thermostat
-//!   (F8) and the smooth-spring revision (F9) are measured fixes,
-//!   the K1.1 gate is passed, and the harness is the judge of
-//!   every further retune.
+//!   pass per sub-step. The compute/apply split is the shape a V2
+//!   region-parallel implementation needs, and it keeps each pass
+//!   free of tangled borrows (ADR-0005, runtime spec 10.2).
+//! - Constants are the spec 11 tuned set (2026-09-07, findings
+//!   F1-F16 in docs/research/abstraction-notes.md plus the K1.3
+//!   sub-stepping session): every retune is a measured fix, the
+//!   passed gates are re-validated in the commit that moves their
+//!   operating assumptions, and the harness is the judge of every
+//!   further retune.
 //!
 //! RNG discipline (ADR-0005): this system is the first RNG consumer
 //! in the tick (the energy system, step 1, draws nothing). Exactly
@@ -33,17 +45,26 @@ use crate::config::PhysicsConfig;
 use crate::world::{AtomId, BoundaryType, WorldState};
 
 /// The physics system interface, decomposed per the tick order
-/// (runtime spec 5.1: update_velocities, update_positions,
-/// apply_boundary). v0.1 compiles exactly one implementation; the
-/// trait exists so future plugin loading does not require
-/// restructuring (runtime spec 10.4).
+/// (runtime spec 5.1: apply_bath once per tick, then the
+/// update_velocities / update_positions pair repeated
+/// `integration_substeps` times, then apply_boundary). v0.1
+/// compiles exactly one implementation; the trait exists so
+/// future plugin loading does not require restructuring (runtime
+/// spec 10.4).
 pub trait PhysicsSystem {
-    /// Temperature diffusion, thermal kicks, bond spring forces,
-    /// pressure-gradient forces (spec 6.1-6.4).
+    /// Temperature diffusion, setpoint relaxation, and the
+    /// Langevin thermal bath (spec 6.1, 6.2) - once per tick,
+    /// before the integration sub-steps. The tick's only physics
+    /// RNG consumer.
+    fn apply_bath(&mut self, world: &mut WorldState);
+    /// One integration sub-step's forces (springs, excluded
+    /// volume, pressure; spec 6.1, 6.3-6.5) applied to velocities
+    /// at dt_sub (F = ma).
     fn update_velocities(&mut self, world: &mut WorldState);
-    /// Position integration, dt = 1.0 (spec 6.5).
+    /// One integration sub-step's position update (spec 6.5) at
+    /// dt_sub; the sub-steps sum to dt = 1 per tick.
     fn update_positions(&mut self, world: &mut WorldState);
-    /// Boundary normalization (spec 6.6; guarantee G05).
+    /// Boundary normalization (spec 6.7; guarantee G05).
     fn apply_boundary(&mut self, world: &mut WorldState);
 }
 
@@ -54,10 +75,11 @@ pub trait PhysicsSystem {
 /// every tick of a run.
 pub struct Physics {
     config: PhysicsConfig,
-    /// Per-atom thermal kicks for this tick (RNG output).
-    kx: Vec<f32>,
-    ky: Vec<f32>,
-    /// Per-atom force accumulators for this tick (springs, pressure).
+    /// Integration time per sub-step: 1 / integration_substeps.
+    /// The tick as a whole stays dt = 1 (spec 6.5).
+    dt: f32,
+    /// Per-atom force accumulators for this sub-step (springs,
+    /// excluded volume, pressure).
     fx: Vec<f32>,
     fy: Vec<f32>,
     /// Per-cell scratch for temperature diffusion.
@@ -66,10 +88,10 @@ pub struct Physics {
 
 impl Physics {
     pub fn new(config: PhysicsConfig) -> Self {
+        assert!(config.integration_substeps >= 1, "at least one sub-step");
         Self {
+            dt: 1.0 / config.integration_substeps as f32,
             config,
-            kx: Vec::new(),
-            ky: Vec::new(),
             fx: Vec::new(),
             fy: Vec::new(),
             diffused: Vec::new(),
@@ -144,31 +166,39 @@ impl Physics {
         let gamma = self.config.thermostat_damping;
         let noise = (gamma * (2.0 - gamma)).sqrt();
         let ke_scale = self.config.ke_field_scale;
-        self.kx.clear();
-        self.ky.clear();
-        for atom in &world.atoms {
-            if !atom.alive {
-                self.kx.push(0.0);
-                self.ky.push(0.0);
+        for i in 0..world.atoms.len() {
+            // Index-based loop: the write below borrows atoms[i]
+            // mutably while rng and temp_field are borrowed through
+            // their own fields (disjoint borrows).
+            let (x, y, vx, vy, mass, alive) = {
+                let atom = &world.atoms[i];
+                (
+                    atom.x,
+                    atom.y,
+                    atom.vx,
+                    atom.vy,
+                    world.element(atom.element).mass,
+                    atom.alive,
+                )
+            };
+            if !alive {
                 continue;
             }
-            let t = world.temp_field.get(atom.x, atom.y).max(0.0);
-            let mass = world.element(atom.element).mass;
+            let t = world.temp_field.get(x, y).max(0.0);
             let s = noise * (kb * t / mass).sqrt();
-            let vx_new = atom.vx * (1.0 - gamma) + (world.rng.normal(0.0, s as f64) as f32);
-            let vy_new = atom.vy * (1.0 - gamma) + (world.rng.normal(0.0, s as f64) as f32);
+            let vx_new = vx * (1.0 - gamma) + (world.rng.normal(0.0, s as f64) as f32);
+            let vy_new = vy * (1.0 - gamma) + (world.rng.normal(0.0, s as f64) as f32);
             // The signed KE delta is the COMPLETE exchange: the
             // noise energy is already inside vx_new (the field pays
             // for it there), the damping removal likewise. A
             // separate "injected" term double-counts and bleeds the
             // field - found while diagnosing the furnace; the old
             // drift test's tolerance masked the bleed.
-            let delta_ke = 0.5
-                * mass
-                * (atom.vx * atom.vx + atom.vy * atom.vy - vx_new * vx_new - vy_new * vy_new);
-            world.temp_field.add(atom.x, atom.y, delta_ke * ke_scale);
-            self.kx.push(vx_new);
-            self.ky.push(vy_new);
+            let delta_ke = 0.5 * mass * (vx * vx + vy * vy - vx_new * vx_new - vy_new * vy_new);
+            world.temp_field.add(x, y, delta_ke * ke_scale);
+            let atom = &mut world.atoms[i];
+            atom.vx = vx_new;
+            atom.vy = vy_new;
         }
     }
 
@@ -252,7 +282,7 @@ impl Physics {
         }
     }
 
-    /// Non-bonded excluded volume (finding F4's fix, spec 6.5):
+    /// Non-bonded excluded volume (finding F4's fix, spec 6.6):
     /// every UNBONDED live pair closer than its cutoff
     /// `(radius_a + radius_b) * non_bonded_margin` is pushed apart
     /// with `F = non_bonded_repulsion * (cutoff - r)` along the
@@ -315,58 +345,47 @@ impl Physics {
 }
 
 impl Physics {
-    /// The apply half of the compute/apply split: writes each live
-    /// atom's velocity from the thermostat result plus the force
-    /// accumulators, then applies the speed clamp.
+    /// The apply half of the compute/apply split: adds one
+    /// sub-step's accumulated forces to each live atom's velocity,
+    /// divided by mass (F = ma), scaled by dt_sub.
     ///
-    /// kx/ky carry the COMPLETE post-bath velocity (the thermostat
-    /// consumes the old velocity); fx/fy are FORCES, divided by
-    /// mass here (F = ma). Set, not add - adding would compound
-    /// the velocity every tick. The founding spec applied forces
-    /// without /mass; with unit-mass atoms hidden in H-H tests,
-    /// that minted ~(0.5*m - 1) * F^2 energy per heavy-atom
-    /// interaction (the one-water probe isolated it: m=16 O,
-    /// ~8*F^2 per spring-tick - the pond furnace). Dead atoms are
-    /// frozen: nothing in this system touches them.
-    fn apply_velocities(&mut self, world: &mut WorldState) {
+    /// The founding spec applied forces without /mass; with
+    /// unit-mass atoms hidden in H-H tests, that minted
+    /// ~(0.5*m - 1) * F^2 energy per heavy-atom interaction (the
+    /// one-water probe isolated it: m=16 O, ~8*F^2 per spring-tick
+    /// - the pond furnace). Dead atoms are frozen: nothing in
+    ///   this system touches them.
+    ///
+    /// No velocity clamp: the integrator sub-steps resolve the
+    /// fast passes the clamp guarded (F13; spec 6.1) - an atom
+    /// crossing the non-bonded zone in several sub-steps samples
+    /// the force symmetrically, so no tunneling mint - and the
+    /// re-validation contract required the clamp's removal before
+    /// the E-gates run their long horizons.
+    fn apply_forces(&mut self, world: &mut WorldState) {
         // Mass lookup without borrowing world against the mutable
         // atom loop (Arc clone, cheap).
         let table = world.element_table.clone();
-        let vmax = self.config.max_atom_speed;
-        let ke_scale = self.config.ke_field_scale;
+        let dt = self.dt;
         for (i, atom) in world.atoms.iter_mut().enumerate() {
             if !atom.alive {
                 continue;
             }
             let mass = table[atom.element.0 as usize].mass;
-            let (vx, vy) = (
-                self.kx[i] + self.fx[i] / mass,
-                self.ky[i] + self.fy[i] / mass,
-            );
-            // Numerical guard (config doc): unresolved fast passes
-            // through the short-range forces mint energy; clamp the
-            // speed and deposit what the clamp removed so the
-            // ledger stays exact.
-            let speed2 = vx * vx + vy * vy;
-            let (vx, vy) = if speed2 > vmax * vmax {
-                let scale = vmax / speed2.sqrt();
-                let removed = 0.5 * mass * (speed2 - vmax * vmax);
-                world.temp_field.add(atom.x, atom.y, removed * ke_scale);
-                (vx * scale, vy * scale)
-            } else {
-                (vx, vy)
-            };
-            atom.vx = vx;
-            atom.vy = vy;
+            atom.vx += self.fx[i] / mass * dt;
+            atom.vy += self.fy[i] / mass * dt;
         }
     }
 }
 
 impl PhysicsSystem for Physics {
-    fn update_velocities(&mut self, world: &mut WorldState) {
-        let n = world.atoms.len();
+    fn apply_bath(&mut self, world: &mut WorldState) {
         self.diffuse_temperature(world);
         self.thermal_bath(world);
+    }
+
+    fn update_velocities(&mut self, world: &mut WorldState) {
+        let n = world.atoms.len();
         self.fx.clear();
         self.fy.clear();
         self.fx.resize(n, 0.0);
@@ -374,18 +393,20 @@ impl PhysicsSystem for Physics {
         self.spring_forces(world);
         self.non_bonded_forces(world);
         self.pressure_forces(world);
-        self.apply_velocities(world);
+        self.apply_forces(world);
     }
 
     fn update_positions(&mut self, world: &mut WorldState) {
+        let dt = self.dt;
         for atom in &mut world.atoms {
             if !atom.alive {
                 continue;
             }
-            // dt = 1.0: one tick = one femtosecond at default scale
-            // (spec 6.5).
-            atom.x += atom.vx;
-            atom.y += atom.vy;
+            // Sub-step position update (spec 6.5); the sub-steps
+            // sum to dt = 1 per tick (one tick = one femtosecond at
+            // default scale).
+            atom.x += atom.vx * dt;
+            atom.y += atom.vy * dt;
         }
     }
 
@@ -429,7 +450,7 @@ impl PhysicsSystem for Physics {
                     .filter(|a| a.alive && (a.x < 0.0 || a.x >= w || a.y < 0.0 || a.y >= h))
                     .map(|a| a.id)
                     .collect();
-                // Bonds break before the atom dies (spec 6.6);
+                // Bonds break before the atom dies (spec 6.7);
                 // break_bond updates both sides.
                 for id in leaving {
                     let slots = world.atom(id).bonds;
@@ -461,7 +482,7 @@ mod tests {
         // Zero temperature: sigma = 0, the atom stays at rest.
         let mut cold = world(1, BoundaryType::Wrap);
         let a = cold.spawn_atom(ElementId(3), 50.0, 50.0); // O
-        physics().update_velocities(&mut cold);
+        physics().apply_bath(&mut cold);
         let (vx, vy) = (cold.atom(a).vx, cold.atom(a).vy);
         assert_eq!((vx, vy), (0.0, 0.0));
 
@@ -469,7 +490,7 @@ mod tests {
         let mut hot = world(1, BoundaryType::Wrap);
         let b = hot.spawn_atom(ElementId(3), 50.0, 50.0);
         hot.temp_field.set(50.0, 50.0, 400.0);
-        physics().update_velocities(&mut hot);
+        physics().apply_bath(&mut hot);
         let dv = hot.atom(b).vx.hypot(hot.atom(b).vy);
         assert!(dv > 0.1, "hot oxygen kick magnitude {dv}");
 
@@ -478,7 +499,7 @@ mod tests {
         let mut light = world(1, BoundaryType::Wrap);
         let c = light.spawn_atom(ElementId(0), 50.0, 50.0);
         light.temp_field.set(50.0, 50.0, 400.0);
-        physics().update_velocities(&mut light);
+        physics().apply_bath(&mut light);
         let dv_light = light.atom(c).vx.hypot(light.atom(c).vy);
         assert!(dv_light > dv, "H kick {dv_light} should exceed O kick {dv}");
     }
@@ -488,34 +509,40 @@ mod tests {
         let mut w = world(1, BoundaryType::Wrap);
         let a = w.spawn_atom(ElementId(0), 50.0, 50.0); // H
         let b = w.spawn_atom(ElementId(0), 52.0, 50.0); // H, r_eq = 1.06
-        w.form_bond(a, b, 1, 1.0); // weak spring so dt=1 does not overshoot
-        physics().update_velocities(&mut w);
+        w.form_bond(a, b, 1, 1.0); // weak spring so the pair does not fly
+        // One full tick of integration sub-steps (bath skipped:
+        // zero field, no kicks; positions move only under forces).
+        let mut sys = physics();
+        for _ in 0..PhysicsConfig::default().integration_substeps {
+            sys.update_velocities(&mut w);
+            sys.update_positions(&mut w);
+        }
         assert!(w.atom(a).vx > 0.0, "a should move toward b");
         assert!(w.atom(b).vx < 0.0, "b should move toward a");
-        physics().update_positions(&mut w);
         let d = w.atom(b).x - w.atom(a).x;
-        assert!(d < 2.0, "distance {d} should shrink");
+        assert!(d < 1.99, "distance {d} should shrink");
     }
 
     #[test]
     fn unbonded_atoms_push_apart_within_cutoff() {
         // F4 law: excluded volume. Two free H 0.5 A apart (cutoff
         // 1.59) push apart; the force is the soft linear core, not
-        // the bonded hard core.
+        // the bonded hard core. One sub-step applies F/m * dt_sub:
+        // scale * (cutoff - r) * dt_sub = 1.09 * 0.25 ~ 0.27.
         let mut w = world(1, BoundaryType::Wrap);
         let a = w.spawn_atom(ElementId(0), 50.0, 50.0);
         let b = w.spawn_atom(ElementId(0), 50.5, 50.0);
         // Outside the tick loop the index must be built by hand; in
-        // the loop, update_velocities consumes the previous tick's
-        // rebuild (read-previous-tick state).
+        // the loop, each sub-step after the first rebuilds it.
         w.spatial_index.rebuild(&w.atoms);
         physics().update_velocities(&mut w);
         assert!(w.atom(a).vx < 0.0, "a pushed away");
         assert!(w.atom(b).vx > 0.0, "b pushed away");
-        // Magnitude: scale * (cutoff - r) = 1.0 * (1.59 - 0.5) ~ 1.09.
+        // Magnitude: the sub-step impulse law, F/m * dt_sub.
+        let dt = 1.0 / PhysicsConfig::default().integration_substeps as f32;
         assert!(
-            (w.atom(b).vx - 1.09).abs() < 0.15,
-            "soft-core magnitude {}",
+            (w.atom(b).vx - 1.09 * dt).abs() < 0.05,
+            "soft-core sub-step impulse {}",
             w.atom(b).vx
         );
 
@@ -613,12 +640,14 @@ mod tests {
         w.temp_field.set(50.0, 50.0, 35.0);
         let mut sys = physics();
         for _ in 0..500 {
-            sys.update_velocities(&mut w);
+            sys.apply_bath(&mut w);
         }
         let speed = w.atom(a).vx.hypot(w.atom(a).vy);
         // O at 35 C: sigma = 0.135; thermal speed ~ sqrt(2) * sigma
-        // ~ 0.19. Band 2.0 leaves generous statistical room.
-        assert!(speed < 2.0, "relaxed speed {speed} should be thermal");
+        // ~ 0.19. No velocity clamp exists anymore (sub-stepping
+        // replaced it): 1.0 is a real 7-sigma tail bound, not a
+        // clamp value.
+        assert!(speed < 1.0, "relaxed speed {speed} should be thermal");
     }
 
     #[test]
@@ -630,7 +659,7 @@ mod tests {
         w.atom_mut(a).vx = 20.0;
         let mut sys = physics();
         for _ in 0..50 {
-            sys.update_velocities(&mut w);
+            sys.apply_bath(&mut w);
         }
         let cell = w.temp_field.get(50.0, 50.0);
         assert!(cell > 0.0, "atom KE must warm the frozen cell, got {cell}");
@@ -665,7 +694,7 @@ mod tests {
         let before = total(&w);
         let mut sys = Physics::new(config);
         for _ in 0..500 {
-            sys.update_velocities(&mut w);
+            sys.apply_bath(&mut w);
         }
         let after = total(&w);
         // Tolerance is f32 ledger accumulation over 500 ticks
@@ -683,18 +712,22 @@ mod tests {
     fn bonded_compression_is_smooth_and_bounded() {
         // F9 law (revised): compression repels through the same
         // smooth Hooke term, bounded by k * r_eq - no hard core, no
-        // discontinuity, no cannon.
+        // discontinuity, no cannon. One sub-step applies at most
+        // the analytic single-SUB-step impulse k * r_eq * dt_sub
+        // per atom (the K1.2 harness probe pins the per-tick
+        // bound).
         let mut w = world(1, BoundaryType::Wrap);
         let a = w.spawn_atom(ElementId(0), 50.0, 50.0);
         let b = w.spawn_atom(ElementId(0), 50.1, 50.0);
-        w.form_bond(a, b, 1, 436.0); // k = 0.872; F at r=0.1 ~ -0.86
+        w.form_bond(a, b, 1, 436.0); // k = 13.95; F at r=0.1 ~ -13.4
         physics().update_velocities(&mut w);
         assert!(w.atom(a).vx < 0.0, "compressed bond pushes a away");
         assert!(w.atom(b).vx > 0.0, "compressed bond pushes b away");
-        let bound = 436.0 * PhysicsConfig::default().spring_energy_scale * 1.06; // k * r_eq
+        let dt = 1.0 / PhysicsConfig::default().integration_substeps as f32;
+        let bound = 436.0 * PhysicsConfig::default().spring_energy_scale * 1.06 * dt; // k*r_eq*dt
         assert!(
             w.atom(b).vx <= bound,
-            "compression force {} exceeds k*r_eq {}",
+            "compression impulse {} exceeds k*r_eq*dt_sub {}",
             w.atom(b).vx,
             bound
         );
@@ -703,16 +736,25 @@ mod tests {
     #[test]
     fn bonded_pair_across_wrap_seam_is_not_shredded() {
         // Minimum-image convention: two atoms 1 A apart ACROSS the
-        // wrap seam must feel the spring for 1 A, not 119 A. The
-        // pond starts with seam-straddling waters (lattice at 0.75
-        // A plus 1.19 A bond length), so this law is load-bearing
-        // for K1, not a corner case.
+        // wrap seam must feel the spring for 1 A, not 99 A. The
+        // pair sits slightly compressed (1.00 < r_eq 1.06), so the
+        // honest law is a mild REPULSION apart the short way - a
+        // broken min-image reads the raw 99 A delta as a huge
+        // stretch and shreds the pair (measured pre-F10: +-103
+        // A/tick). The pond starts with seam-straddling waters, so
+        // this law is load-bearing for K1, not a corner case.
         let mut w = world(1, BoundaryType::Wrap);
-        let a = w.spawn_atom(ElementId(0), 0.3, 50.0);
-        let b = w.spawn_atom(ElementId(0), 99.7, 50.0); // 1 A apart across the seam
+        let a = w.spawn_atom(ElementId(0), 0.5, 50.0);
+        let b = w.spawn_atom(ElementId(0), 99.5, 50.0); // 1 A apart across the seam
         w.form_bond(a, b, 1, 436.0);
         physics().update_velocities(&mut w);
         let (va, vb) = (w.atom(a).vx, w.atom(b).vx);
+        // Compressed: b sits 1 A to a's LEFT across the seam, so
+        // the repulsion pushes a +x and b -x - apart the short way.
+        assert!(
+            va > 0.0 && vb < 0.0,
+            "seam pair must push apart the short way, got {va} / {vb}"
+        );
         assert!(
             va.abs() < 1.0 && vb.abs() < 1.0,
             "seam pair must feel a 1 A spring, got velocities {va} / {vb}"
@@ -753,7 +795,7 @@ mod tests {
         // 10x10 cells; heat the center cell only.
         w.temp_field.set(50.0, 50.0, 100.0);
         let before: f32 = w.temp_field.data.iter().sum();
-        physics().update_velocities(&mut w);
+        physics().apply_bath(&mut w);
         let center = w.temp_field.get(50.0, 50.0);
         let side = w.temp_field.get(45.0, 50.0);
         let after: f32 = w.temp_field.data.iter().sum();
@@ -771,7 +813,19 @@ mod tests {
         let a = w.spawn_atom(ElementId(0), 50.0, 50.0);
         w.atom_mut(a).vx = 1.5;
         w.atom_mut(a).vy = -0.5;
-        physics().update_positions(&mut w);
+        // One sub-step moves v * dt_sub; a full tick of sub-steps
+        // sums back to dt = 1 (spec 6.5).
+        let mut sys = physics();
+        sys.update_positions(&mut w);
+        let dt = 1.0 / PhysicsConfig::default().integration_substeps as f32;
+        assert_eq!(
+            (w.atom(a).x, w.atom(a).y),
+            (50.0 + 1.5 * dt, 50.0 - 0.5 * dt)
+        );
+        let substeps = PhysicsConfig::default().integration_substeps;
+        for _ in 1..substeps {
+            sys.update_positions(&mut w);
+        }
         assert_eq!((w.atom(a).x, w.atom(a).y), (51.5, 49.5));
     }
 
@@ -835,9 +889,12 @@ mod tests {
             w.form_bond(a, b, 1, 413.0);
             let mut sys = physics();
             for _ in 0..25 {
-                sys.update_velocities(&mut w);
-                sys.update_positions(&mut w);
-                sys.apply_boundary(&mut w);
+                // The tick shape: bath once, sub-steps after.
+                sys.apply_bath(&mut w);
+                for _ in 0..PhysicsConfig::default().integration_substeps {
+                    sys.update_velocities(&mut w);
+                    sys.update_positions(&mut w);
+                }
             }
             w
         }
@@ -858,9 +915,11 @@ mod tests {
         let b = w.spawn_atom(ElementId(0), 52.0, 50.0);
         w.form_bond(a, b, 1, 1.0);
         w.atom_mut(a).alive = false;
+        // Forces only (the bath is a separate step; the frozen field
+        // would kick nothing anyway).
         physics().update_velocities(&mut w);
         // No panic, and the live atom was not flung by a force
-        // against a dead partner (zero temperature: kicks are zero).
+        // against a dead partner.
         assert_eq!(w.atom(b).vx, 0.0);
         assert_eq!(w.bond(BondId(0)).atom_b, b, "the bond still points at b");
     }

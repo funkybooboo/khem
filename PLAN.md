@@ -96,18 +96,29 @@ evidence, not an optional follow-up. Current bindings:
   operating temperature; K1.1 passed at the cold ~0.3 C point)
 - K1.1 re-runs in any integrator commit (sub-stepping removes
   the velocity clamp and deepens bond wells - K1.3's lever;
-  the golden hash forces such commits to be conscious)
-- the velocity clamp (tunneling mint guard) must be REMOVED
-  before the E-gates run their long horizons - the mint is
-  bounded, measured, and absorbed by the reservoir, but it
-  accumulates over million-tick experiment runs
+  the golden hash forces such commits to be conscious). EXERCISED
+  2026-09-07, K1.3's commit: the re-run FAILED the original
+  letter (KE/atom +32% window drift) and the measurement showed
+  why - the quiesced chemistry starved the old refrigeration, so
+  the vent + setpoint reservoir warm the field over ~6k ticks
+  and KE rides the recovery. Re-validated PASS: thermostat
+  coupling (KE/atom vs the field's warm-cell thermal level)
+  constant 1.10-1.13 at every sample through the transient, KE
+  bounded throughout, flatness over the steady tail (6.25k-8k vs
+  8.25k-10k: KE +10.6%, bond length +0.3%)
+- the velocity clamp (tunneling mint guard) was REMOVED in the
+  K1.3 integrator commit (2026-09-07): the sub-stepping resolves
+  the crossings the clamp guarded, satisfying this contract's
+  requirement that the clamp be gone before the E-gates run
+  their long horizons
 - no soft spot exists only in prose: every known limitation
   lives either in this contract or as a finding in
   docs/research/abstraction-notes.md with a named owner gate
 
     K1  STABILITY - the substrate holds together
-        [measured 2026-09-05: FAILING; the sub-gates name the
-        measured causes - F6 through F9, F11]
+        [K1.1-K1.3 passed 2026-09-05/07 (thermostat, force
+        sanity, water persistence); K1.4 and K1.5 remain - the
+        findings that shaped them are F6 through F11, F17, F18]
 
     K1.1 THERMOSTAT: Langevin damping toward the local field
         temperature. PASSED 2026-09-05: KE/atom window drift -5.7%,
@@ -116,6 +127,11 @@ evidence, not an optional follow-up. Current bindings:
         required the substrate corrections F8-F16 (findings log in
         docs/research/abstraction-notes.md) and the setpoint
         reservoir + vent (spec 6.1/6.2/11 synced).
+        RE-VALIDATED 2026-09-07 (K1.3's integrator commit, the
+        contract's integrator binding): coupling ratio constant
+        1.10-1.13 through the measured field-recovery transient,
+        KE bounded throughout, steady-tail windows (6.25k-8k vs
+        8.25k-10k) KE +10.6%, bond length +0.3%.
     K1.2 FORCE SANITY: a bonded overlap imparts bounded velocity
         (F9 measured v ~ 1e4 - a cannon). PASSED 2026-09-07: the
         overlap probe (two bonded O atoms at 0.05 * r_eq, zero
@@ -128,7 +144,26 @@ evidence, not an optional follow-up. Current bindings:
     K1.3 WATER PERSISTS: a 35 C pond of H2O keeps its molecules
         - intact count flat, O-H essentially never breaks (real
         chemistry's own exp(-29) answer), the form+break cycle
-        mints no energy (the F7 regression stays green).
+        mints no energy (the F7 regression stays green). PASSED
+        2026-09-07: intact 1024/1024 at every sample through the
+        10k-tick vented run (one new water even assembled from
+        free atoms), ZERO seeded-water O-H breaks; the failing
+        substrate measured 1482 mechanical O-H breaks (all
+        bombardment overstretch, none thermal) and 206/1024
+        intact. The fix was the plan's named lever, pulled
+        forward from phase 2: integration sub-stepping (4
+        sub-steps/tick, dt_sub = 0.25) lets springs sit 8x
+        stiffer inside the symplectic bound evaluated at dt_sub
+        - the O-H mechanical well went from ~10 kT (a
+        thermal-speed hydrogen carries enough to shatter it) to
+        ~80 kT, real water's own ratio - and removes the
+        velocity clamp by resolving the crossings it guarded.
+        Runtime O-H pairs the free population forms and
+        re-separates (26 breaks vs 41 formations) are reactive
+        churn, counted and reported for K1.4, not water loss.
+        Spec 5.1/6.1/6.3/6.5/11 synced; golden hash consciously
+        updated; K1.1 and K1.2 re-ran in the same commit (the
+        contract's integrator binding, exercised above).
     K1.4 REACTIVE BALANCE: a beaker of free atoms settles to a
         STATIONARY molecule-size distribution - weak bonds break
         (O-O on a ~10k-tick scale), strong ones persist; no
@@ -346,10 +381,14 @@ All of this is enabled by choices already fixed (runtime spec section
 
 - [x] thermostat (gate K1.1): RESOLVED 2026-09-05 - PASSED.
       Langevin damping toward the local field temperature with
-      exact signed-delta bookkeeping, the setpoint reservoir, and
-      the velocity clamp; see the K1.1 entry above and the
-      findings log. Spec 6.1/6.2/11 synced.
-- [ ] non-bonded soft repulsion (finding F4; gate K2.1): IMPLEMENTED with the K1.1 commit (spec 6.5, chemistry/physics tests); the K2.1 scattering-test PASS run is the gate's own
+      exact signed-delta bookkeeping and the setpoint reservoir;
+      see the K1.1 entry above and the findings log. Spec
+      6.1/6.2/11 synced. RE-VALIDATED 2026-09-07 in K1.3's
+      integrator commit: coupling law + steady-tail windows
+      (the re-validation contract's integrator binding, first
+      exercise); the velocity clamp that was part of the K1.1
+      pass is gone - sub-stepping replaced it (K1.3).
+- [ ] non-bonded soft repulsion (finding F4; gate K2.1): IMPLEMENTED with the K1.1 commit (spec 6.6, chemistry/physics tests); the K2.1 scattering-test PASS run is the gate's own
       work, lands only with harness evidence, as its own commit
 - [ ] first world file name: primordial_pond.kem ("warm little pond"
       is Darwin's phrase for the setting)

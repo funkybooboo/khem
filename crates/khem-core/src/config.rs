@@ -60,17 +60,35 @@ pub struct PhysicsConfig {
     pub diffusion_rate: f32,
     pub pressure_sensitivity: f32,
     /// Spring constant scale: k = bond.energy * scale (spec 6.3).
-    /// Retuned 2026-09-05 from the founding 0.01 (F2: the
-    /// integrator is symplectic Euler; stability is
-    /// dt * sqrt(k / reduced_mass) < 2, and 0.01 put light-pair
-    /// bonds far over the bound). 0.002 was stable but floppy:
-    /// measured water O-H mean 2.46 A vs 1.19 equilibrium (thermal
-    /// kicks vs spring stiffness). 0.004 doubles rigidity with the
-    /// worst tabulated case (H-H, reduced mass 0.5) at
-    /// sqrt(436 * 0.004 / 0.5) = 1.87, inside the bound; the
-    /// bond_table_symplectic_stability test pins this law for
-    /// every row.
+    /// Retuned 2026-09-07 from 0.004 (the dt=1 stability bound
+    /// dt * sqrt(k / reduced_mass) < 2 capped it there; at 0.004
+    /// the O-H mechanical well - the stretch energy at the 7.1
+    /// break point - was only ~10 kT, and a thermal-speed hydrogen
+    /// or one non-bonded shove carried enough to shatter water:
+    /// gate K1.3 measured 1482 mechanical O-H breaks in 10k ticks,
+    /// 75% of the pond). With the integrator sub-stepping n times
+    /// per tick the bound is evaluated at dt_sub = 1/n, and
+    /// 0.032 puts the worst formable pair (H-H order 1) at
+    /// dt_sub * sqrt(k/mu) = 1.32 < 2 while deepening the O-H well
+    /// to ~80 kT - real water's own ratio - so the thermostat at
+    /// 35 C essentially never stretches a bond to the break point
+    /// (needs ~7 A/tick relative, ~13 sigma). Pinned per row by
+    /// the bond_table_symplectic_stability test.
     pub spring_energy_scale: f32,
+    /// Integration sub-steps per tick (spec 6.5, gate K1.3): the
+    /// force/integration pair runs this many times per tick with
+    /// dt_sub = 1 / integration_substeps, so the tick stays dt = 1
+    /// for chemistry, the thermostat, and the fields while the
+    /// short-range dynamics resolve at dt_sub. This is the proper
+    /// fix for the tunneling mint (F13): an atom crossing the
+    /// ~1.6-4 A non-bonded zone in several sub-steps samples the
+    /// force symmetrically - no energy mint - which is why the
+    /// velocity clamp could be REMOVED with this change (the
+    /// re-validation contract required removing it before the
+    /// E-gates). 4 gives dt_sub = 0.25: sub-step displacement of
+    /// the fastest thermal atoms (~2-3 A/tick tail) stays under
+    /// half the narrowest interaction zone.
+    pub integration_substeps: u32,
     /// Non-bonded soft-core strength (finding F4's fix): every
     /// UNBONDED pair closer than its cutoff is pushed apart with
     /// force `non_bonded_repulsion * (cutoff - r)`. Without excluded
@@ -120,21 +138,6 @@ pub struct PhysicsConfig {
     /// nothing). Region declarations (phase 3) are the
     /// setpoint source; the phase-1 pond declares 35 C.
     pub field_relax_rate: f32,
-    /// Velocity clamp (numerical guard, not physics): the
-    /// non-bonded interaction range is ~1.6-5 A while fast atoms
-    /// move 3-18 A per tick; unresolved passes sample the force
-    /// asymmetrically and mint energy (measured: collision cascade
-    /// to max_v ~18 and a 2200 C field). Atoms above this speed are
-    /// clamped and the removed KE is deposited into the local
-    /// field, keeping the ledger exact. Default 2.0 A/tick (~3.7
-    /// sigma for H at pond temperature - thermal dynamics are
-    /// untouched). 3.0 re-opened the tunneling mint (measured:
-    /// full dissociation, field to 2000 C); 2.0 sits below the
-    /// mint threshold, and the over-stretched bonds it cannot
-    /// reel in are handled by mechanical dissociation
-    /// (bond_break_factor) - which releases no heat, so breaks
-    /// cannot cascade. Proper collision sub-stepping is phase 2.
-    pub max_atom_speed: f32,
     /// Formation capture gate: pairs with relative speed above
     /// this do not bond (spec 7.2, v0 fill). A bond forming between
     /// atoms flying past each other cannot absorb their relative
@@ -171,7 +174,8 @@ impl Default for PhysicsConfig {
             ke_field_scale: 0.01,
             diffusion_rate: 0.1,
             pressure_sensitivity: 0.01,
-            spring_energy_scale: 0.004,
+            spring_energy_scale: 0.032,
+            integration_substeps: 4,
             non_bonded_repulsion: 1.0,
             non_bonded_margin: 1.5,
             convection_rate: 0.001,
@@ -186,7 +190,6 @@ impl Default for PhysicsConfig {
             t_width: 20.0,
             max_form_speed: 1.5,
             bond_break_factor: 2.5,
-            max_atom_speed: 2.0,
             field_relax_rate: 0.002,
             spatial_cell_size: 5.0,
             field_cell_size: 10.0,
@@ -214,7 +217,9 @@ mod tests {
         assert_eq!(c.ke_field_scale, 0.01);
         assert_eq!(c.non_bonded_repulsion, 1.0);
         assert_eq!(c.non_bonded_margin, 1.5);
-        assert_eq!(c.spring_energy_scale, 0.004);
+        assert_eq!(c.non_bonded_margin, 1.5);
+        assert_eq!(c.spring_energy_scale, 0.032);
+        assert_eq!(c.integration_substeps, 4);
         assert_eq!(
             c.release_fraction, c.formation_fraction,
             "cycle conservation"
@@ -231,7 +236,6 @@ mod tests {
         assert_eq!(c.t_width, 20.0);
         assert_eq!(c.max_form_speed, 1.5);
         assert_eq!(c.bond_break_factor, 2.5);
-        assert_eq!(c.max_atom_speed, 2.0);
         assert_eq!(c.field_relax_rate, 0.002);
         assert_eq!(c.uv_sensitivity.of_order(2), 0.0003);
         assert_eq!(c.uv_sensitivity.of_order(0), 0.0);

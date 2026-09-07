@@ -25,12 +25,12 @@ and one command streams a live world to stdout:
     cargo run --release -p khem    # the hardcoded primordial pond
 
     {"v":1,"type":"start","tick":0,"run_name":"primordial_pond",
-     "seed":42,"atom_count":3422,"bond_count":2048}
-    {"v":1,"type":"bond_formed","tick":2,"elem_a":"H","elem_b":"N",
-     "order":1,"energy":391}
-    {"v":1,"type":"tick","tick":1000,"atom_count":3422,
-     "bond_count":2083,"mol_size_dist":{"1":281,"2_5":1058,
-     "6_20":0,"21plus":0}}
+     "seed":42,"atom_count":3432,"bond_count":2048}
+    {"v":1,"type":"bond_formed","tick":16,"elem_a":"O","elem_b":"O",
+     "order":2,"energy":498}
+    {"v":1,"type":"tick","tick":1000,"atom_count":3432,
+     "bond_count":2091,"mol_size_dist":{"1":290,"2_5":1052,
+     "6_20":1,"21plus":0}}
 
 One JSON event per line, flushed every tick: stream it, grep it,
 chart it, build a viewer on it. Same seed, byte-identical run -
@@ -101,11 +101,15 @@ in the runtime - it is something the chemistry must do alone.
 
 The engine is built and streams real output - every number above
 came off an actual run. The gate ladder is partly climbed: the
-thermostat (K1.1) and force-sanity (K1.2) sub-gates are measured
-passes. K1 is still failing - measured, with causes named: pond
-water does not survive the collisions (206 of 1024 intact at
-tick 2000, gate K1.3), and the settled field runs at -162 C
-against its 35 C setpoint (gate K1.4). The .kem language is
+thermostat (K1.1), force-sanity (K1.2), and water-persistence
+(K1.3) sub-gates are measured passes - the pond's 1024 waters
+hold intact across 10k-tick runs, which took sub-stepped
+integration and real-water-stiff bonds (the failing substrate
+measured 1482 bombardment breaks and only 206 waters intact).
+K1 is still failing - measured, with causes named: the settled
+field runs below its 35 C setpoint while the free-atom
+chemistry settles (gate K1.4), and cross-seam formation
+symmetry is not yet measured (gate K1.5). The .kem language is
 spec-only - the parser is built only after the gates pass,
 because a language on a dead substrate is worthless.
 

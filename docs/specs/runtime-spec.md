@@ -7,9 +7,14 @@ Sync policy (owner decision 2026-09-05): the implementation and
 this spec must agree; any divergence is fixed in both in the same
 commit. Synced 2026-09-05 against khem-core post-F10, and again the
 same day for the K1.1 substrate corrections (6.1 thermostat and
-bookkeeping, 6.3 smooth springs with F = ma, 6.5 excluded volume,
+bookkeeping, 6.3 smooth springs with F = ma, 6.6 excluded volume,
 7.1 mechanical dissociation, 7.2 capture gate, 4.9 wrap-aware
-index, section 11 constants). Items marked
+index, section 11 constants), and 2026-09-07 for the K1.3
+integrator (5.1 sub-stepped tick order, 6.1 velocity clamp
+removed, 6.3 stability law and well depth at dt_sub, 6.5
+integration, section 11 constants; the duplicate 6.5/6.6 section
+numbers fixed by renumbering non-bonded interactions to 6.6 and
+boundaries to 6.7). Items marked
 [phase 2] / [phase 3] are designed but not yet implemented.
 Provenance: reconciled from the founding conversation (preserved in
 git history, ADR-0010) with the final terminology applied
@@ -277,17 +282,32 @@ that evaluates them; Wall and Open use raw coordinates.
 
 Systems execute in strict order. Each reads current state; writes are
 committed before the next system reads; no system reads another
-system's writes within the same tick.
+system's writes within the same tick. The tick is dt = 1 for
+chemistry, the thermostat, and the fields, but the force/motion
+pair is SUB-STEPPED: steps 3-5 below repeat integration_substeps
+times per tick at dt_sub = 1/integration_substeps (6.5, gate K1.3).
 
     1.  EnergySystem::update
-    2.  PhysicsSystem::update_velocities
-    3.  PhysicsSystem::update_positions
-    4.  PhysicsSystem::apply_boundary
-    5.  SpatialIndex::rebuild
-    6.  ChemistrySystem::break_bonds
-    7.  ChemistrySystem::form_bonds
-    8.  ObserverSystem::sample
-    9.  EventQueue::flush_to_output
+    2.  PhysicsSystem::apply_bath        (temperature diffusion,
+                                           setpoint relaxation,
+                                           Langevin kicks; once)
+    3.  SpatialIndex::rebuild            \ + the sub-step block,
+    4.  PhysicsSystem::update_velocities  | repeated
+    5.  PhysicsSystem::update_positions   | integration_substeps
+                                          /  times per tick
+    6.  PhysicsSystem::apply_boundary
+    7.  SpatialIndex::rebuild
+    8.  ChemistrySystem::break_bonds
+    9.  ChemistrySystem::form_bonds
+    10. ObserverSystem::sample
+    11. EventQueue::flush_to_output
+
+The first sub-step enters with the index already current (the
+previous tick's post-boundary rebuild; the bath moves velocities,
+not positions), so the loop rebuilds before every sub-step after
+the first - mid-tick motion would otherwise leave the non-bonded
+candidate sets stale behind the motion they must resolve, the
+exact asymmetric sampling the sub-stepping exists to remove.
 
 ### 5.2 Dead atom and bond cleanup [phase 2]
 
@@ -306,11 +326,13 @@ thread-local state in v0.1; iteration over atoms always by AtomId.
 
 RNG draw discipline (pinned by the phase-1 kernel, ADR-0005): the
 physics system draws first - exactly two normal draws per live atom
-in AtomId order (dead atoms draw nothing; zero-temperature atoms
-draw no-op samples). Bond breaking draws exactly one uniform per
-live bond per tick, in BondId order. Formation draws exactly one
-uniform per eligible pair, in iterating-AtomId order with candidates
-in spatial scan order; ineligible pairs draw nothing.
+per tick, in AtomId order, inside the once-per-tick bath step
+(dead atoms draw nothing; zero-temperature atoms draw no-op
+samples). Bond breaking draws exactly one uniform per live bond per
+tick, in BondId order. Formation draws exactly one uniform per
+eligible pair, in iterating-AtomId order with candidates in spatial
+scan order; ineligible pairs draw nothing. The integration
+sub-steps draw nothing.
 
 ## 6. Physics system
 
@@ -338,16 +360,20 @@ delta (it arrives inside v'). Net zero at equilibrium; off
 equilibrium energy flows both ways. The invariant:
 field + KE * ke_field_scale is constant through the bath.
 
-A velocity clamp (max_atom_speed, a numerical guard, not physics)
-caps speeds: fast atoms tunnel through the short-range forces
-(~1.6-5 A range, steps up to 3-18 A measured) and the asymmetric
-force sampling mints energy; the clamp deposits what it removes.
-Proper collision sub-stepping replaces it in phase 2. The clamp
-pass also handles F = ma: all accumulated forces are divided by
-the atom's mass at application (the founding draft said "applied
-to both atoms" without /mass; with unit-mass hydrogen hiding the
-error, each oxygen interaction minted ~(0.5*m - 1) * F^2 -
-the measured pond furnace).
+A velocity clamp (max_atom_speed) guarded the founding substrate
+against the tunneling mint (F13: fast atoms crossed the ~1.6-5 A
+non-bonded zone in one unresolved step; the asymmetric force
+sampling minted energy - measured: collision cascade to v ~18,
+field to 2200 C). REMOVED 2026-09-07 (gate K1.3): the integrator
+sub-steps (6.5) resolve those crossings - an atom crossing the
+zone in several sub-steps samples the force symmetrically - so
+no clamp, no mint, and the re-validation contract's requirement
+that the clamp be gone before the E-gates is satisfied. The
+clamp pass also handled F = ma: all accumulated forces are
+divided by the atom's mass at application (the founding draft
+said "applied to both atoms" without /mass; with unit-mass
+hydrogen hiding the error, each oxygen interaction minted
+~(0.5*m - 1) * F^2 - the measured pond furnace).
 
 ### 6.2 Temperature diffusion
 
@@ -398,8 +424,16 @@ found by test 2026-09-05, fixed the same day). All pair rules
 
 The stability law (pinned by test for every formable bond at the
 configured scale): symplectic Euler is stable for
-dt * sqrt(k / reduced_mass) < 2. spring_energy_scale is set
-inside that bound with margin.
+dt_sub * sqrt(k / reduced_mass) < 2, evaluated at the integration
+sub-step (6.5). spring_energy_scale is set inside that bound with
+margin. Retuned 2026-09-07 from 0.004 to 0.032 with the
+sub-stepping (gate K1.3): at dt = 1 the bound capped light-pair
+springs so soft that the O-H mechanical well - the stretch energy
+at the 7.1 break point - was only ~10 kT, and thermal-speed
+hydrogens shattered the pond's water (measured: 1482 mechanical
+O-H breaks in 10k ticks). At dt_sub = 0.25 the same law admits
+0.032 with the worst formable pair (H-H) at 1.32 < 2, deepening
+the O-H well to ~80 kT - real water's own ratio.
 
 ### 6.4 Pressure force
 
@@ -409,13 +443,27 @@ Each atom feels force from the central-difference pressure gradient,
 scaled by pressure_sensitivity, divided by mass at application
 (6.1).
 
-### 6.5 Position update
+### 6.5 Position update and integration
 
-    x += vx * dt
-    y += vy * dt
-    dt = 1.0    (one tick = one femtosecond at default scale)
+    x += vx * dt_sub
+    y += vy * dt_sub
+    dt_sub = 1.0 / integration_substeps
 
-### 6.5 Non-bonded interactions
+Implemented 2026-09-07 (gate K1.3): the force/integration pair
+(update_velocities then update_positions, 5.1 steps 4-5) repeats
+integration_substeps times per tick; the sub-steps sum to dt = 1.0
+per tick (one tick = one femtosecond at default scale), so
+chemistry, the thermostat bath, and the field updates all keep
+the tick as their time unit. The sub-stepping resolves the
+short-range dynamics at dt_sub: an atom crossing the non-bonded
+zone in several sub-steps samples the force symmetrically (no
+tunneling mint, 6.1), and the spring stability bound (6.3) is
+evaluated at dt_sub - which is what allows real-water bond well
+depths at the configured spring scale. Default 4 (dt_sub = 0.25):
+sub-step displacement of the fastest thermal atoms (~2-3 A/tick
+tail) stays under half the narrowest interaction zone.
+
+### 6.6 Non-bonded interactions
 
 Excluded volume (implemented 2026-09-05; the founding draft had
 none - unbonded atoms passed through each other, and the lipid
@@ -434,7 +482,7 @@ wrap-aware spatial index (4.9). This is smuggled PHYSICS,
 documented as such: the substrate has excluded volume because
 matter does, not because any biology needs it.
 
-### 6.6 Boundaries
+### 6.7 Boundaries
 
     Wrap   x = x mod width; y = y mod height
     Wall   clamp position; reverse the velocity component
@@ -671,17 +719,17 @@ measurements that changed them:
     thermostat_damping      0.1      // Langevin gamma (6.1, K1.1)
     ke_field_scale          0.01     // field degrees per KE unit
                                      // exchanged by the bath
-    max_atom_speed          2.0      // velocity clamp; below the
-                                     // tunneling-mint threshold
-                                     // (6.1, phase 2 removes it)
+    integration_substeps    4        // force/motion sub-steps per
+                                     // tick, dt_sub = 1/n (6.5,
+                                     // K1.3; replaced the velocity
+                                     // clamp - see 6.1)
     diffusion_rate          0.1
     field_relax_rate        0.002    // setpoint relaxation (6.2,
                                      // K1.1: the environment
                                      // reservoir / heat sink)
     pressure_sensitivity    0.01
-    spring_energy_scale     0.004    // F2 + water rigidity; the
-                                     // dt*sqrt(k/mu) < 2 law is
-                                     // test-pinned per bond
+    spring_energy_scale     0.032    // F2 stability bound at dt_sub
+                                     // + K1.3 well depth: O-H ~80 kT
     convection_rate         0.001
     vent_heat_rate          0.1      // used by 8.1's formula; was
                                      // missing from this block
@@ -713,9 +761,9 @@ measurements that changed them:
     surface_threshold       0.9      // fraction of world height
 
     non_bonded_repulsion    1.0      // excluded volume strength
-                                     // (6.5)
+                                     // (6.6)
     non_bonded_margin      1.5      // cutoff = (r_a + r_b) *
-                                     // margin (6.5)
+                                     // margin (6.6)
 
     bond_energy { ... }    // the section 7.3 table
     bond_angles { ... }    // the section 7.4 table
