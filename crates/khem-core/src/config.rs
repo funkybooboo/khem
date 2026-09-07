@@ -219,7 +219,6 @@ mod tests {
         assert_eq!(c.ke_field_scale, 0.01);
         assert_eq!(c.non_bonded_repulsion, 1.0);
         assert_eq!(c.non_bonded_margin, 1.5);
-        assert_eq!(c.non_bonded_margin, 1.5);
         assert_eq!(c.spring_energy_scale, 0.032);
         assert_eq!(c.integration_substeps, 4);
         assert_eq!(

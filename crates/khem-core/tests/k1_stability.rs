@@ -34,9 +34,11 @@
 use khem_core::config::PhysicsConfig;
 use khem_core::observer::Event;
 use khem_core::pond::{self, water_intact};
-use khem_core::{BoundaryType, ElementId, Observer, ObserverConfig, Sim, WorldState, bond_energy};
+use khem_core::{
+    BondId, BoundaryType, ElementId, Observer, ObserverConfig, Sim, WorldState, bond_energy,
+};
 
-const WATERS: usize = 32 * 32;
+const WATERS: usize = pond::POND_WATERS;
 
 // ---- Shared helpers ----------------------------------------------------
 
@@ -236,8 +238,14 @@ fn k1_1_thermostat_flatness() {
         }
     }
     // Samples land every 250 ticks from 2000 through 10000: 33 of
-    // them. Index i = (t - 2000) / 250.
-    assert_eq!(ke_samples.len(), 33, "sampling bug");
+    // them. Sample-array index for tick t is (t - 2000) / 250, so a
+    // window over ticks [from..=to] is the slice
+    // [idx(from)..idx(to) + 1] - written that way below, so the
+    // windows state their ticks instead of magic indices.
+    fn idx(t: u64) -> usize {
+        ((t - 2000) / 250) as usize
+    }
+    assert_eq!(ke_samples.len(), idx(10_000) + 1, "sampling bug");
     // Bounded throughout, transient included: the 35 C bath level
     // (kb * T = 0.291) is the scale; 2x it would already be a
     // furnace signature (the founding F8 failure measured 1e13).
@@ -246,10 +254,12 @@ fn k1_1_thermostat_flatness() {
         "K1.1 FAIL: KE/atom unbounded during the run: {ke_samples:?}"
     );
     let mean = |s: &[f64]| s.iter().sum::<f64>() / s.len() as f64;
-    let ke_mid = mean(&ke_samples[17..25]); // ticks 6.25k..8k
-    let ke_late = mean(&ke_samples[25..33]); // ticks 8.25k..10k
-    let len_mid = len_samples[17..25].iter().sum::<f32>() / 8.0;
-    let len_late = len_samples[25..33].iter().sum::<f32>() / 8.0;
+    // Steady-tail windows: ticks 6.25k..=8k vs 8.25k..=10k.
+    let ke_mid = mean(&ke_samples[idx(6250)..idx(8000) + 1]);
+    let ke_late = mean(&ke_samples[idx(8250)..idx(10_000) + 1]);
+    let span = (idx(8000) + 1 - idx(6250)) as f32; // samples per window
+    let len_mid = len_samples[idx(6250)..idx(8000) + 1].iter().sum::<f32>() / span;
+    let len_late = len_samples[idx(8250)..idx(10_000) + 1].iter().sum::<f32>() / span;
 
     eprintln!(
         "KE/atom 6.25k-8k {ke_mid:.4} 8.25k-10k {ke_late:.4} ({:+.1}%)",
@@ -454,7 +464,7 @@ fn k1_3_water_persistence() {
                         // Velocities at processing time are the
                         // velocities at break time (chemistry is the
                         // last mutating step of the tick).
-                        let bond = world.bond(khem_core::world::BondId(*bond_id));
+                        let bond = world.bond(BondId(*bond_id));
                         let (a, b) = (world.atom(bond.atom_a), world.atom(bond.atom_b));
                         let rel = ((a.vx - b.vx).powi(2) + (a.vy - b.vy).powi(2)).sqrt();
                         oh_details.push(format!(

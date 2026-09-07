@@ -545,22 +545,34 @@ mod tests {
 
     #[test]
     fn hot_weak_bonds_break_and_release_heat() {
+        let config = PhysicsConfig::default();
         let mut w = world(7);
         let a = w.spawn_atom(element_id("O").unwrap(), 50.0, 50.0);
         let b = w.spawn_atom(element_id("O").unwrap(), 51.0, 50.0);
         // A pathologically weak bond in a very hot field: p_break =
-        // exp(-1/(0.008314*10000)) ~ 0.988 per tick.
+        // exp(-E/(kb_scaled * T)) = exp(-1/(0.45 * 10_000)) ~ 0.9998
+        // per tick. (Breaking reads kb_scaled 0.45, not
+        // thermal_kick_scale 0.008314 - the constants decoupled in
+        // the F1 tuning; the old comment here had them crossed.)
         w.form_bond(a, b, 1, 1.0);
         w.temp_field.set(50.0, 50.0, 10_000.0);
-        let mut chem = chemistry(PhysicsConfig::default());
+        let mut chem = chemistry(config);
         for _ in 0..10 {
             chem.break_bonds(&mut w);
         }
         assert!(!w.bond(BondId(0)).alive, "weak hot bond must break");
         assert_eq!(w.atom(a).bond_count, 0);
-        // Heat released at the midpoint: energy * release_fraction.
+        // Heat released at the midpoint: energy * release_fraction,
+        // landing in the same 10 A cell the set() warmed. The
+        // expected value is computed from the law, not hand-copied:
+        // the old literal (10_000.5) was wrong and survived only
+        // because the tolerance was +-1.0 on a 10k-scale number.
         let released = w.temp_field.get(50.5, 50.0);
-        assert!((released - 10_000.5).abs() < 1.0, "released {released}");
+        let expected = 10_000.0f32 + 1.0 * config.release_fraction;
+        assert!(
+            (released - expected).abs() < 1e-2,
+            "released {released}, expected {expected}"
+        );
         // One break event queued.
         assert!(matches!(
             w.event_queue.first(),
@@ -933,14 +945,21 @@ mod tests {
         // in E. Statistical check with a fixed seed: 200 weak O-O
         // bonds at vent temperature break in the expected band;
         // the same bonds at 35 C break ~none.
-        let mut hot = world(21);
-        for i in 0..200u32 {
-            let y = 10.0 + (i / 20) as f32;
-            let x = 10.0 + (i % 20) as f32 * 2.5;
-            let a = hot.spawn_atom(element_id("O").unwrap(), x, y);
-            let b = hot.spawn_atom(element_id("O").unwrap(), x + 1.0, y);
-            hot.form_bond(a, b, 1, 146.0);
+
+        // 200 weak O-O pairs (energy 146) spread over a lattice.
+        fn oo_pair_lattice(seed: u64) -> WorldState {
+            let mut w = world(seed);
+            for i in 0..200u32 {
+                let y = 10.0 + (i / 20) as f32;
+                let x = 10.0 + (i % 20) as f32 * 2.5;
+                let a = w.spawn_atom(element_id("O").unwrap(), x, y);
+                let b = w.spawn_atom(element_id("O").unwrap(), x + 1.0, y);
+                w.form_bond(a, b, 1, 146.0);
+            }
+            w
         }
+
+        let mut hot = oo_pair_lattice(21);
         for v in hot.temp_field.data.iter_mut() {
             *v = 847.0;
         }
@@ -953,14 +972,7 @@ mod tests {
             "hot O-O: broke {broken}, predicted {predicted:.1}"
         );
 
-        let mut cold = world(21);
-        for i in 0..200u32 {
-            let y = 10.0 + (i / 20) as f32;
-            let x = 10.0 + (i % 20) as f32 * 2.5;
-            let a = cold.spawn_atom(element_id("O").unwrap(), x, y);
-            let b = cold.spawn_atom(element_id("O").unwrap(), x + 1.0, y);
-            cold.form_bond(a, b, 1, 146.0);
-        }
+        let mut cold = oo_pair_lattice(21);
         for v in cold.temp_field.data.iter_mut() {
             *v = 35.0;
         }

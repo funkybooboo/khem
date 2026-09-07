@@ -82,6 +82,14 @@ pub fn element_id(symbol: &str) -> Option<ElementId> {
         .map(|i| ElementId(i as u8))
 }
 
+/// Canonical ids for the elements phase-1 code names statically
+/// (metrics, pond construction). Kept in lockstep with [`ELEMENTS`]
+/// by the `canonical_id_constants_match_the_table` test;
+/// [`element_id`] stays the general lookup for names that arrive
+/// at runtime (the FREE_ATOMS table, phase-3 definitions).
+pub const H: ElementId = ElementId(0);
+pub const O: ElementId = ElementId(3);
+
 /// Properties for an element id, straight from the const table. For
 /// the world's table (phase 3: custom tables), use
 /// [`crate::world::WorldState::element`].
@@ -126,5 +134,19 @@ mod tests {
         assert_eq!(element_id("O"), Some(ElementId(3)));
         assert_eq!(element_id("Au"), None);
         assert_eq!(element(ElementId(1)).symbol, "C");
+    }
+
+    #[test]
+    fn canonical_id_constants_match_the_table() {
+        // The consts are the table's canonical order made nameable;
+        // a table reorder must update them, not silently desync.
+        assert_eq!(element_id("H"), Some(H));
+        assert_eq!(element_id("O"), Some(O));
+    }
+
+    #[test]
+    #[should_panic(expected = "index out of bounds")]
+    fn element_lookup_panics_out_of_range() {
+        let _ = element(ElementId(10));
     }
 }

@@ -35,8 +35,15 @@ pub const POND_HEIGHT: f32 = 120.0;
 /// Uniform starting temperature, celsius (ocean-region value from
 /// the language-spec pond).
 pub const POND_TEMP: f32 = 35.0;
-/// Water lattice spacing, angstroms (32x32 grid = 1024 molecules).
+/// Water lattice spacing, angstroms.
 const WATER_SPACING: f32 = 3.75;
+/// Lattice dimensions in molecules (32x32 = 1024).
+const WATER_COLS: i32 = (POND_WIDTH / WATER_SPACING) as i32;
+const WATER_ROWS: i32 = (POND_HEIGHT / WATER_SPACING) as i32;
+/// Seeded water molecules in the pond - one number the K1
+/// harness and the pond tests share, derived from the same consts
+/// the builder loops over (no hand-copied 32 * 32 to desync).
+pub const POND_WATERS: usize = (WATER_COLS * WATER_ROWS) as usize;
 /// Free-atom sprinkle: (symbol, count). Rebalanced 2026-09-05:
 /// the founding H-dominated mix could only form strong bonds
 /// (H-H 436, H-O 463 - p_break ~ exp(-22) at pond temperature), so
@@ -75,17 +82,14 @@ pub fn primordial_pond(seed: u64, config: PhysicsConfig) -> WorldState {
     // Water: O plus two H at the bent geometry (104.5 degrees), bond
     // length = covalent radius sum (physics 6.3 equilibrium), on a
     // jittered lattice with a random orientation per molecule.
-    let h_el = element_id("H").expect("H in table");
-    let o_el = element_id("O").expect("O in table");
+    let (h_el, o_el) = (elements::H, elements::O);
     let oh_energy = bond_energy(o_el, h_el, 1);
     // Physics 6.3 equilibrium: the covalent radius sum, from the
     // same table the springs read.
     let bond_len = elements::element(o_el).radius + elements::element(h_el).radius;
     let half_angle = (104.5f32 / 2.0).to_radians();
-    let cols = (POND_WIDTH / WATER_SPACING) as i32;
-    let rows = (POND_HEIGHT / WATER_SPACING) as i32;
-    for gy in 0..rows {
-        for gx in 0..cols {
+    for gy in 0..WATER_ROWS {
+        for gx in 0..WATER_COLS {
             let x = (gx as f32 + 0.5) * WATER_SPACING + lattice_jitter(&mut w);
             let y = (gy as f32 + 0.5) * WATER_SPACING + lattice_jitter(&mut w);
             let orientation = w.rng.f01() as f32 * std::f32::consts::TAU;
@@ -117,8 +121,7 @@ pub fn primordial_pond(seed: u64, config: PhysicsConfig) -> WorldState {
 /// persistence signal. Recognized structurally: an alive O holding
 /// exactly two bonds, both to H.
 pub fn water_intact(world: &WorldState) -> usize {
-    let h_el = element_id("H").expect("H in table");
-    let o_el = element_id("O").expect("O in table");
+    let (h_el, o_el) = (elements::H, elements::O);
     world
         .atoms
         .iter()
@@ -144,7 +147,7 @@ mod tests {
     fn pond_shape_and_content() {
         let w = primordial_pond(42, PhysicsConfig::default());
         // 1024 waters (3 atoms each) + 360 free atoms.
-        let waters = 32 * 32;
+        let waters = POND_WATERS;
         let free: u32 = FREE_ATOMS.iter().map(|(_, n)| n).sum();
         assert_eq!(w.atoms.len(), waters * 3 + free as usize);
         assert_eq!(w.bonds.len(), waters * 2);
@@ -186,10 +189,12 @@ mod tests {
     #[test]
     fn water_geometry_is_bent() {
         let w = primordial_pond(42, PhysicsConfig::default());
-        // Check the first water molecule's H-O-H angle.
+        // Check the first water molecule's H-O-H angle, walking the
+        // O's bonds through the canonical bond_ids() interface.
         let o = &w.atoms[0];
-        let h1 = w.atom(w.bond(o.bonds[0].unwrap()).atom_b);
-        let h2 = w.atom(w.bond(o.bonds[1].unwrap()).atom_b);
+        let bond_ids: Vec<_> = o.bond_ids().collect();
+        let h1 = w.atom(w.bond(bond_ids[0]).atom_b);
+        let h2 = w.atom(w.bond(bond_ids[1]).atom_b);
         let a1 = (h1.y - o.y).atan2(h1.x - o.x);
         let a2 = (h2.y - o.y).atan2(h2.x - o.x);
         let d = (a1 - a2).abs().to_degrees();

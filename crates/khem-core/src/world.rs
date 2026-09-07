@@ -477,6 +477,27 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "cell size must be positive")]
+    fn grid_rejects_nonpositive_cell_size() {
+        let _ = Grid2D::new(100.0, 100.0, 0.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "bond order must be 1, 2, or 3")]
+    fn form_bond_rejects_invalid_order() {
+        let mut w = WorldState::new(
+            200.0,
+            200.0,
+            BoundaryType::Wrap,
+            1,
+            PhysicsConfig::default(),
+        );
+        let a = w.spawn_atom(ElementId(0), 0.0, 0.0);
+        let b = w.spawn_atom(ElementId(0), 1.0, 0.0);
+        let _ = w.form_bond(a, b, 0, 1.0);
+    }
+
+    #[test]
     fn world_state_shape() {
         let w = WorldState::new(
             200.0,

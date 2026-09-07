@@ -509,6 +509,16 @@ mod tests {
         Physics::new(PhysicsConfig::default())
     }
 
+    #[test]
+    #[should_panic(expected = "at least one sub-step")]
+    fn physics_rejects_zero_substeps() {
+        let config = PhysicsConfig {
+            integration_substeps: 0,
+            ..PhysicsConfig::default()
+        };
+        let _ = Physics::new(config);
+    }
+
     /// The integration sub-step, dt_sub = 1/integration_substeps,
     /// from the configured constants (the same value Physics::new
     /// derives into its private `dt` field).
@@ -585,12 +595,19 @@ mod tests {
             w.atom(b).vx
         );
 
-        // Beyond cutoff: no force.
+        // Beyond cutoff: no force. The pair sits 1.7 A apart (cutoff
+        // 1.59 for H-H) with the index REBUILT, so the candidate
+        // query (radius 3.3 A) actually finds the pair and the
+        // distance filter rejects it. The previous probe never
+        // rebuilt the index, so it passed vacuously - verified by
+        // deleting the cutoff filter and watching it stay green.
         let mut w = world(1, BoundaryType::Wrap);
         let c = w.spawn_atom(ElementId(0), 50.0, 50.0);
-        let d = w.spawn_atom(ElementId(0), 55.0, 50.0);
+        let d = w.spawn_atom(ElementId(0), 51.7, 50.0);
+        w.spatial_index.rebuild(&w.atoms);
         physics().update_velocities(&mut w);
-        assert_eq!(w.atom(c).vx, 0.0);
+        assert_eq!(w.atom(c).vx, 0.0, "beyond-cutoff pair must feel nothing");
+        assert_eq!(w.atom(d).vx, 0.0);
         assert_eq!(
             (w.atom(c).bond_count, w.atom(d).bond_count),
             (0, 0),

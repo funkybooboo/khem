@@ -50,48 +50,73 @@ const MAX_TICKS: u64 = 1_000_000;
 /// Tick event interval; the language-spec run example uses 1000.
 const TICK_INTERVAL: u64 = 1000;
 
-fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let mut seed: Option<u64> = None;
-    let mut path: Option<&str> = None;
+/// What the command line asks for.
+#[derive(Debug, PartialEq)]
+enum Invocation {
+    /// Run the pond: an optional .kem path (accepted but not read
+    /// until the phase-3 parser) and an optional seed.
+    Run {
+        path: Option<String>,
+        seed: Option<u64>,
+    },
+    Help,
+    Version,
+}
 
+/// Parses arguments. Err carries the usage-error message for
+/// stderr; extractable and tested so the CLI surface cannot
+/// regress silently.
+fn parse_args(args: &[String]) -> Result<Invocation, String> {
+    let mut path = None;
+    let mut seed = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
-            "--help" => {
-                println!("{USAGE}");
-                return ExitCode::SUCCESS;
-            }
-            "--version" => {
-                println!("khem {}", env!("CARGO_PKG_VERSION"));
-                return ExitCode::SUCCESS;
-            }
+            "--help" => return Ok(Invocation::Help),
+            "--version" => return Ok(Invocation::Version),
             "--seed" => {
                 let Some(value) = args.get(i + 1) else {
-                    eprintln!("khem: --seed requires a value");
-                    eprintln!("{USAGE}");
-                    return ExitCode::from(1);
+                    return Err("--seed requires a value".into());
                 };
                 match value.parse::<u64>() {
                     Ok(n) => seed = Some(n),
                     Err(_) => {
-                        eprintln!("khem: --seed expects an integer, got {value:?}");
-                        return ExitCode::from(1);
+                        return Err(format!("--seed expects an integer, got {value:?}"));
                     }
                 }
                 i += 1;
             }
             arg if arg.starts_with('-') => {
-                eprintln!("khem: unknown option {arg:?}");
-                eprintln!("{USAGE}");
-                return ExitCode::from(1);
+                return Err(format!("unknown option {arg:?}"));
             }
-            arg => path = Some(arg),
+            arg => path = Some(arg.to_string()),
         }
         i += 1;
     }
+    Ok(Invocation::Run { path, seed })
+}
 
-    run(path, seed)
+fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let invocation = match parse_args(&args) {
+        Ok(invocation) => invocation,
+        Err(message) => {
+            eprintln!("khem: {message}");
+            eprintln!("{USAGE}");
+            return ExitCode::from(1);
+        }
+    };
+    match invocation {
+        Invocation::Help => {
+            println!("{USAGE}");
+            ExitCode::SUCCESS
+        }
+        Invocation::Version => {
+            println!("khem {}", env!("CARGO_PKG_VERSION"));
+            ExitCode::SUCCESS
+        }
+        Invocation::Run { path, seed } => run(path.as_deref(), seed),
+    }
 }
 
 /// Runs the hardcoded primordial pond and streams NDJSON to stdout
@@ -143,4 +168,66 @@ fn run(path: Option<&str>, seed: Option<u64>) -> ExitCode {
 
 fn write_event(out: &mut impl Write, event: &khem_core::Event) -> std::io::Result<()> {
     writeln!(out, "{}", ndjson::emit(event))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn no_arguments_runs_the_default_pond() {
+        assert_eq!(
+            parse_args(&args(&[])),
+            Ok(Invocation::Run {
+                path: None,
+                seed: None
+            })
+        );
+    }
+
+    #[test]
+    fn parses_seed_and_path() {
+        assert_eq!(
+            parse_args(&args(&["--seed", "7", "world.kem"])),
+            Ok(Invocation::Run {
+                path: Some("world.kem".into()),
+                seed: Some(7)
+            })
+        );
+        // Order is free; the last positional wins (same as v0.1's
+        // original inline loop).
+        assert_eq!(
+            parse_args(&args(&["a.kem", "--seed", "1", "b.kem"])),
+            Ok(Invocation::Run {
+                path: Some("b.kem".into()),
+                seed: Some(1)
+            })
+        );
+    }
+
+    #[test]
+    fn help_and_version_short_circuit() {
+        assert_eq!(parse_args(&args(&["--help"])), Ok(Invocation::Help));
+        assert_eq!(parse_args(&args(&["--version"])), Ok(Invocation::Version));
+    }
+
+    #[test]
+    fn rejects_bad_arguments() {
+        assert_eq!(
+            parse_args(&args(&["--seed"])),
+            Err("--seed requires a value".into())
+        );
+        assert_eq!(
+            parse_args(&args(&["--seed", "--help"])),
+            Err("--seed expects an integer, got \"--help\"".into())
+        );
+        assert_eq!(
+            parse_args(&args(&["--wat"])),
+            Err("unknown option \"--wat\"".into())
+        );
+    }
 }
