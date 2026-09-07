@@ -102,6 +102,13 @@ order, one gate per commit, with the 2D pass records as the
 dimension-agnostic regression reference:
 
 1. K1.1 thermostat: coupling-ratio law + bounded KE in 3D.
+   PASSED 2026-09-08: coupling 1.037-1.121 at every sample (2D:
+   1.055-1.158; the ratio is dimension-normalized by
+   construction), KE max 0.527 vs the 3/2-scaled bar 0.873, tail
+   windows (21k-22.75k vs 23k-25k, horizon 25k) KE +4.5% / bond
+   length +0.4%. The 3D tail arrives ~4k ticks later than 2D and
+   rides ~1 C above setpoint (avg ~36.1) - the vent's larger
+   fraction of the 72-cell field.
 2. K1.2 force sanity: overlap probe + per-bond band.
 3. K1.3 water persistence: the seeded waters stay intact.
 4. K1.4 reactive balance: F18 fix active from day one; rates

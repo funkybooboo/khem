@@ -110,6 +110,23 @@ the measured field-recovery transient, KE bounded throughout,
 steady-tail windows (6.25k-8k vs 8.25k-10k) KE +10.6%, bond
 length +0.3%.
 
+RE-CLIMBED AND PASSED IN 3D 2026-09-08 (the port's first gate,
+re-validation contract at full force): coupling 1.037-1.121 at
+every sample of the 25k-tick 3D run - the ratio to the
+dimensionally-correct 3/2 * kb * T level (three Langevin
+components; the 2D law's counterpart ratio measured 1.055-1.158)
+- KE bounded throughout (max 0.527 vs the 3/2-scaled 2x bar
+0.873), steady-tail windows (21k-22.75k vs 23k-25k, moved with
+the measured 3D settle) KE +4.5%, bond length +0.4%. The 2D
+windows sat mid-recovery in 3D: the slab pond's tail arrives
+~4k ticks later and rides ~1 C above setpoint (tail field avg
+~36.1, swinging 33-38.6 on the churn) - the vent's larger
+fraction of the 72-cell field, honest G06 balance, recorded for
+K1.4's ledger. The port commit's first bar scaling ([1.2, 2.1])
+double-counted the dimension - the coupling RATIO is
+dimension-normalized by construction and the first sample
+(1.042) falsified it in one read.
+
 ### K1.2 - force sanity: PASSED
 
 A bonded overlap imparts bounded velocity (F9 measured v ~ 1e4 -

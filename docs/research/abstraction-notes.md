@@ -347,6 +347,38 @@ measured:
   with their rationale in docs/plans/phase-2-3d-port.md,
   "Decisions this phase owns".
 
+## Resolution log (2026-09-08, the K1.1 3D re-climb)
+
+- Gate K1.1 PASSED in 3D - the port's first re-climbed gate, and
+  the run falsified one port-commit claim in its first sample,
+  which is the re-validation contract working: the port scaled
+  the coupling bar to [1.2, 2.1] on the theory that three
+  Langevin components put KE/atom at 3/2 * kb * T. True for the
+  ABSOLUTE level (and the bounded-KE bar correctly scaled by
+  3/2: max 0.527 vs 0.873) - but the coupling RATIO divides by
+  exactly the dimensionally-correct equipartition, so it is
+  dimension-normalized by construction and the bar [0.8, 1.4]
+  carries unchanged. The first 3D sample (tick 2000, coupling
+  1.042) failed the scaled bar immediately; the full run
+  measured 1.037-1.121 at every sample - the same ~1.05-1.12
+  band the 2D substrate measured (1.055-1.158). The flatness
+  windows moved with the measured 3D settle, the 2D precedent
+  repeated: the slab pond's recovery transient runs ~4k ticks
+  longer (the 20k run ended at 38.3 C still climbing), so the
+  horizon rides 25k with windows 21k-22.75k vs 23k-25k (KE
+  +4.5%, bond length +0.4% against the 15% bar).
+- One pond-physics measurement recorded for the K1.4 re-climb's
+  ledger: the 3D slab's tail field avg is ~36.1 C against the
+  35 C setpoint (2D measured 35.6-35.9), with single samples
+  swinging 33-38.6 on the formation/break churn. The vent holds
+  a proportionally larger fraction of the 72-cell field (the 2D
+  pond had 144 cells); the flux balance that placed the 2D pond
+  at +0.6 C places the 3D pond at ~+1 C, modulated by the
+  thermostat's backflow. Honest G06 physics (the setpoint is a
+  reservoir, the vent an additional input) - but the K1.4
+  ledger's vent column and the tail-avg band [30, 40] must be
+  re-measured against this pond, not the 2D one's numbers.
+
 ## Findings first analyzed before measurement
 
 - F1  Literal kB (0.008314) with pond temperatures (15-80 C) makes
