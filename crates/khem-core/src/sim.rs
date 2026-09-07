@@ -138,7 +138,7 @@ impl Sim {
     /// The END event with the run's reason. Call once, after the
     /// last tick. The reason vocabulary is fixed by the observer
     /// (max_ticks_reached in v0.1; interrupt/extinction arrive with
-    /// phase 2 hardening).
+    /// phase 3 hardening).
     pub fn end(&mut self, world: &WorldState) -> Event {
         self.observer.end(world, self.timing())
     }

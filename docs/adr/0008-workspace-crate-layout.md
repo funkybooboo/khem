@@ -1,7 +1,10 @@
 # ADR-0008: Workspace crate layout
 
 Date: 2026-09-04
-Status: Accepted
+Status: Accepted (amended 2026-09-07 by the phase
+renumbering: the body's "khem-lang (lib, phase 3)" predates
+it - the language is phase 4 under the 0-5 numbering; the
+crate decision is unchanged)
 
 ## Context
 

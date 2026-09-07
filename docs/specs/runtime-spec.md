@@ -10,7 +10,7 @@ corrections (4.9, 6.1, 6.3, 6.6, 7.1, 7.2, section 11);
 2026-09-07 the K1.3 integrator (5.1, 6.1, 6.3, 6.5, 6.6, 6.7,
 section 11) and the open-boundary BOND_BROKEN event (3.3, 6.7).
 Items marked
-[phase 2] / [phase 3] are designed but not yet implemented.
+[phase 3] / [phase 4] are designed but not yet implemented.
 Provenance: reconciled from the founding conversation (preserved in
 git history) with the final terminology applied (ADR-0007,
 ADR-0009).
@@ -43,15 +43,15 @@ there.
 
     --seed <integer>   override the seed from the run declaration
                        khem --seed 42 experiment_1.kem
-    --check            [phase 3] parse and validate all files; report
+    --check            [phase 4] parse and validate all files; report
                        errors and warnings; do not run. Exit 0 if
                        valid, 1 if not.
                        khem --check primordial_pond.kem
-    --test             [phase 3] run a single struct or body in
+    --test             [phase 4] run a single struct or body in
                        isolation in a minimal world for a default
                        test duration.
                        khem --test minimal_cell.kem
-    --info             [phase 3] parse a .kem file and print its
+    --info             [phase 4] parse a .kem file and print its
                        structure: atom count, bond count, port list,
                        import tree. Does not run.
                        khem --info nucleotide_A.kem
@@ -59,7 +59,7 @@ there.
     --help
 
 Phase 1: the binary runs the hardcoded primordial pond; a file
-argument is accepted but not read (the parser is phase 3), and
+argument is accepted but not read (the parser is phase 4), and
 --seed is the only behavioral option (default 42).
 
 ### 2.3 Exit codes
@@ -67,7 +67,7 @@ argument is accepted but not read (the parser is phase 3), and
     0   success (simulation completed, or --check passed)
     1   validation error (bad .kem files or bad command line)
     2   runtime error (crash during simulation)
-    3   user interrupt (SIGINT / ctrl-c)  [phase 2: v0.1 phase-1
+    3   user interrupt (SIGINT / ctrl-c)  [phase 3: v0.1 phase-1
         builds do not trap signals; ctrl-c kills the process]
 
 ### 2.4 Streams
@@ -134,7 +134,7 @@ Emitted for every bond break, including Open-boundary removals
 (energy_released 0; the boundary takes the bond with no field
 exchange, 6.7).
 
-notable - [phase 2] when a watch condition triggers; always
+notable - [phase 3] when a watch condition triggers; always
 emitted regardless of output settings:
 
     {"v":1,"type":"notable","tick":1247900,"event":"largest_molecule",
@@ -148,7 +148,7 @@ Event vocabulary:
     population_crash     population drop above threshold
     bond_type_first      bond type seen for the first time
 
-save - [phase 2] when state is saved:
+save - [phase 3] when state is saved:
 
     {"v":1,"type":"save","tick":1000000,"path":"./saves/tick_1000000.state"}
 
@@ -318,7 +318,7 @@ the first - mid-tick motion would otherwise leave the non-bonded
 candidate sets stale behind the motion they must resolve, the
 exact asymmetric sampling the sub-stepping exists to remove.
 
-### 5.2 Dead atom and bond cleanup [phase 2]
+### 5.2 Dead atom and bond cleanup [phase 3]
 
 Atoms and bonds are flagged dead, not removed. Compaction runs every
 compaction_interval ticks (default 10,000): dead entries removed, IDs
@@ -406,7 +406,7 @@ environment reservoir, the pond's heat sink. Without it a vented
 Wrap world only heats (a vent injects continuously; nothing
 leaves), and no steady state exists to be stable against (gate
 K1.1's vented-pond flatness criterion requires it). Region
-declarations (phase 3) are the setpoint source; the phase-1 pond
+declarations (phase 4) are the setpoint source; the phase-1 pond
 declares 35 C everywhere.
 
     T_new = T * (1 - diffusion_rate) + mean(T_neighbors) * diffusion_rate
@@ -603,7 +603,7 @@ pinned by the kernel and test-locked).
 
 Phase 1 hardcodes this table in khem-core/src/chemistry.rs, with a
 test transcribing every row against this section; physics.cfg
-loading arrives in phase 3 with the language.
+loading arrives in phase 4 with the language.
 
 ### 7.4 Bond angle table (VSEPR, degrees)
 
@@ -622,7 +622,7 @@ loading arrives in phase 3 with the language.
     Na   1 bond: no constraint
     Cl   1 bond: no constraint
 
-Also in physics.cfg, not source code. [phase 3; phase 1 hardcodes
+Also in physics.cfg, not source code. [phase 4; phase 1 hardcodes
 this in khem-core/src/chemistry.rs with test-locked values]
 
 Semantics (v0.1, pinned by the kernel): the angles are scoring
@@ -732,7 +732,7 @@ definitions, in the project root or a system default path, modifiable
 without recompilation. Tuning affects behavior and stability; it never
 changes what chemistry is possible. [Phase 1: these are the defaults
 in khem-core/src/config.rs, test-locked; physics.cfg loading arrives
-in phase 3.]
+in phase 4.]
 
 Values below are the phase-1 tuned set (tuned 2026-09-05;
 integration_substeps and spring_energy_scale retuned 2026-09-07
@@ -804,7 +804,7 @@ measurements that changed them:
 
     spatial_cell_size       5.0      // angstroms
     field_cell_size         10.0     // angstroms
-    compaction_interval     10000    // ticks [phase 2]
+    compaction_interval     10000    // ticks [phase 3]
     surface_threshold       0.9      // fraction of world height
 
     non_bonded_repulsion    1.0      // excluded volume strength
@@ -837,7 +837,7 @@ hard core is gone; 6.3 has the story).
          start of ChemistrySystem::update each tick
     G08  All validation errors are reported before tick 0
     G09  Save state is complete: a loaded run produces the identical
-         future as an uninterrupted run [phase 2]
+         future as an uninterrupted run [phase 3]
     G10  stdout contains only NDJSON events
     G11  stderr contains only human-readable diagnostics
     G12  Exit codes follow section 2.3

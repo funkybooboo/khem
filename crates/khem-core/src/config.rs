@@ -179,7 +179,7 @@ pub struct PhysicsConfig {
     /// This is the environment reservoir - the pond's heat sink -
     /// without which a vented pond cannot hold a steady state (a
     /// vent injects continuously and a Wrap boundary leaks
-    /// nothing). Region declarations (phase 3) are the
+    /// nothing). Region declarations (phase 4) are the
     /// setpoint source; the phase-1 pond declares 35 C.
     pub field_relax_rate: f32,
     /// Formation capture gate: pairs with relative speed above
@@ -203,7 +203,7 @@ pub struct PhysicsConfig {
     /// Field grid cell size, angstroms.
     pub field_cell_size: f32,
     /// Ticks between dead-entity compactions (spec 5.2). NOT YET
-    /// READ by any system: compaction is phase-2 work, so this only
+    /// READ by any system: compaction is phase-3 work, so this only
     /// pins the spec 11 value until the compactor lands.
     pub compaction_interval: u32,
     /// Fraction of world height counted as surface for solar UV.

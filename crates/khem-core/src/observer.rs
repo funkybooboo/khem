@@ -10,7 +10,7 @@
 //!
 //! Phase-1 scope: START, TICK, BOND_FORMED, BOND_BROKEN, END per
 //! runtime spec 3.3. NOTABLE (watch conditions) and SAVE (state
-//! persistence) arrive with phase 2; the enum grows additively when
+//! persistence) arrive with phase 3; the enum grows additively when
 //! they do.
 //!
 //! Timing fields (elapsed_ms, ticks_per_sec) are wall-clock and
@@ -51,7 +51,7 @@ pub struct WorldStats {
 
 /// One output event (runtime spec 3.3), payloads carrying exactly
 /// the schema fields. `elem_*` fields are element indexes into the
-/// canonical table (phase 3 revisits if custom element tables
+/// canonical table (phase 4 revisits if custom element tables
 /// arrive).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event {
@@ -110,7 +110,7 @@ pub trait ObserverSystem {
     /// The START event from initial state.
     fn start(&mut self, world: &WorldState) -> Event;
     /// Events for this tick: a TICK event on `tick_interval`
-    /// boundaries, plus any watch-condition NOTABLEs (phase 2).
+    /// boundaries, plus any watch-condition NOTABLEs (phase 3).
     fn sample(&mut self, world: &WorldState, timing: Timing) -> Vec<Event>;
     /// The END event with the run's reason.
     fn end(&mut self, world: &WorldState, timing: Timing) -> Event;

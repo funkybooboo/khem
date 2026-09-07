@@ -11,7 +11,7 @@
 //!   chemistry the only bond-mutating steps, and one place that
 //!   breaks bonds keeps the RNG discipline legible.
 //! - The bond-energy table (spec 7.3) and angle logic (spec 7.4) are
-//!   hardcoded here; the spec puts them in physics.cfg, which phase 3
+//!   hardcoded here; the spec puts them in physics.cfg, which phase 4
 //!   loads. Unknown-pair fallback: geometric mean of the elements'
 //!   single-bond reference energies; unknown order for a known pair:
 //!   single-bond energy times order (v0 fallbacks).

@@ -38,7 +38,7 @@ pub struct ElementId(pub u8);
 ///
 /// Dead atoms are flagged (`alive = false`) and never removed
 /// immediately - removal would invalidate IDs. Periodic compaction
-/// is phase-2 work (spec 5.2: not yet implemented); until it lands,
+/// is phase-3 work (spec 5.2: not yet implemented); until it lands,
 /// dead slots accumulate and every system skips them.
 ///
 /// The bond slots are `Option` rather than the spec's raw
@@ -248,7 +248,7 @@ pub struct WorldState {
     /// Declared environment setpoints, degrees: cells relax toward
     /// their setpoint at field_relax_rate (spec 6.2, the environment
     /// reservoir). 0 = no setpoint declared = no relaxation
-    /// (phase-1 sentinel; phase 3 regions always declare).
+    /// (phase-1 sentinel; phase 4 regions always declare).
     pub setpoint_field: Grid2D,
     pub pressure_field: Grid2D,
     pub uv_field: Grid2D,
