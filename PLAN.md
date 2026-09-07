@@ -103,7 +103,7 @@ evidence, not an optional follow-up. Current bindings:
   the vent + setpoint reservoir warm the field over ~6k ticks
   and KE rides the recovery. Re-validated PASS: thermostat
   coupling (KE/atom vs the field's warm-cell thermal level)
-  constant 1.10-1.13 at every sample through the transient, KE
+  constant 1.09-1.13 at every sample through the transient, KE
   bounded throughout, flatness over the steady tail (6.25k-8k vs
   8.25k-10k: KE +10.6%, bond length +0.3%)
 - the velocity clamp (tunneling mint guard) was REMOVED in the
@@ -129,7 +129,7 @@ evidence, not an optional follow-up. Current bindings:
         reservoir + vent (spec 6.1/6.2/11 synced).
         RE-VALIDATED 2026-09-07 (K1.3's integrator commit, the
         contract's integrator binding): coupling ratio constant
-        1.10-1.13 through the measured field-recovery transient,
+        1.09-1.13 through the measured field-recovery transient,
         KE bounded throughout, steady-tail windows (6.25k-8k vs
         8.25k-10k) KE +10.6%, bond length +0.3%.
     K1.2 FORCE SANITY: a bonded overlap imparts bounded velocity
@@ -141,6 +141,11 @@ evidence, not an optional follow-up. Current bindings:
         (p95 <= 1.013, worst sample 13/1496 bonds outside the
         band) at every sample of the same 10k-tick vented run
         (tests/k1_stability.rs, release --ignored).
+        RE-VALIDATED 2026-09-07 in K1.3's integrator commit
+        (stiffer springs move the operating point): PASS -
+        probe under the analytic bound, band mean ratio
+        1.003-1.010, p95 <= 1.21, every sample inside
+        [0.8, 1.5].
     K1.3 WATER PERSISTS: a 35 C pond of H2O keeps its molecules
         - intact count flat, O-H essentially never breaks (real
         chemistry's own exp(-29) answer), the form+break cycle

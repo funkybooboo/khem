@@ -62,8 +62,8 @@ pub const TICK_ORDER: [&str; 11] = [
 /// The tick loop: owns the systems and the wall clock, drives one
 /// [`WorldState`] through fixed-order ticks, and yields the events
 /// each tick produced (bond events from chemistry plus the observer's
-/// tick events). The caller serializes and flushes (step 9 of the
-/// tick order - I/O belongs to the bin).
+/// tick events). The caller serializes and flushes (the final step
+/// of the tick order - I/O belongs to the bin).
 pub struct Sim {
     energy: Energy,
     physics: Physics,

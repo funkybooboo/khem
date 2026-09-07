@@ -164,12 +164,12 @@ fn phase1_loop_smoke() {
 ///   transient included (the founding F8 furnace measured 1e13);
 /// - the THERMOSTAT COUPLING law: KE/atom stays within [0.8, 1.4]
 ///   of the field's warm-cell thermal level kb*T at every sample
-///   (measured: constant 1.10-1.13 through the whole run - the
+///   (measured: constant 1.09-1.13 through the whole run - the
 ///   atoms ride their local bath, never decoupled above or
 ///   below it);
 /// - flatness over the steady tail: window means 6.25k-8k vs
 ///   8.25k-10k within 15% for both metrics (measured: KE/atom
-///   +9.4%, mean bond length +0.35%). The window moved past a
+///   +10.6%, mean bond length +0.3%). The window moved past a
 ///   measured, converging TRANSIENT: the pre-K1.3 substrate's
 ///   chemistry refrigerated the field into a steady cold state
 ///   within ~2k ticks (every formation absorbed 0.3*E; shatter
@@ -213,7 +213,7 @@ fn k1_1_thermostat_flatness() {
                 .temp_field
                 .data
                 .iter()
-                .map(|t| t.max(0.0))
+                .map(|v| v.max(0.0))
                 .sum::<f32>()
                 / world.temp_field.data.len() as f32;
             // The thermostat coupling law: atoms at their local
@@ -274,18 +274,23 @@ fn k1_1_thermostat_flatness() {
 
 /// K1.2 FORCE SANITY (gate ladder): a bonded overlap imparts
 /// bounded velocity (the founding hard core measured v ~ 1e4 - a
-/// cannon), and bond geometry holds the ladder's band.
+/// cannon), and bond geometry holds the ladder's band. PASSED
+/// 2026-09-07 against the pre-K1.3 substrate; re-run PASS in the
+/// K1.3 integrator commit (sub-stepping resolves the overlap
+/// over the whole tick, so the measured impulse lands further
+/// below the bound, and the band tightens with the stiffer
+/// springs).
 ///
 /// Two measurements:
 ///
 /// - Overlap probe: two bonded O atoms placed at 0.05 * r_eq in a
 ///   zero-temperature world - no kicks (sigma 0), no vent, no
 ///   other atoms - so the spring is the only actor. One tick must
-///   impart at most the analytic single-tick Hooke impulse
+///   impart at most the analytic single-impulse Hooke bound
 ///   k * r_eq / m per atom (the smooth law is bounded at
 ///   coincidence by construction, spec 6.3; the removed hard
-///   core would land orders of magnitude over, clamp or no clamp)
-///   and must push the pair apart.
+///   core would land orders of magnitude over) and must push the
+///   pair apart.
 /// - The band: the same 10k-tick vented pond as K1.1 (seed 42);
 ///   PASS is the ladder's criterion - the mean per-bond stretch
 ///   ratio stays within [0.8, 1.5] at every sample.
@@ -322,7 +327,7 @@ fn k1_2_force_sanity() {
         assert!(
             speed <= impulse_bound,
             "K1.2 probe: atom {id:?} speed {speed:.4} exceeds the \
-             single-tick Hooke bound {impulse_bound:.4}"
+             single-impulse Hooke bound {impulse_bound:.4}"
         );
     }
     let (ax, ay) = (world.atom(a).x, world.atom(a).y);
@@ -572,20 +577,21 @@ fn k1_diagnostics() {
         "K1 persistence: only {intact}/{WATERS} waters intact"
     );
     assert!(finite, "K1 stability: positions/velocities not finite");
-    // Geometry standard: molecules stay COHERENT (no shards, no
-    // comets), at the flop level this substrate's dt=1 symplectic
-    // bound allows. Real water's bond-PE/kT ratio is ~80; the
-    // stability bound caps this substrate near ~3, so mean stretch
-    // around equilibrium is inherent until collision sub-stepping
-    // (phase 2) permits stiffer springs. The numbers below detect
-    // the failure modes that existed: 80 A comets (mean >> p95)
-    // and full shard blowups.
+    // Geometry standard: molecules stay COHERENT - no shards, no
+    // comets. Since the K1.3 sub-stepping the springs sit at
+    // real-water well depths (~80 kT, spec 6.3), and this rollup
+    // measures mean 1.193 / p95 1.369 A against equilibrium
+    // ~1.19-1.32 per pair; the bars below sit well above that
+    // with room for the formed-bond population mixing larger
+    // pairs (O-O 1.32, C-C 1.54), while still catching the
+    // failure modes that existed: 80 A comets (mean >> p95) and
+    // full shard blowups.
     assert!(
-        mean_len < 3.5,
-        "K1 geometry: mean bond length {mean_len:.3} A beyond coherent flop"
+        mean_len < 1.5,
+        "K1 geometry: mean bond length {mean_len:.3} A beyond coherent"
     );
     assert!(
-        p95_len < 5.0,
+        p95_len < 2.5,
         "K1 geometry: p95 bond length {p95_len:.3} A - shard tail"
     );
     assert!(

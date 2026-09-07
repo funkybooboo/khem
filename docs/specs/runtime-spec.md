@@ -291,10 +291,10 @@ times per tick at dt_sub = 1/integration_substeps (6.5, gate K1.3).
     2.  PhysicsSystem::apply_bath        (temperature diffusion,
                                            setpoint relaxation,
                                            Langevin kicks; once)
-    3.  SpatialIndex::rebuild            \ + the sub-step block,
-    4.  PhysicsSystem::update_velocities  | repeated
-    5.  PhysicsSystem::update_positions   | integration_substeps
-                                          /  times per tick
+    3.  SpatialIndex::rebuild               \ the sub-step block:
+    4.  PhysicsSystem::update_velocities    | these three repeat
+    5.  PhysicsSystem::update_positions     | integration_substeps
+                                            /  times per tick
     6.  PhysicsSystem::apply_boundary
     7.  SpatialIndex::rebuild
     8.  ChemistrySystem::break_bonds
@@ -377,7 +377,7 @@ hydrogen hiding the error, each oxygen interaction minted
 
 ### 6.2 Temperature diffusion
 
-Executes at the start of PhysicsSystem::update_velocities, before
+Executes at the start of PhysicsSystem::apply_bath, before
 the kicks sample the field (5.1 names no slot for it; the kernel
 pinned this one). Per cell, 4-connected neighbors, wrapped at the
 grid edges (grids wrap like the Wrap boundary, 4.8). After

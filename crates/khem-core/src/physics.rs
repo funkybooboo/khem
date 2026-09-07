@@ -27,17 +27,18 @@
 //!   region-parallel implementation needs, and it keeps each pass
 //!   free of tangled borrows (ADR-0005, runtime spec 10.2).
 //! - Constants are the spec 11 tuned set (2026-09-07, findings
-//!   F1-F16 in docs/research/abstraction-notes.md plus the K1.3
-//!   sub-stepping session): every retune is a measured fix, the
-//!   passed gates are re-validated in the commit that moves their
-//!   operating assumptions, and the harness is the judge of every
-//!   further retune.
+//!   F1-F18 in docs/research/abstraction-notes.md): every retune
+//!   is a measured fix, the passed gates are re-validated in the
+//!   commit that moves their operating assumptions, and the
+//!   harness is the judge of every further retune.
 //!
 //! RNG discipline (ADR-0005): this system is the first RNG consumer
 //! in the tick (the energy system, step 1, draws nothing). Exactly
-//! two `normal` draws per LIVE atom per tick, in AtomId order; dead
-//! atoms draw nothing. Every other physics step is deterministic
-//! arithmetic with no RNG access.
+//! two `normal` draws per LIVE atom per tick, in AtomId order,
+//! once per tick inside [`PhysicsSystem::apply_bath`]; dead atoms
+//! draw nothing. The integration sub-steps draw nothing. Every
+//! other physics step is deterministic arithmetic with no RNG
+//! access.
 //!
 //! Spec: docs/specs/runtime-spec.md, section 6 (Physics System).
 
@@ -477,6 +478,13 @@ mod tests {
         Physics::new(PhysicsConfig::default())
     }
 
+    /// The integration sub-step, dt_sub = 1/integration_substeps,
+    /// from the configured constants (the same value Physics::new
+    /// derives into its private `dt` field).
+    fn dt_sub() -> f32 {
+        1.0 / PhysicsConfig::default().integration_substeps as f32
+    }
+
     #[test]
     fn thermal_noise_scales_with_temperature_and_inverse_mass() {
         // Zero temperature: sigma = 0, the atom stays at rest.
@@ -539,7 +547,7 @@ mod tests {
         assert!(w.atom(a).vx < 0.0, "a pushed away");
         assert!(w.atom(b).vx > 0.0, "b pushed away");
         // Magnitude: the sub-step impulse law, F/m * dt_sub.
-        let dt = 1.0 / PhysicsConfig::default().integration_substeps as f32;
+        let dt = dt_sub();
         assert!(
             (w.atom(b).vx - 1.09 * dt).abs() < 0.05,
             "soft-core sub-step impulse {}",
@@ -723,8 +731,7 @@ mod tests {
         physics().update_velocities(&mut w);
         assert!(w.atom(a).vx < 0.0, "compressed bond pushes a away");
         assert!(w.atom(b).vx > 0.0, "compressed bond pushes b away");
-        let dt = 1.0 / PhysicsConfig::default().integration_substeps as f32;
-        let bound = 436.0 * PhysicsConfig::default().spring_energy_scale * 1.06 * dt; // k*r_eq*dt
+        let bound = 436.0 * PhysicsConfig::default().spring_energy_scale * 1.06 * dt_sub(); // k*r_eq*dt
         assert!(
             w.atom(b).vx <= bound,
             "compression impulse {} exceeds k*r_eq*dt_sub {}",
@@ -817,7 +824,7 @@ mod tests {
         // sums back to dt = 1 (spec 6.5).
         let mut sys = physics();
         sys.update_positions(&mut w);
-        let dt = 1.0 / PhysicsConfig::default().integration_substeps as f32;
+        let dt = dt_sub();
         assert_eq!(
             (w.atom(a).x, w.atom(a).y),
             (50.0 + 1.5 * dt, 50.0 - 0.5 * dt)

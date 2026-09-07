@@ -127,7 +127,7 @@ run by channel):
   vent + setpoint reservoir warm the field over ~6k ticks and
   KE/atom rides the recovery. The thermostat itself held
   perfectly: the coupling ratio KE/atom / (kB * field warm-cell
-  average) measured a constant 1.10-1.13 at every sample through
+  average) measured a constant 1.09-1.13 at every sample through
   the transient. Re-validated criterion: bounded throughout +
   the coupling law (ratio in [0.8, 1.4]) + flatness over the
   steady tail (6.25k-8k vs 8.25k-10k: KE +10.6%, bond length
@@ -235,7 +235,11 @@ dt * sqrt(k) < 2 - but that bound is a necessary condition, not a
 thermostat. Without a dissipation channel, additive noise pumps
 energy forever regardless of integration scheme. The lesson stands:
 canonical-ensemble dynamics need a bath, not just a stable
-integrator (see section 10 below).
+integrator (see section 10 below). K1.3 update (2026-09-07): the
+integrator sub-steps, so the stability bound is evaluated at
+dt_sub = 1/integration_substeps and the springs sit at real-water
+well depths (~80 kT for O-H) inside it - the resolution log has
+the measurements.
 
 ## 4. Non-bonded interactions (the F4 gap)
 
