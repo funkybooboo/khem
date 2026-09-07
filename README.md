@@ -100,9 +100,12 @@ in the runtime - it is something the chemistry must do alone.
 ## Status
 
 The engine is built and streams real output - every number above
-came off an actual run. The gates have not passed: K1 is
-measured, failing, and the measured cause is a missing
-thermostat; that fix is the open decision. The .kem language is
+came off an actual run. The gate ladder is partly climbed: the
+thermostat (K1.1) and force-sanity (K1.2) sub-gates are measured
+passes. K1 is still failing - measured, with causes named: pond
+water does not survive the collisions (206 of 1024 intact at
+tick 2000, gate K1.3), and the settled field runs at -162 C
+against its 35 C setpoint (gate K1.4). The .kem language is
 spec-only - the parser is built only after the gates pass,
 because a language on a dead substrate is worthless.
 

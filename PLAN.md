@@ -117,8 +117,14 @@ evidence, not an optional follow-up. Current bindings:
         docs/research/abstraction-notes.md) and the setpoint
         reservoir + vent (spec 6.1/6.2/11 synced).
     K1.2 FORCE SANITY: a bonded overlap imparts bounded velocity
-        (F9 measured v ~ 1e4 - a cannon). PASS: mean bond length
-        stays within [0.8, 1.5] * r_eq over the same run.
+        (F9 measured v ~ 1e4 - a cannon). PASSED 2026-09-07: the
+        overlap probe (two bonded O atoms at 0.05 * r_eq, zero
+        field, one tick) imparts 0.046 A/tick per atom against the
+        analytic single-tick Hooke bound k * r_eq / m = 0.048;
+        the mean per-bond stretch ratio holds 1.000-1.002
+        (p95 <= 1.013, worst sample 13/1496 bonds outside the
+        band) at every sample of the same 10k-tick vented run
+        (tests/k1_stability.rs, release --ignored).
     K1.3 WATER PERSISTS: a 35 C pond of H2O keeps its molecules
         - intact count flat, O-H essentially never breaks (real
         chemistry's own exp(-29) answer), the form+break cycle
