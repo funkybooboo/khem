@@ -1,8 +1,13 @@
 # khem project plan
 
+khem is a bet: build matter honest enough to be interesting and
+cheap enough to run a billion ticks, seed it with a minimal cell,
+and let the chemistry do everything above the atom/bond level - if
+anything alive appears, it built itself from the rules.
+
 This file is the hub: the hinge question, where the repo stands,
-the phase map, and the project-wide rules. The detail lives one
-phase per file in docs/plans/.
+the phase map, and the project-wide rules. The detail lives in
+docs/plans/, one file per phase.
 
 ## The one question this project hinges on
 
@@ -32,9 +37,9 @@ before specs.
   history: docs/plans/phase-1-kernel.md.
 - Findings F1-F18 live in docs/research/abstraction-notes.md;
   the open one is F18 (wide-capture churn, K1.4's lever).
-- Release speed measured ~55 t/s at 3.4k atoms (K1.3's
-  sub-stepping costs 4x force passes); the phase-2 perf pass
-  owns the target (10k atoms at >500 t/s).
+- Release speed measured ~60 t/s at 3.4k atoms (2026-09-07;
+  K1.3's sub-stepping costs 4x force passes); the phase-2 perf
+  pass owns the target (10k atoms at >500 t/s).
 - The .kem language is spec-only; the parser starts only after
   the K gates pass (ADR-0006).
 - Toolchain pinned in mise.toml; `mise run check` is the gate,

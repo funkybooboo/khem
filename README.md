@@ -32,6 +32,9 @@ and one command streams a live world to stdout:
      "bond_count":2091,"mol_size_dist":{"1":290,"2_5":1052,
      "6_20":1,"21plus":0}}
 
+Every number above came off this run; the events are abridged
+for width - the full field lists are the runtime spec, section 3.3.
+
 One JSON event per line, flushed every tick: stream it, grep it,
 chart it, build a viewer on it. Same seed, byte-identical run -
 determinism is by construction, not luck.
@@ -119,11 +122,11 @@ because a language on a dead substrate is worthless.
 
 ## Documentation
 
-    PLAN.md            the plan hub: status, phase map, rules
-    docs/plans/       one file per phase (kernel, gates, language)
-    ARCHITECTURE.md    crate map and scaling plan
-    docs/specs/        the .kem language and runtime specs
-    docs/adr/          the why behind every decision
-    docs/research/     prior work, mapped to design choices
+    PLAN.md            where the project stands and where it goes
+    ARCHITECTURE.md    how the crates fit together
+    docs/specs/        the contracts: the .kem language, the runtime
+    docs/plans/        the build order, phase by phase
+    docs/adr/          the why behind the design decisions
+    docs/research/     prior work and the evidence log
 
 MIT license.

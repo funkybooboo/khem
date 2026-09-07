@@ -32,8 +32,8 @@ Remaining (the spec's [phase 2] markers):
   (phase 0's binding).
 - signals: clean ctrl-c interrupt (spec 2.3, exit code 3);
   phase-1 builds die with the process.
-- performance: the spec-10 targets (10k atoms at >500 t/s on a
-  laptop). Measured after K1.3: ~55 t/s at 3.4k atoms - the
+- performance: the spec 13 targets (10k atoms at >500 t/s on a
+  laptop). Measured 2026-09-07: ~60 t/s at 3.4k atoms - the
   sub-stepping (4x force passes + per-sub-step index rebuilds)
   bought water persistence at 8x the force cost, so this pass is
   now load-bearing. No optimization before the substrate is

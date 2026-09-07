@@ -58,7 +58,7 @@ describes the shape they produced.
   [[bin]] targets, but one-bin-per-crate is the convention here so
   dependency graphs stay honest.
 
-## Scaling plan (from the runtime spec draft)
+## Scaling plan (runtime spec section 10)
 
 - V1 (now): single thread, flat arrays, deterministic tick order.
 - V2 (optional, later): thread-per-region with ghost cells. Enabled
@@ -73,12 +73,16 @@ describes the shape they produced.
 
 ## Exists today vs later
 
-    today    khem-core (data model, element table, config, RNG,
-             spatial index; the systems are phase 1)
-             khem (bin: CLI skeleton, runtime spec section 2)
+    today    khem-core (the whole phase-1 kernel: tick loop,
+             physics, chemistry, energy, observer, spatial index,
+             deterministic RNG, NDJSON, the hardcoded pond, the
+             K1 harness)
+             khem (bin: runs the pond, streams NDJSON; runtime
+             spec section 2)
     phase 3  khem-lang (after the K1-K5 gates pass)
-    later    khem-view, khem-log (once there is an event stream worth
-             watching)
+    later    khem-view, khem-log, khem-check, khem-build (the
+             stream and the parts library they consume come
+             first)
 
 Placeholder crates are deliberately NOT created ahead of need. The
 workspace accepts a new crate with one directory and one members

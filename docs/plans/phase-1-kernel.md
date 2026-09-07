@@ -12,8 +12,8 @@ entry point (see ARCHITECTURE.md). Everything is hardcoded:
 - NDJSON events to stdout (tick + bond events; watch conditions
   are phase 2)
 
-Explicit non-goals: no parser, no .kem files, no plugins, no CLI
-flags beyond --seed. Hardcode everything. The kernel is
+Explicit non-goals: no parser, no .kem files, no plugins, no
+behavioral CLI options beyond --seed. Hardcode everything. The kernel is
 disposable; the answer to the K-gates is not.
 
 ## The gate ladder

@@ -1,10 +1,10 @@
 # Phase-0 notes: what each abstraction stands on
 
 Status: in progress (docs/plans/phase-0-research.md). Companion to
-references.md (the
-bibliography); this file records, per abstraction khem uses, what
-prior work supports it, what it simplifies away, and what the phase-1
-kernel has already measured against it. Written 2026-09-05, after the
+references.md (the bibliography); this file records, per
+abstraction khem uses, what prior work supports it, what it
+simplifies away, and what the phase-1 kernel has already measured
+against it. Written 2026-09-05, after the
 physics and energy systems landed and the first analytical stability
 findings were made (F1-F5 below).
 
@@ -41,9 +41,10 @@ constants; numbers in the tuning commit):
       gap the owner asked about. Fixed same day (WorldState::delta,
       spec 6.3/7.1/7.2 synced). Post-fix round 3: mean bond length
       58.5 A (from 63) - real but minor; F8/F9 dominate K1's
-      failure. Known related gap (F11): the spatial index does not
-      wrap, so formation candidates across the seam are suppressed
-      (no dynamics corruption; phase 2 with K2/K3).
+      failure. Known related gap (F11): the spatial index did not
+      wrap, so formation candidates across the seam were
+      suppressed - fixed the same day (wrap-aware index, spec
+      4.9); gate K1.5 owns the seam-symmetry measurement.
 
 ## Resolution log (2026-09-05, K1.1 session)
 
@@ -156,6 +157,26 @@ run by channel):
   (docs/plans/phase-2-hardening.md: no optimization before the
   substrate is behaviorally sane; the gates are correctness gates).
 
+## Resolution log (2026-09-07, post-K1.3 quality pass)
+
+- The golden hash was strengthened to cover FIELD STATE, not
+  just dynamics (commit 63beb41): it now hashes temp/setpoint/
+  pressure/uv sums alongside the atom/bond state. New value
+  0x6239_1611_1731_3A86 (the previous 0x0896_8E9C_98C9_54F6
+  stays in git history). Why: the dynamics-only hash was blind
+  to field-only refactors - a UV rescale would have left the
+  golden tick green while changing the world's energy budget.
+- Open-boundary bond breaks emit BOND_BROKEN (energy_released 0,
+  no field exchange; spec 3.3/6.7 synced): a bond never silently
+  vanishes at the edge - the stream stays a complete record of
+  bond liveness.
+- The form_bonds capacity pre-check was hoisted before the
+  neighbor query (commit f4791e5; the pond is ~90% saturated, so
+  most atoms skip the expensive pass; draw-neutral, golden hash
+  unchanged): the 10k-tick pond now runs ~167 s (~60 t/s), from
+  ~189 s at the K1.3 commit. Perf drifts with the substrate; the
+  phase-2 perf pass owns the target.
+
 ## Findings first analyzed before measurement
 
 - F1  Literal kB (0.008314) with pond temperatures (15-80 C) makes
@@ -184,8 +205,8 @@ run by channel):
       Queued as a proposal before K2 (section 4 below).
 - F5  TICK events carry wall-clock fields (elapsed_ms,
       ticks_per_sec), so G02 (byte-identical output) needs a
-      documented carve-out for those two fields. DONE in the
-      observer module doc, pending spec revision.
+      documented carve-out for those two fields. DONE: the
+      runtime spec's G02 (section 12) carries the carve-out.
 
 These are expected: ADR-0006 treats the specs as drafts until
 validated against the kernel. The constants retune against harness
@@ -310,10 +331,12 @@ JohnnyVon (continuous 2D replicators): "much slower to run" -
 cited by Hutton as restricting evolutionary usefulness. khem's
 v0.1 target (10k atoms >500 t/s, continuous space, springs, spatial
 hash) is aggressive but the architecture's scaling hooks exist for
-exactly this reason. Measured 2026-09-05: the 3422-atom pond runs
-~90 t/s in a debug build, ~2000 ticks in 22 s; the release-build
-number comes with the phase-2 perf pass. No optimization before
-the pond is behaviorally sane.
+exactly this reason. Measured 2026-09-05: the pond of that day
+(3422 atoms - the mix before the F16 rebalance; today's pond
+seeds 3432) runs ~90 t/s in a debug build, ~2000 ticks in 22 s.
+Release-build numbers live in the resolution logs below; the
+phase-2 perf pass owns the target. No optimization before the
+pond is behaviorally sane.
 
 ## 10. Thermostats: the missing bath (finding F8 - RESOLVED, K1.1)
 
@@ -333,14 +356,12 @@ field locally. Proposed model (owner sign-off pending):
     v <- v * (1 - damping) + normal(0, sigma(T_cell))
 
 IMPLEMENTED 2026-09-05 as gate K1.1 (PASS): the exact form above
-plus signed-delta bookkeeping, the setpoint reservoir, and the
-velocity clamp (findings log).
-fast atoms relax toward the cell's temperature, the field diffuses
-and relaxes toward declared region values, energy bookkeeping
-stays closed except at the world boundary (which the spec pins as
-G06: sources only). One new knob (thermostat_damping), spec 6.1
-revision, harness-gated: K1's KE and bond-length metrics must go
-flat with it.
+plus signed-delta bookkeeping and the setpoint reservoir. Atoms
+relax toward their cell's temperature, the field diffuses and
+relaxes toward declared setpoints, and energy bookkeeping stays
+closed except at the declared environment reservoir (G06). One
+new knob (thermostat_damping), spec 6.1 revision, harness-gated:
+K1's KE and bond-length metrics must go flat with it.
 
 ## What this means for the build order
 

@@ -8,7 +8,7 @@ The language is an HDL for matter (language-spec.md section 1):
 .kem descriptions in, a WorldState of atoms and bonds out. Phase 3
 builds that front end.
 
-- .kem parser for the declarations: element / struct / chain /
+- .kem parser for the declarations: elements / struct / chain /
   body / world / run (grammar from
   docs/specs/language-spec.md, revised against Kappa lessons
   and phase-1 reality; specs are drafts until validated, not
