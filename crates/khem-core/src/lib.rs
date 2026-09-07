@@ -25,6 +25,8 @@
 //! - [`observer`]: event model + read-only sampling with union-find
 //!   molecule detection (spec 9); [`ndjson`]: the schema v:1 emitter
 //! - [`sim`]: the tick loop driving all systems in spec 5.1 order
+//! - [`pond`]: the hardcoded phase-1 vented primordial pond (the
+//!   K1 gate world; phase 3 replaces it with .kem declarations)
 
 pub mod chemistry;
 pub mod config;

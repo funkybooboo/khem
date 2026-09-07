@@ -170,21 +170,12 @@ impl Observer {
     /// World statistics for a TICK event: live counts, field
     /// min/max/avg, free atoms per element, molecule size buckets.
     fn stats(world: &WorldState) -> WorldStats {
-        let mut atom_count = 0;
-        let mut bond_count = 0;
+        let atom_count = world.live_atom_count() as u32;
+        let bond_count = world.live_bond_count() as u32;
         let mut free_atoms = [0u32; 10];
-        for atom in &world.atoms {
-            if !atom.alive {
-                continue;
-            }
-            atom_count += 1;
+        for atom in world.atoms.iter().filter(|a| a.alive) {
             if atom.bond_count == 0 {
                 free_atoms[atom.element.0 as usize] += 1;
-            }
-        }
-        for bond in &world.bonds {
-            if bond.alive {
-                bond_count += 1;
             }
         }
         let (temp_min, temp_max, temp_avg) = field_stats(&world.temp_field.data);
@@ -245,8 +236,8 @@ fn find(parent: &mut [u32], mut i: u32) -> u32 {
 
 impl ObserverSystem for Observer {
     fn start(&mut self, world: &WorldState) -> Event {
-        let atom_count = world.atoms.iter().filter(|a| a.alive).count() as u32;
-        let bond_count = world.bonds.iter().filter(|b| b.alive).count() as u32;
+        let atom_count = world.live_atom_count() as u32;
+        let bond_count = world.live_bond_count() as u32;
         Event::Start {
             khem_version: self.config.khem_version,
             run_name: self.config.run_name.clone(),

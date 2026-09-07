@@ -1,7 +1,8 @@
 //! The physics system: the Langevin thermostat (velocities relax
 //! toward the local field temperature, spec 6.1), temperature
-//! diffusion, bond spring forces with a bounded soft core,
-//! pressure-gradient forces, position updates, boundary conditions.
+//! diffusion and setpoint relaxation, smooth two-way Hooke bond
+//! springs, non-bonded excluded volume, pressure-gradient forces,
+//! position updates, boundary conditions.
 //!
 //! Phase-1 placement decisions, to fold into the spec at revision
 //! (ADR-0006: specs are drafts until validated):
@@ -15,9 +16,10 @@
 //!   implementation needs, and it keeps each pass free of tangled
 //!   borrows (ADR-0005, runtime spec 10.2).
 //! - Constants are the spec 11 tuned set (2026-09-05, findings
-//!   F1-F9 in docs/research/abstraction-notes.md); the thermostat
-//!   (F8) and the bounded soft core (F9) are measured fixes, and
-//!   the K1 harness is the judge of every further retune.
+//!   F1-F16 in docs/research/abstraction-notes.md): the thermostat
+//!   (F8) and the smooth-spring revision (F9) are measured fixes,
+//!   the K1.1 gate is passed, and the harness is the judge of
+//!   every further retune.
 //!
 //! RNG discipline (ADR-0005): this system is the first RNG consumer
 //! in the tick (the energy system, step 1, draws nothing). Exactly
@@ -128,13 +130,15 @@ impl Physics {
     /// clamps to zero (negative field: sigma 0, pure damping).
     ///
     /// Fluctuation-dissipation bookkeeping keeps the field the
-    /// honest energy ledger: the damping DEPOSITS the kinetic
-    /// energy it removed into the atom's cell (fast atoms heat
-    /// their surroundings - the F6 fix), and the noise DRAINS its
-    /// expected injection back out (`mass * s^2`, both components).
-    /// Net zero at equilibrium; off equilibrium energy flows
-    /// field <-> atoms both ways. Draws: exactly two normals per
-    /// LIVE atom per tick, unchanged from before.
+    /// honest energy ledger: the SIGNED kinetic-energy delta
+    /// (old minus new) is deposited into the atom's cell. That one
+    /// term is the complete exchange - the noise's energy is
+    /// inside the new velocity (the field pays for it there), the
+    /// damping's removal likewise. A separate "injected" term
+    /// double-counts and bleeds the field (found diagnosing the
+    /// K1.1 furnace). Net zero at equilibrium; off equilibrium
+    /// energy flows field <-> atoms both ways. Draws: exactly two
+    /// normals per LIVE atom per tick, unchanged from before.
     fn thermal_bath(&mut self, world: &mut WorldState) {
         let kb = self.config.thermal_kick_scale;
         let gamma = self.config.thermostat_damping;
@@ -247,6 +251,7 @@ impl Physics {
             self.fy[i] -= dpdy * sensitivity;
         }
     }
+
     /// Non-bonded excluded volume (finding F4's fix, spec 6.5):
     /// every UNBONDED live pair closer than its cutoff
     /// `(radius_a + radius_b) * non_bonded_margin` is pushed apart
@@ -309,38 +314,30 @@ impl Physics {
     }
 }
 
-impl PhysicsSystem for Physics {
-    fn update_velocities(&mut self, world: &mut WorldState) {
-        let n = world.atoms.len();
-        self.diffuse_temperature(world);
-        self.thermal_bath(world);
-        self.fx.clear();
-        self.fy.clear();
-        self.fx.resize(n, 0.0);
-        self.fy.resize(n, 0.0);
-        self.spring_forces(world);
-        self.non_bonded_forces(world);
-        self.pressure_forces(world);
+impl Physics {
+    /// The apply half of the compute/apply split: writes each live
+    /// atom's velocity from the thermostat result plus the force
+    /// accumulators, then applies the speed clamp.
+    ///
+    /// kx/ky carry the COMPLETE post-bath velocity (the thermostat
+    /// consumes the old velocity); fx/fy are FORCES, divided by
+    /// mass here (F = ma). Set, not add - adding would compound
+    /// the velocity every tick. The founding spec applied forces
+    /// without /mass; with unit-mass atoms hidden in H-H tests,
+    /// that minted ~(0.5*m - 1) * F^2 energy per heavy-atom
+    /// interaction (the one-water probe isolated it: m=16 O,
+    /// ~8*F^2 per spring-tick - the pond furnace). Dead atoms are
+    /// frozen: nothing in this system touches them.
+    fn apply_velocities(&mut self, world: &mut WorldState) {
         // Mass lookup without borrowing world against the mutable
         // atom loop (Arc clone, cheap).
         let table = world.element_table.clone();
         let vmax = self.config.max_atom_speed;
+        let ke_scale = self.config.ke_field_scale;
         for (i, atom) in world.atoms.iter_mut().enumerate() {
-            // Dead atoms are frozen: nothing in this system touches
-            // them (kx/ky carry 0 for them; writing it would zero
-            // their state).
             if !atom.alive {
                 continue;
             }
-            // kx/ky carry the COMPLETE post-bath velocity (the
-            // thermostat consumes the old velocity); fx/fy are
-            // FORCES, divided by mass here (F = ma). Set, not add -
-            // adding would compound the velocity every tick. The
-            // founding spec applied forces without /mass; with
-            // unit-mass atoms hidden in H-H tests, that minted
-            // ~(0.5*m - 1) * F^2 energy per heavy-atom interaction
-            // (the one-water probe isolated it: m=16 O, ~8*F^2 per
-            // spring-tick - the pond furnace).
             let mass = table[atom.element.0 as usize].mass;
             let (vx, vy) = (
                 self.kx[i] + self.fx[i] / mass,
@@ -354,9 +351,7 @@ impl PhysicsSystem for Physics {
             let (vx, vy) = if speed2 > vmax * vmax {
                 let scale = vmax / speed2.sqrt();
                 let removed = 0.5 * mass * (speed2 - vmax * vmax);
-                world
-                    .temp_field
-                    .add(atom.x, atom.y, removed * self.config.ke_field_scale);
+                world.temp_field.add(atom.x, atom.y, removed * ke_scale);
                 (vx * scale, vy * scale)
             } else {
                 (vx, vy)
@@ -364,6 +359,22 @@ impl PhysicsSystem for Physics {
             atom.vx = vx;
             atom.vy = vy;
         }
+    }
+}
+
+impl PhysicsSystem for Physics {
+    fn update_velocities(&mut self, world: &mut WorldState) {
+        let n = world.atoms.len();
+        self.diffuse_temperature(world);
+        self.thermal_bath(world);
+        self.fx.clear();
+        self.fy.clear();
+        self.fx.resize(n, 0.0);
+        self.fy.resize(n, 0.0);
+        self.spring_forces(world);
+        self.non_bonded_forces(world);
+        self.pressure_forces(world);
+        self.apply_velocities(world);
     }
 
     fn update_positions(&mut self, world: &mut WorldState) {
@@ -446,7 +457,7 @@ mod tests {
     }
 
     #[test]
-    fn thermal_kicks_scale_with_temperature_and_inverse_mass() {
+    fn thermal_noise_scales_with_temperature_and_inverse_mass() {
         // Zero temperature: sigma = 0, the atom stays at rest.
         let mut cold = world(1, BoundaryType::Wrap);
         let a = cold.spawn_atom(ElementId(3), 50.0, 50.0); // O
@@ -511,10 +522,14 @@ mod tests {
         // Beyond cutoff: no force.
         let mut w = world(1, BoundaryType::Wrap);
         let c = w.spawn_atom(ElementId(0), 50.0, 50.0);
-        w.spawn_atom(ElementId(0), 55.0, 50.0);
+        let d = w.spawn_atom(ElementId(0), 55.0, 50.0);
         physics().update_velocities(&mut w);
         assert_eq!(w.atom(c).vx, 0.0);
-        let _ = b;
+        assert_eq!(
+            (w.atom(c).bond_count, w.atom(d).bond_count),
+            (0, 0),
+            "distant pair: no forces, no bonds"
+        );
     }
 
     #[test]
@@ -645,16 +660,7 @@ mod tests {
         // form; dividing is the inverted-scale mistake).
         let total = |w: &WorldState| -> f64 {
             let field: f32 = w.temp_field.data.iter().sum();
-            let ke: f64 = w
-                .atoms
-                .iter()
-                .filter(|at| at.alive)
-                .map(|at| {
-                    let m = w.element(at.element).mass as f64;
-                    0.5 * m * (at.vx as f64).powi(2) + 0.5 * m * (at.vy as f64).powi(2)
-                })
-                .sum();
-            field as f64 + ke * config.ke_field_scale as f64
+            field as f64 + w.kinetic_energy() * config.ke_field_scale as f64
         };
         let before = total(&w);
         let mut sys = Physics::new(config);
@@ -856,6 +862,6 @@ mod tests {
         // No panic, and the live atom was not flung by a force
         // against a dead partner (zero temperature: kicks are zero).
         assert_eq!(w.atom(b).vx, 0.0);
-        let _ = BondId(0);
+        assert_eq!(w.bond(BondId(0)).atom_b, b, "the bond still points at b");
     }
 }

@@ -101,6 +101,16 @@ impl AtomState {
         self.bond_count -= 1;
         true
     }
+
+    /// The ids of this atom's held bonds, in slot order. The one
+    /// canonical way to walk an atom's bonds; `bonds[..bond_count]`
+    /// slicing is an implementation detail.
+    pub fn bond_ids(&self) -> impl Iterator<Item = BondId> + '_ {
+        self.bonds[..self.bond_count as usize]
+            .iter()
+            .flatten()
+            .copied()
+    }
 }
 
 /// One bond (runtime spec 4.5).
@@ -336,14 +346,48 @@ impl WorldState {
 
     /// Whether two atoms share a live bond.
     pub fn is_bonded(&self, a: AtomId, b: AtomId) -> bool {
-        let atom = self.atom(a);
-        atom.bonds[..atom.bond_count as usize]
+        self.atom(a).bond_ids().any(|id| {
+            let bond = self.bond(id);
+            bond.alive && (bond.atom_a == b || bond.atom_b == b)
+        })
+    }
+
+    /// Number of live atoms.
+    pub fn live_atom_count(&self) -> usize {
+        self.atoms.iter().filter(|a| a.alive).count()
+    }
+
+    /// Number of live bonds.
+    pub fn live_bond_count(&self) -> usize {
+        self.bonds.iter().filter(|b| b.alive).count()
+    }
+
+    /// Total kinetic energy of live atoms, summing per component
+    /// `0.5 * mass * v^2`. The diagnostics and harnesses all read
+    /// this; one implementation keeps the ledger consistent.
+    pub fn kinetic_energy(&self) -> f64 {
+        self.atoms
             .iter()
-            .filter_map(|slot| *slot)
-            .any(|id| {
-                let bond = self.bond(id);
-                bond.alive && (bond.atom_a == b || bond.atom_b == b)
+            .filter(|a| a.alive)
+            .map(|a| {
+                let m = self.element(a.element).mass as f64;
+                0.5 * m * (a.vx as f64).powi(2) + 0.5 * m * (a.vy as f64).powi(2)
             })
+            .sum()
+    }
+
+    /// Minimum-image lengths of all live bonds, angstroms.
+    /// Geometry diagnostics (K1.1/K1.2) read this.
+    pub fn bond_lengths(&self) -> Vec<f32> {
+        self.bonds
+            .iter()
+            .filter(|b| b.alive)
+            .map(|b| {
+                let (a, c) = (self.atom(b.atom_a), self.atom(b.atom_b));
+                let (dx, dy) = self.delta(a.x, a.y, c.x, c.y);
+                (dx * dx + dy * dy).sqrt()
+            })
+            .collect()
     }
 
     /// Forms a bond between two atoms, enforcing guarantee G04 (bond

@@ -154,10 +154,9 @@ fn ideal_angle(world: &WorldState, a: AtomId, candidate_order: u8) -> Option<f32
         return None;
     }
     // Existing double bonds shift carbon and nitrogen geometry.
-    let doubles = atom.bonds[..atom.bond_count as usize]
-        .iter()
-        .flatten()
-        .filter(|id| world.bond(**id).order >= 2)
+    let doubles = atom
+        .bond_ids()
+        .filter(|id| world.bond(*id).order >= 2)
         .count() as u8;
     let has_double = doubles > 0 || candidate_order >= 2;
     match world.element(atom.element).atomic_number {
@@ -187,6 +186,48 @@ pub struct Chemistry {
 impl Chemistry {
     pub fn new(config: PhysicsConfig) -> Self {
         Self { config }
+    }
+
+    /// Mechanical dissociation (spec 7.1 v0): bonds stretched past
+    /// `bond_break_factor * r_eq` break deterministically, no RNG
+    /// roll. Real bonds do not stretch to multiples of their
+    /// length; without this rule, collision-shoved bonds
+    /// random-walked to tens of angstroms while alive (measured).
+    ///
+    /// No field release: the stretch already spent the energy (the
+    /// vanishing spring potential is a sink, and sinks cannot
+    /// cascade - measured: heat-releasing length breaks fueled
+    /// runaway dissociation). Thermal/UV breaks keep the release
+    /// (the F7-conserving channel). Returns whether the bond was
+    /// overstretched and is now handled.
+    fn break_if_overstretched(
+        &self,
+        world: &mut WorldState,
+        index: usize,
+        a: AtomId,
+        b: AtomId,
+        dx: f32,
+        dy: f32,
+    ) -> bool {
+        let r_eq = world.element(world.atom(a).element).radius
+            + world.element(world.atom(b).element).radius;
+        let r = (dx * dx + dy * dy).sqrt();
+        if r <= self.config.bond_break_factor * r_eq {
+            return false;
+        }
+        if world.break_bond(BondId(index as u32)) {
+            let (ax, ay) = (world.atom(a).x, world.atom(a).y);
+            world.event_queue.push(Event::BondBroken {
+                tick: world.tick,
+                bond_id: index as u32,
+                elem_a: world.atom(a).element,
+                elem_b: world.atom(b).element,
+                energy_released: 0.0,
+                x: ax + dx * 0.5,
+                y: ay + dy * 0.5,
+            });
+        }
+        true
     }
 
     /// The bond a pair would form and its per-tick formation
@@ -254,8 +295,8 @@ impl Chemistry {
         let atom = world.atom(a);
         let (ax, ay) = (atom.x, atom.y);
         let mut best = 0.0f32;
-        for id in atom.bonds[..atom.bond_count as usize].iter().flatten() {
-            let bond = world.bond(*id);
+        for id in atom.bond_ids() {
+            let bond = world.bond(id);
             let other = if bond.atom_a == a {
                 bond.atom_b
             } else {
@@ -289,41 +330,14 @@ impl ChemistrySystem for Chemistry {
             if !alive {
                 continue;
             }
-            // Mechanical dissociation: bonds stretched past
-            // bond_break_factor * r_eq break deterministically (no
-            // RNG roll; spec 7.1 v0 addition, config doc). Real
-            // bonds do not stretch to multiples of their length;
-            // without this, collision-shoved bonds random-walked to
-            // tens of angstroms while alive.
+            // One minimum-image delta serves both the length check
+            // and the midpoint (a seam pair samples the field where
+            // the bond actually is, not across the world - F10).
             let (ax, ay) = (world.atom(a).x, world.atom(a).y);
-            let r_eq_break = world.element(world.atom(a).element).radius
-                + world.element(world.atom(b).element).radius;
             let (dx, dy) = world.delta(ax, ay, world.atom(b).x, world.atom(b).y);
-            let r = (dx * dx + dy * dy).sqrt();
-            if r > self.config.bond_break_factor * r_eq_break {
-                // No field release on mechanical dissociation: the
-                // stretch already spent the energy (the vanishing
-                // spring potential is a sink, and sinks cannot
-                // cascade - measured: heat-releasing length breaks
-                // fueled runaway dissociation). Thermal/UV breaks
-                // keep the release (the F7-conserving channel).
-                if world.break_bond(BondId(i as u32)) {
-                    world.event_queue.push(Event::BondBroken {
-                        tick: world.tick,
-                        bond_id: i as u32,
-                        elem_a: world.atom(a).element,
-                        elem_b: world.atom(b).element,
-                        energy_released: 0.0,
-                        x: ax + dx * 0.5,
-                        y: ay + dy * 0.5,
-                    });
-                }
+            if self.break_if_overstretched(world, i, a, b, dx, dy) {
                 continue;
             }
-            // Midpoint through the minimum-image delta: a seam pair
-            // samples the field where the bond actually is, not
-            // across the world (finding F10). Reuses the length
-            // check's delta.
             let (mx, my) = (ax + dx * 0.5, ay + dy * 0.5);
             // Spec 7.1. Non-positive temperatures give p_break 0
             // (clamped field reads; exp(-inf) guard).
@@ -445,7 +459,7 @@ mod tests {
     use super::*;
     use crate::elements::element_id;
     use crate::energy::EnergySystem;
-    use crate::world::{BoundaryType, MAX_BONDS};
+    use crate::world::BoundaryType;
 
     fn world(seed: u64) -> WorldState {
         WorldState::new(
@@ -631,7 +645,11 @@ mod tests {
         rebuild_index(&mut w);
         chemistry(config).form_bonds(&mut w);
         assert_eq!(w.bonds.len(), 0, "distant pair must not bond");
-        assert_eq!((d.0, e.0), (0, 1));
+        assert_eq!(
+            (w.atom(d).bond_count, w.atom(e).bond_count),
+            (0, 0),
+            "both stay free"
+        );
     }
 
     #[test]
@@ -685,7 +703,11 @@ mod tests {
             1,
             "180-degree candidate must fail the geometry gate"
         );
-        let _ = h2;
+        assert_eq!(
+            w.atom(h2).bond_count,
+            0,
+            "the anti-ideal candidate stays unbonded"
+        );
     }
 
     #[test]
@@ -843,7 +865,6 @@ mod tests {
         }
         assert!(w.atom(c).bond_count > 0, "carbon should gain bonds");
         assert!(w.atom(c).bond_count <= 4, "carbon max_bonds is 4");
-        let _ = MAX_BONDS;
     }
 
     // ---- Rule-law tests: the fundamental rules must hold as
@@ -892,7 +913,11 @@ mod tests {
             "released {released}"
         );
         assert_eq!(config.release_fraction, config.formation_fraction);
-        let _ = (a, b);
+        assert_eq!(
+            (w.atom(a).bond_count, w.atom(b).bond_count),
+            (0, 0),
+            "both atoms end the cycle unbonded"
+        );
     }
 
     #[test]
