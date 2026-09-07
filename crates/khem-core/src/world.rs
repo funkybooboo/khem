@@ -220,6 +220,11 @@ pub struct WorldState {
     pub height: f32,
     pub boundary: BoundaryType,
     pub temp_field: Grid2D,
+    /// Declared environment setpoints, degrees: cells relax toward
+    /// their setpoint at field_relax_rate (spec 6.2, the environment
+    /// reservoir). 0 = no setpoint declared = no relaxation
+    /// (phase-1 sentinel; phase 3 regions always declare).
+    pub setpoint_field: Grid2D,
     pub pressure_field: Grid2D,
     pub uv_field: Grid2D,
     pub energy_sources: Vec<EnergySource>,
@@ -248,11 +253,12 @@ impl WorldState {
             height,
             boundary,
             temp_field: Grid2D::new(width, height, config.field_cell_size),
+            setpoint_field: Grid2D::new(width, height, config.field_cell_size),
             pressure_field: Grid2D::new(width, height, config.field_cell_size),
             uv_field: Grid2D::new(width, height, config.field_cell_size),
             energy_sources: Vec::new(),
             element_table: Arc::new(ELEMENTS.to_vec()),
-            spatial_index: SpatialIndex::new(config.spatial_cell_size),
+            spatial_index: SpatialIndex::new(config.spatial_cell_size, width, height, boundary),
             rng: Rng::new(seed),
             event_queue: Vec::new(),
         }

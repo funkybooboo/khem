@@ -9,7 +9,9 @@
 //! ~1,000 water molecules plus a few hundred free atoms in a
 //! 120x120 A world: a dilute 2D monolayer, sized so the K1 signal
 //! (do molecules persist?) reads cleanly, with no energy sources -
-//! stability is isolated from convection.
+//! the vent and the 35 C setpoint reservoir hold a steady
+//! state (K1.1): heat in from the vent, heat out through
+//! relaxation, chemistry perturbing locally.
 //!
 //! Every placement draw comes from the world's seeded RNG, so the
 //! same seed builds the identical pond (G02 from tick 0).
@@ -22,6 +24,7 @@
 use crate::chemistry::bond_energy;
 use crate::config::PhysicsConfig;
 use crate::elements::element_id;
+use crate::energy::EnergySource;
 use crate::world::{BoundaryType, WorldState};
 
 /// Pond dimensions, angstroms.
@@ -32,8 +35,14 @@ pub const POND_HEIGHT: f32 = 120.0;
 pub const POND_TEMP: f32 = 35.0;
 /// Water lattice spacing, angstroms (32x32 grid = 1024 molecules).
 const WATER_SPACING: f32 = 3.75;
-/// Free-atom sprinkle: (symbol, count).
-const FREE_ATOMS: [(&str, u32); 4] = [("H", 150), ("C", 80), ("N", 60), ("O", 60)];
+/// Free-atom sprinkle: (symbol, count). Rebalanced 2026-09-05:
+/// the founding H-dominated mix could only form strong bonds
+/// (H-H 436, H-O 463 - p_break ~ exp(-22) at pond temperature), so
+/// the measured harness showed zero breaks ever: frozen inertness
+/// by composition, violating K1's "bonds form AND break". O/N-rich
+/// gives weak flickering pairs (O-O 146, N-N 163 - p ~ 1e-3/1e-4
+/// per tick at 45 C) alongside the strong ones.
+const FREE_ATOMS: [(&str, u32); 4] = [("H", 100), ("C", 80), ("N", 80), ("O", 100)];
 
 /// Builds the hardcoded primordial pond. The seed also seeds the
 /// world RNG; the same seed yields the identical pond and run.
@@ -44,6 +53,19 @@ pub fn primordial_pond(seed: u64, config: PhysicsConfig) -> WorldState {
     for v in w.temp_field.data.iter_mut() {
         *v = POND_TEMP;
     }
+    // The 35 C setpoint everywhere: the environment reservoir
+    // (K1.1). Together with the vent below, the pond has a real
+    // steady state - heat in from the vent, heat out through
+    // relaxation, chemistry perturbing locally.
+    for v in w.setpoint_field.data.iter_mut() {
+        *v = POND_TEMP;
+    }
+    // The vent (the language-spec pond carries one at the floor).
+    w.energy_sources.push(EnergySource::hydrothermal(
+        (POND_WIDTH * 0.5, 5.0),
+        0.8,
+        15.0,
+    ));
 
     // Water: O plus two H at the bent geometry (104.5 degrees), bond
     // length = covalent radius sum (physics 6.3 equilibrium), on a
@@ -137,8 +159,8 @@ mod tests {
         );
         assert_eq!(
             w.energy_sources.len(),
-            0,
-            "no sources: stability is isolated"
+            1,
+            "the vented pond carries its vent"
         );
     }
 

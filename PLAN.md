@@ -92,9 +92,12 @@ a viewer.
         measured causes - F6 through F9, F11]
 
     K1.1 THERMOSTAT: Langevin damping toward the local field
-        temperature (the pending decision; spec 6.1 revision).
-        PASS: KE per atom AND mean bond length both go flat over
-        a 10k-tick vented-pond run.
+        temperature. PASSED 2026-09-05: KE/atom window drift -5.7%,
+        mean bond length +0.5% over the 10k-tick vented run
+        (tests/k1_stability.rs, release --ignored). The pass
+        required the substrate corrections F8-F16 (findings log in
+        docs/research/abstraction-notes.md) and the setpoint
+        reservoir + vent (spec 6.1/6.2/11 synced).
     K1.2 FORCE SANITY: a bonded overlap imparts bounded velocity
         (F9 measured v ~ 1e4 - a cannon). PASS: mean bond length
         stays within [0.8, 1.5] * r_eq over the same run.
@@ -317,13 +320,12 @@ All of this is enabled by choices already fixed (runtime spec section
 
 ## Open decisions (owner: nate)
 
-- [ ] thermostat (gate K1.1): Langevin-style damping toward
-      the local field temperature (abstraction-notes section
-      10) - the measured K1 blocker. Proposal: v <- v*(1-damping)
-      + normal(0, sigma(T)); region declarations become bath
-      setpoints. One knob, spec-6.1 revision, harness-gated (KE
-      and bond length must go flat)
-- [ ] non-bonded soft repulsion (finding F4; gate K2.1): drafted before K2
+- [x] thermostat (gate K1.1): RESOLVED 2026-09-05 - PASSED.
+      Langevin damping toward the local field temperature with
+      exact signed-delta bookkeeping, the setpoint reservoir, and
+      the velocity clamp; see the K1.1 entry above and the
+      findings log. Spec 6.1/6.2/11 synced.
+- [ ] non-bonded soft repulsion (finding F4; gate K2.1): IMPLEMENTED with the K1.1 commit (spec 6.5, chemistry/physics tests); the K2.1 scattering-test PASS run is the gate's own
       work, lands only with harness evidence, as its own commit
 - [ ] first world file name: primordial_pond.kem ("warm little pond"
       is Darwin's phrase for the setting)

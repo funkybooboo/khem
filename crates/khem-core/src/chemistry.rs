@@ -289,12 +289,42 @@ impl ChemistrySystem for Chemistry {
             if !alive {
                 continue;
             }
+            // Mechanical dissociation: bonds stretched past
+            // bond_break_factor * r_eq break deterministically (no
+            // RNG roll; spec 7.1 v0 addition, config doc). Real
+            // bonds do not stretch to multiples of their length;
+            // without this, collision-shoved bonds random-walked to
+            // tens of angstroms while alive.
+            let (ax, ay) = (world.atom(a).x, world.atom(a).y);
+            let r_eq_break = world.element(world.atom(a).element).radius
+                + world.element(world.atom(b).element).radius;
+            let (dx, dy) = world.delta(ax, ay, world.atom(b).x, world.atom(b).y);
+            let r = (dx * dx + dy * dy).sqrt();
+            if r > self.config.bond_break_factor * r_eq_break {
+                // No field release on mechanical dissociation: the
+                // stretch already spent the energy (the vanishing
+                // spring potential is a sink, and sinks cannot
+                // cascade - measured: heat-releasing length breaks
+                // fueled runaway dissociation). Thermal/UV breaks
+                // keep the release (the F7-conserving channel).
+                if world.break_bond(BondId(i as u32)) {
+                    world.event_queue.push(Event::BondBroken {
+                        tick: world.tick,
+                        bond_id: i as u32,
+                        elem_a: world.atom(a).element,
+                        elem_b: world.atom(b).element,
+                        energy_released: 0.0,
+                        x: ax + dx * 0.5,
+                        y: ay + dy * 0.5,
+                    });
+                }
+                continue;
+            }
             // Midpoint through the minimum-image delta: a seam pair
             // samples the field where the bond actually is, not
-            // across the world (finding F10).
-            let (ax, ay) = (world.atom(a).x, world.atom(a).y);
-            let (dxb, dyb) = world.delta(ax, ay, world.atom(b).x, world.atom(b).y);
-            let (mx, my) = (ax + dxb * 0.5, ay + dyb * 0.5);
+            // across the world (finding F10). Reuses the length
+            // check's delta.
+            let (mx, my) = (ax + dx * 0.5, ay + dy * 0.5);
             // Spec 7.1. Non-positive temperatures give p_break 0
             // (clamped field reads; exp(-inf) guard).
             let t = world.temp_field.get(mx, my).max(0.0);
@@ -368,6 +398,18 @@ impl ChemistrySystem for Chemistry {
                     continue;
                 }
                 if world.is_bonded(a_id, b_id) {
+                    continue;
+                }
+                // Capture gate (spec 7.2 v0): a pair flying past
+                // each other cannot be captured; the bond would
+                // have to absorb their relative KE as stretch and
+                // become a comet (measured without this gate:
+                // bond-length tail at ~80 A).
+                let (rvx, rvy) = (
+                    world.atom(b_id).vx - world.atom(a_id).vx,
+                    world.atom(b_id).vy - world.atom(a_id).vy,
+                );
+                if rvx * rvx + rvy * rvy > self.config.max_form_speed * self.config.max_form_speed {
                     continue;
                 }
                 let (order, energy, p, mx, my) = self.pair_probability(world, a_id, b_id);
@@ -644,6 +686,106 @@ mod tests {
             "180-degree candidate must fail the geometry gate"
         );
         let _ = h2;
+    }
+
+    #[test]
+    fn bond_table_is_symplectic_stable_at_configured_scale() {
+        // F2's law, generalized: symplectic Euler is stable for
+        // dt * sqrt(k / reduced_mass) < 2. The worst case is the
+        // lightest pair with the strongest bond. Pin it for every
+        // tabulated pair AND the fallback, at the configured scale.
+        let scale = PhysicsConfig::default().spring_energy_scale;
+        let mass = |id: ElementId| crate::elements::element(id).mass;
+        for a in 0..10u8 {
+            for b in a..10u8 {
+                // Only orders the pair can actually hold: G04 caps
+                // bonds at max_bonds, so higher orders are never
+                // formed (the fallback's linear scaling would
+                // otherwise report impossible H=H double bonds).
+                let max_order = crate::elements::element(ElementId(a))
+                    .max_bonds
+                    .min(crate::elements::element(ElementId(b)).max_bonds);
+                for order in 1..=max_order {
+                    let (ea, eb) = (ElementId(a), ElementId(b));
+                    let energy = bond_energy(ea, eb, order);
+                    // reduced mass; self-pairs are the same atom
+                    // twice in a row, so mu = m/2
+                    let mu = if a == b {
+                        mass(ea) / 2.0
+                    } else {
+                        1.0 / (1.0 / mass(ea) + 1.0 / mass(eb))
+                    };
+                    let w = (energy * scale / mu).sqrt();
+                    assert!(
+                        w < 2.0,
+                        "{a}-{b} order {order}: omega {w:.3} violates the bound"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn overstretched_bonds_break_deterministically() {
+        // Mechanical dissociation law: a bond past
+        // bond_break_factor * r_eq breaks without any RNG roll.
+        let config = PhysicsConfig::default();
+        let mut w = world(6);
+        let a = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0);
+        let b = w.spawn_atom(element_id("H").unwrap(), 60.0, 50.0); // r = 10 >> 2.5 * 1.06
+        w.form_bond(a, b, 1, 436.0);
+        let before: f32 = w.temp_field.data.iter().sum();
+        // A cold field: thermal breaking is impossible (p = 0), so
+        // any break here is the length rule.
+        chemistry(config).break_bonds(&mut w);
+        assert!(!w.bond(BondId(0)).alive, "overstretched bond must break");
+        assert_eq!(w.atom(a).bond_count, 0);
+        let after: f32 = w.temp_field.data.iter().sum();
+        // Mechanical dissociation releases NO heat (the stretch
+        // already spent the energy; a releasing break cascaded in
+        // measurement).
+        assert!(
+            (after - before).abs() < 1e-3,
+            "length break must be release-free, got {}",
+            after - before
+        );
+        assert!(matches!(
+            w.event_queue.first(),
+            Some(Event::BondBroken { .. })
+        ));
+        // Within the factor: no break, even at max roll pressure
+        // (the thermal probability at T=0 is zero).
+        let mut w2 = world(6);
+        let c = w2.spawn_atom(element_id("H").unwrap(), 50.0, 50.0);
+        let d = w2.spawn_atom(element_id("H").unwrap(), 51.0, 50.0); // r = 1 < 2.65
+        w2.form_bond(c, d, 1, 436.0);
+        chemistry(config).break_bonds(&mut w2);
+        assert!(w2.bond(BondId(0)).alive, "normal-length bond must survive");
+    }
+
+    #[test]
+    fn fast_pairs_are_not_captured() {
+        // Capture law: atoms flying past each other do not bond,
+        // however high the formation probability; slow pairs do.
+        let config = PhysicsConfig {
+            base_formation_rate: 1.0,
+            ..PhysicsConfig::default()
+        };
+        let mut w = world(4);
+        let a = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0);
+        let b = w.spawn_atom(element_id("H").unwrap(), 51.0, 50.0);
+        w.atom_mut(a).vx = 10.0; // opposite directions: |v_rel| 11
+        w.atom_mut(b).vx = -1.0;
+        w.temp_field.set(50.5, 50.0, 43.6);
+        rebuild_index(&mut w);
+        chemistry(config).form_bonds(&mut w);
+        assert_eq!(w.bonds.len(), 0, "a fast flyby must not be captured");
+        // Slow the pair down: capture proceeds.
+        w.atom_mut(a).vx = 0.1;
+        w.atom_mut(b).vx = -0.1;
+        rebuild_index(&mut w);
+        chemistry(config).form_bonds(&mut w);
+        assert_eq!(w.bonds.len(), 1, "a slow approach must be captured");
     }
 
     #[test]

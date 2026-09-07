@@ -131,9 +131,12 @@ mod tests {
     use crate::observer::ObserverConfig;
     use crate::world::{BoundaryType, ElementId};
 
-    /// Recorded 2026-09-05, after the minimum-image fix (F10). Update
-    /// ONLY with a justification in the commit message.
-    const GOLDEN_HASH: u64 = 0x9F89_64C7_66C5_07C3;
+    /// Recorded 2026-09-05, after the foundation fixes: Langevin
+    /// thermostat (F8), bounded soft core (F9), non-bonded excluded
+    /// volume (F4), wrap-aware spatial index (F11). Pre-fix values
+    /// live in git history. Update ONLY with a justification in
+    /// the commit message.
+    const GOLDEN_HASH: u64 = 0xDD4E_87CD_A7FD_94CE;
 
     fn observer(interval: u64) -> Observer {
         Observer::new(ObserverConfig {
@@ -350,8 +353,9 @@ mod tests {
         let mut w = WorldState::new(50.0, 50.0, BoundaryType::Wrap, 3, config);
         let a = w.spawn_atom(ElementId(0), 10.0, 10.0);
         w.spawn_atom(ElementId(0), 14.0, 10.0);
-        w.atom_mut(a).vx = 2.0;
-        // b stays; after one tick a is at 12.0, within the 4 A
+        w.atom_mut(a).vx = 1.0; // capturable: |v_rel| stays under
+        // max_form_speed after damping
+        // b stays; after one tick a is at ~11, within the 4 A
         // search radius.
         w.temp_field.set(12.0, 10.0, 43.6);
         let mut sim = Sim::new(config, observer(1000));

@@ -1,5 +1,6 @@
-//! The physics system: thermal velocity perturbation
-//! (Maxwell-Boltzmann), temperature diffusion, bond spring forces,
+//! The physics system: the Langevin thermostat (velocities relax
+//! toward the local field temperature, spec 6.1), temperature
+//! diffusion, bond spring forces with a bounded soft core,
 //! pressure-gradient forces, position updates, boundary conditions.
 //!
 //! Phase-1 placement decisions, to fold into the spec at revision
@@ -13,12 +14,10 @@
 //!   pass. The compute/apply split is the shape a V2 region-parallel
 //!   implementation needs, and it keeps each pass free of tangled
 //!   borrows (ADR-0005, runtime spec 10.2).
-//! - All constants are used exactly as spec 11 gives them. At least
-//!   one is analytically unstable: explicit Euler with dt = 1
-//!   diverges when sqrt(spring_k) > 2, and every bond in the table
-//!   gives sqrt(energy * 0.01) > 2 (H-H: 2.09). The K1 harness
-//!   measures that honestly; retuned constants get their own commit
-//!   against evidence, not silently.
+//! - Constants are the spec 11 tuned set (2026-09-05, findings
+//!   F1-F9 in docs/research/abstraction-notes.md); the thermostat
+//!   (F8) and the bounded soft core (F9) are measured fixes, and
+//!   the K1 harness is the judge of every further retune.
 //!
 //! RNG discipline (ADR-0005): this system is the first RNG consumer
 //! in the tick (the energy system, step 1, draws nothing). Exactly
@@ -103,15 +102,44 @@ impl Physics {
             }
         }
         world.temp_field.data.copy_from_slice(buf);
+        // Setpoint relaxation (spec 6.2, K1.1): the environment
+        // reservoir. Cells with a declared setpoint (> 0) relax
+        // toward it - the pond's heat sink; a vented Wrap world
+        // with no sink only heats.
+        let rate = self.config.field_relax_rate;
+        if rate > 0.0 {
+            let field = &mut world.temp_field;
+            for i in 0..field.data.len() {
+                let set = world.setpoint_field.data[i];
+                if set > 0.0 {
+                    field.data[i] += (set - field.data[i]) * rate;
+                }
+            }
+        }
     }
 
-    /// Spec 6.1: Maxwell-Boltzmann perturbation.
-    /// `sigma = sqrt(kB * T / mass)`, T from the temperature field at
-    /// the atom's position. Negative field values clamp to zero (a
-    /// negative absolute temperature is meaningless; sigma would be
-    /// NaN).
-    fn thermal_kicks(&mut self, world: &mut WorldState) {
+    /// Spec 6.1: the Langevin thermostat (finding F8's fix).
+    ///
+    /// `v_new = v * (1 - damping) + sqrt(damping*(2-damping)) *
+    /// sigma(T) * normal(0,1)` per component, sigma(T) =
+    /// sqrt(thermal_kick_scale * T / mass) - so velocities relax
+    /// to the local field temperature with the correct stationary
+    /// variance instead of random-walking upward forever. T <= 0
+    /// clamps to zero (negative field: sigma 0, pure damping).
+    ///
+    /// Fluctuation-dissipation bookkeeping keeps the field the
+    /// honest energy ledger: the damping DEPOSITS the kinetic
+    /// energy it removed into the atom's cell (fast atoms heat
+    /// their surroundings - the F6 fix), and the noise DRAINS its
+    /// expected injection back out (`mass * s^2`, both components).
+    /// Net zero at equilibrium; off equilibrium energy flows
+    /// field <-> atoms both ways. Draws: exactly two normals per
+    /// LIVE atom per tick, unchanged from before.
+    fn thermal_bath(&mut self, world: &mut WorldState) {
         let kb = self.config.thermal_kick_scale;
+        let gamma = self.config.thermostat_damping;
+        let noise = (gamma * (2.0 - gamma)).sqrt();
+        let ke_scale = self.config.ke_field_scale;
         self.kx.clear();
         self.ky.clear();
         for atom in &world.atoms {
@@ -122,22 +150,39 @@ impl Physics {
             }
             let t = world.temp_field.get(atom.x, atom.y).max(0.0);
             let mass = world.element(atom.element).mass;
-            let sigma = (kb * t / mass).sqrt() as f64;
-            self.kx.push(world.rng.normal(0.0, sigma) as f32);
-            self.ky.push(world.rng.normal(0.0, sigma) as f32);
+            let s = noise * (kb * t / mass).sqrt();
+            let vx_new = atom.vx * (1.0 - gamma) + (world.rng.normal(0.0, s as f64) as f32);
+            let vy_new = atom.vy * (1.0 - gamma) + (world.rng.normal(0.0, s as f64) as f32);
+            // The signed KE delta is the COMPLETE exchange: the
+            // noise energy is already inside vx_new (the field pays
+            // for it there), the damping removal likewise. A
+            // separate "injected" term double-counts and bleeds the
+            // field - found while diagnosing the furnace; the old
+            // drift test's tolerance masked the bleed.
+            let delta_ke = 0.5
+                * mass
+                * (atom.vx * atom.vx + atom.vy * atom.vy - vx_new * vx_new - vy_new * vy_new);
+            world.temp_field.add(atom.x, atom.y, delta_ke * ke_scale);
+            self.kx.push(vx_new);
+            self.ky.push(vy_new);
         }
     }
 
-    /// Spec 6.3: Hooke's law toward `r_eq = radius_a + radius_b`,
-    /// `F = bond.energy * spring_energy_scale * (r - r_eq)` applied
-    /// to both atoms along the bond axis, equal and opposite. When
-    /// `r < 0.5 * r_eq`: `F = -strong_repulsion / r^2` (repulsion).
-    /// Coincident atoms (r ~ 0) have no defined axis; they are
-    /// skipped rather than given a random direction - the next
-    /// thermal kick separates them deterministically enough.
+    /// Spec 6.3 (revised 2026-09-05): ONE smooth Hooke law, both
+    /// directions - `F = bond.energy * spring_energy_scale *
+    /// (r - r_eq)` toward `r_eq = radius_a + radius_b`, applied to
+    /// both atoms along the bond axis, equal and opposite.
+    /// Attractive stretched, repulsive compressed, bounded at
+    /// `k * r_eq` near coincidence. The founding spec's separate
+    /// hard core (`-strong_repulsion / r^2` below `0.5 * r_eq`) was
+    /// a force DISCONTINUITY that symplectic Euler pumped into
+    /// runaway oscillation every time a thermal kick carried an
+    /// atom through it - the measured K1 furnace ignition (F9,
+    /// revised: not a cannon to cap, a core to remove). Coincident
+    /// atoms (r ~ 0) have no defined axis; skipped, and the next
+    /// kick separates them.
     fn spring_forces(&mut self, world: &mut WorldState) {
         let scale = self.config.spring_energy_scale;
-        let repulsion = self.config.strong_repulsion;
         for bond in &world.bonds {
             if !bond.alive {
                 continue;
@@ -157,11 +202,7 @@ impl Physics {
             }
             let r = r2.sqrt();
             let r_eq = world.element(a.element).radius + world.element(b.element).radius;
-            let f = if r < 0.5 * r_eq {
-                -repulsion / r2
-            } else {
-                bond.energy * scale * (r - r_eq)
-            };
+            let f = bond.energy * scale * (r - r_eq);
             let (ux, uy) = (dx / r, dy / r);
             self.fx[ia] += f * ux;
             self.fy[ia] += f * uy;
@@ -206,22 +247,122 @@ impl Physics {
             self.fy[i] -= dpdy * sensitivity;
         }
     }
+    /// Non-bonded excluded volume (finding F4's fix, spec 6.5):
+    /// every UNBONDED live pair closer than its cutoff
+    /// `(radius_a + radius_b) * non_bonded_margin` is pushed apart
+    /// with `F = non_bonded_repulsion * (cutoff - r)` along the
+    /// minimum-image axis, equal and opposite. Bonded pairs are
+    /// excluded (springs own them); same-molecule unbonded pairs
+    /// (1,3 and beyond) are NOT excluded - real sterics, mild by
+    /// construction since VSEPR ideals keep most beyond cutoff.
+    /// Coincident unbonded atoms are skipped (no defined axis;
+    /// kicks separate them). Pairs are visited once (lower AtomId
+    /// iterates), candidates via the wrap-aware index (F11).
+    fn non_bonded_forces(&mut self, world: &mut WorldState) {
+        let strength = self.config.non_bonded_repulsion;
+        let margin = self.config.non_bonded_margin;
+        let max_radius = world
+            .element_table
+            .iter()
+            .map(|e| e.radius)
+            .fold(0.0f32, f32::max);
+        for i in 0..world.atoms.len() {
+            let (a_id, a_el, ax, ay, a_alive) = {
+                let a = &world.atoms[i];
+                (a.id, a.element, a.x, a.y, a.alive)
+            };
+            if !a_alive {
+                continue;
+            }
+            let r_a = world.element(a_el).radius;
+            let query = (r_a + max_radius) * margin;
+            let candidates = world.spatial_index.neighbors(ax, ay, query);
+            for b_id in candidates {
+                if b_id.0 <= a_id.0 {
+                    continue;
+                }
+                let (b_el, bx, by, b_alive) = {
+                    let b = world.atom(b_id);
+                    (b.element, b.x, b.y, b.alive)
+                };
+                if !b_alive || world.is_bonded(a_id, b_id) {
+                    continue;
+                }
+                let (dx, dy) = world.delta(ax, ay, bx, by);
+                let r2 = dx * dx + dy * dy;
+                if r2 < f32::EPSILON {
+                    continue;
+                }
+                let r = r2.sqrt();
+                let cutoff = (r_a + world.element(b_el).radius) * margin;
+                if r >= cutoff {
+                    continue;
+                }
+                let f = -strength * (cutoff - r);
+                let (ux, uy) = (dx / r, dy / r);
+                self.fx[i] += f * ux;
+                self.fy[i] += f * uy;
+                self.fx[b_id.0 as usize] -= f * ux;
+                self.fy[b_id.0 as usize] -= f * uy;
+            }
+        }
+    }
 }
 
 impl PhysicsSystem for Physics {
     fn update_velocities(&mut self, world: &mut WorldState) {
         let n = world.atoms.len();
         self.diffuse_temperature(world);
-        self.thermal_kicks(world);
+        self.thermal_bath(world);
         self.fx.clear();
         self.fy.clear();
         self.fx.resize(n, 0.0);
         self.fy.resize(n, 0.0);
         self.spring_forces(world);
+        self.non_bonded_forces(world);
         self.pressure_forces(world);
+        // Mass lookup without borrowing world against the mutable
+        // atom loop (Arc clone, cheap).
+        let table = world.element_table.clone();
+        let vmax = self.config.max_atom_speed;
         for (i, atom) in world.atoms.iter_mut().enumerate() {
-            atom.vx += self.kx[i] + self.fx[i];
-            atom.vy += self.ky[i] + self.fy[i];
+            // Dead atoms are frozen: nothing in this system touches
+            // them (kx/ky carry 0 for them; writing it would zero
+            // their state).
+            if !atom.alive {
+                continue;
+            }
+            // kx/ky carry the COMPLETE post-bath velocity (the
+            // thermostat consumes the old velocity); fx/fy are
+            // FORCES, divided by mass here (F = ma). Set, not add -
+            // adding would compound the velocity every tick. The
+            // founding spec applied forces without /mass; with
+            // unit-mass atoms hidden in H-H tests, that minted
+            // ~(0.5*m - 1) * F^2 energy per heavy-atom interaction
+            // (the one-water probe isolated it: m=16 O, ~8*F^2 per
+            // spring-tick - the pond furnace).
+            let mass = table[atom.element.0 as usize].mass;
+            let (vx, vy) = (
+                self.kx[i] + self.fx[i] / mass,
+                self.ky[i] + self.fy[i] / mass,
+            );
+            // Numerical guard (config doc): unresolved fast passes
+            // through the short-range forces mint energy; clamp the
+            // speed and deposit what the clamp removed so the
+            // ledger stays exact.
+            let speed2 = vx * vx + vy * vy;
+            let (vx, vy) = if speed2 > vmax * vmax {
+                let scale = vmax / speed2.sqrt();
+                let removed = 0.5 * mass * (speed2 - vmax * vmax);
+                world
+                    .temp_field
+                    .add(atom.x, atom.y, removed * self.config.ke_field_scale);
+                (vx * scale, vy * scale)
+            } else {
+                (vx, vy)
+            };
+            atom.vx = vx;
+            atom.vy = vy;
         }
     }
 
@@ -343,6 +484,214 @@ mod tests {
         physics().update_positions(&mut w);
         let d = w.atom(b).x - w.atom(a).x;
         assert!(d < 2.0, "distance {d} should shrink");
+    }
+
+    #[test]
+    fn unbonded_atoms_push_apart_within_cutoff() {
+        // F4 law: excluded volume. Two free H 0.5 A apart (cutoff
+        // 1.59) push apart; the force is the soft linear core, not
+        // the bonded hard core.
+        let mut w = world(1, BoundaryType::Wrap);
+        let a = w.spawn_atom(ElementId(0), 50.0, 50.0);
+        let b = w.spawn_atom(ElementId(0), 50.5, 50.0);
+        // Outside the tick loop the index must be built by hand; in
+        // the loop, update_velocities consumes the previous tick's
+        // rebuild (read-previous-tick state).
+        w.spatial_index.rebuild(&w.atoms);
+        physics().update_velocities(&mut w);
+        assert!(w.atom(a).vx < 0.0, "a pushed away");
+        assert!(w.atom(b).vx > 0.0, "b pushed away");
+        // Magnitude: scale * (cutoff - r) = 1.0 * (1.59 - 0.5) ~ 1.09.
+        assert!(
+            (w.atom(b).vx - 1.09).abs() < 0.15,
+            "soft-core magnitude {}",
+            w.atom(b).vx
+        );
+
+        // Beyond cutoff: no force.
+        let mut w = world(1, BoundaryType::Wrap);
+        let c = w.spawn_atom(ElementId(0), 50.0, 50.0);
+        w.spawn_atom(ElementId(0), 55.0, 50.0);
+        physics().update_velocities(&mut w);
+        assert_eq!(w.atom(c).vx, 0.0);
+        let _ = b;
+    }
+
+    #[test]
+    fn bonded_pairs_are_exempt_from_excluded_volume() {
+        // A bonded pair AT equilibrium distance feels no spring and
+        // must feel no non-bonded push either, even though the
+        // distance is inside the non-bonded cutoff (1.06 < 1.59).
+        let mut w = world(1, BoundaryType::Wrap);
+        let a = w.spawn_atom(ElementId(0), 50.0, 50.0);
+        let b = w.spawn_atom(ElementId(0), 51.06, 50.0); // r_eq
+        w.form_bond(a, b, 1, 436.0);
+        w.spatial_index.rebuild(&w.atoms);
+        physics().update_velocities(&mut w);
+        assert!(w.atom(a).vx.abs() < 1e-3, "no net force at r_eq");
+        assert!(w.atom(b).vx.abs() < 1e-3);
+    }
+
+    #[test]
+    fn free_atoms_cannot_penetrate_an_intact_water() {
+        // The foundation behavior K2 builds on: a free atom landing
+        // inside a molecule's excluded volume is pushed out, while
+        // the water's own geometry is untouched (its H-O pairs are
+        // bonded, exempt).
+        let mut w = world(1, BoundaryType::Wrap);
+        let o = w.spawn_atom(ElementId(3), 50.0, 50.0);
+        let h1 = w.spawn_atom(ElementId(0), 48.81, 50.0);
+        let h2 = w.spawn_atom(ElementId(0), 51.19, 50.0);
+        w.form_bond(o, h1, 1, 463.0);
+        w.form_bond(o, h2, 1, 463.0);
+        // A free O squeezed between the hydrogens.
+        let probe = w.spawn_atom(ElementId(3), 50.0, 51.0);
+        w.spatial_index.rebuild(&w.atoms);
+        physics().update_velocities(&mut w);
+        let pushed = w.atom(probe).vy;
+        assert!(
+            pushed > 0.0,
+            "probe pushed away from the water, got {pushed}"
+        );
+        // Equal and opposite: the water O reacts downward (its own
+        // H-O pairs are bonded and exempt; only the probe pushes
+        // it).
+        assert!(
+            w.atom(o).vy < 0.0,
+            "water O reacts opposite, got {}",
+            w.atom(o).vy
+        );
+    }
+
+    #[test]
+    fn unbonded_seam_pair_pushes_through_the_wrap() {
+        // F4 + F11 together: two free atoms 0.5 A apart ACROSS the
+        // seam are found by the wrapped index and pushed apart the
+        // short way.
+        let mut w = world(1, BoundaryType::Wrap);
+        let a = w.spawn_atom(ElementId(0), 0.2, 50.0);
+        let b = w.spawn_atom(ElementId(0), 99.7, 50.0);
+        w.spatial_index.rebuild(&w.atoms);
+        let mut sys = physics();
+        sys.update_velocities(&mut w);
+        // In a's frame b sits 0.5 A to the LEFT (across the seam),
+        // so a is pushed +x and b -x: apart the short way.
+        assert!(
+            w.atom(a).vx > 0.0,
+            "seam a pushed short way, got {}",
+            w.atom(a).vx
+        );
+        assert!(
+            w.atom(b).vx < 0.0,
+            "seam b pushed short way, got {}",
+            w.atom(b).vx
+        );
+    }
+
+    #[test]
+    fn thermostat_relaxes_velocity_to_field_temperature() {
+        // F8 law: a hot atom cools to the thermal scale of its
+        // cell; the velocity does not random-walk upward forever.
+        let mut w = world(1, BoundaryType::Wrap);
+        let a = w.spawn_atom(ElementId(3), 50.0, 50.0);
+        w.atom_mut(a).vx = 50.0;
+        w.temp_field.set(50.0, 50.0, 35.0);
+        let mut sys = physics();
+        for _ in 0..500 {
+            sys.update_velocities(&mut w);
+        }
+        let speed = w.atom(a).vx.hypot(w.atom(a).vy);
+        // O at 35 C: sigma = 0.135; thermal speed ~ sqrt(2) * sigma
+        // ~ 0.19. Band 2.0 leaves generous statistical room.
+        assert!(speed < 2.0, "relaxed speed {speed} should be thermal");
+    }
+
+    #[test]
+    fn thermostat_moves_kinetic_energy_into_the_field() {
+        // The deposit half of fluctuation-dissipation (F6's fix): a
+        // moving atom in a frozen cell heats it; the atom slows.
+        let mut w = world(1, BoundaryType::Wrap);
+        let a = w.spawn_atom(ElementId(3), 50.0, 50.0);
+        w.atom_mut(a).vx = 20.0;
+        let mut sys = physics();
+        for _ in 0..50 {
+            sys.update_velocities(&mut w);
+        }
+        let cell = w.temp_field.get(50.0, 50.0);
+        assert!(cell > 0.0, "atom KE must warm the frozen cell, got {cell}");
+        assert!(w.atom(a).vx < 20.0, "damping must slow the atom");
+    }
+
+    #[test]
+    fn thermostat_exchanges_conserve_field_plus_kinetic_energy() {
+        // The exact bookkeeping law: field_sum + KE / ke_field_scale
+        // is invariant through the bath (springs and non-bonded
+        // forces off, so KE is the only other reservoir). The
+        // previous tolerance-based drift test masked the
+        // double-count bleed; this form cannot.
+        let config = PhysicsConfig {
+            non_bonded_repulsion: 0.0,
+            ..PhysicsConfig::default()
+        };
+        let mut w = world(2, BoundaryType::Wrap);
+        for v in w.temp_field.data.iter_mut() {
+            *v = 35.0;
+        }
+        let a = w.spawn_atom(ElementId(3), 50.0, 50.0);
+        w.atom_mut(a).vx = 17.0; // far from equilibrium: exchanges flow
+        // The exchange rate: depositing X KE units raises the field
+        // X * ke_field_scale degrees, so the invariant is
+        // field_degrees + KE * ke_field_scale (the KE * ke_scale
+        // form; dividing is the inverted-scale mistake).
+        let total = |w: &WorldState| -> f64 {
+            let field: f32 = w.temp_field.data.iter().sum();
+            let ke: f64 = w
+                .atoms
+                .iter()
+                .filter(|at| at.alive)
+                .map(|at| {
+                    let m = w.element(at.element).mass as f64;
+                    0.5 * m * (at.vx as f64).powi(2) + 0.5 * m * (at.vy as f64).powi(2)
+                })
+                .sum();
+            field as f64 + ke * config.ke_field_scale as f64
+        };
+        let before = total(&w);
+        let mut sys = Physics::new(config);
+        for _ in 0..500 {
+            sys.update_velocities(&mut w);
+        }
+        let after = total(&w);
+        // Tolerance is f32 ledger accumulation over 500 ticks
+        // (~2e-4 per add on degree-magnitude sums), plus the
+        // unbooked micro-work of the pressure mean field; the law
+        // itself is exact in the exchange terms.
+        assert!(
+            (after - before).abs() < 0.1,
+            "field + KE*ke_scale changed by {}",
+            after - before
+        );
+    }
+
+    #[test]
+    fn bonded_compression_is_smooth_and_bounded() {
+        // F9 law (revised): compression repels through the same
+        // smooth Hooke term, bounded by k * r_eq - no hard core, no
+        // discontinuity, no cannon.
+        let mut w = world(1, BoundaryType::Wrap);
+        let a = w.spawn_atom(ElementId(0), 50.0, 50.0);
+        let b = w.spawn_atom(ElementId(0), 50.1, 50.0);
+        w.form_bond(a, b, 1, 436.0); // k = 0.872; F at r=0.1 ~ -0.86
+        physics().update_velocities(&mut w);
+        assert!(w.atom(a).vx < 0.0, "compressed bond pushes a away");
+        assert!(w.atom(b).vx > 0.0, "compressed bond pushes b away");
+        let bound = 436.0 * PhysicsConfig::default().spring_energy_scale * 1.06; // k * r_eq
+        assert!(
+            w.atom(b).vx <= bound,
+            "compression force {} exceeds k*r_eq {}",
+            w.atom(b).vx,
+            bound
+        );
     }
 
     #[test]

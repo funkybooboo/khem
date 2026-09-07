@@ -5,7 +5,11 @@ Status: canonical as of 2026-09-04. Drafts until validated (ADR-0006):
 revised against phase-1 kernel reality before the parser is built.
 Sync policy (owner decision 2026-09-05): the implementation and
 this spec must agree; any divergence is fixed in both in the same
-commit. Synced 2026-09-05 against khem-core post-F10. Items marked
+commit. Synced 2026-09-05 against khem-core post-F10, and again the
+same day for the K1.1 substrate corrections (6.1 thermostat and
+bookkeeping, 6.3 smooth springs with F = ma, 6.5 excluded volume,
+7.1 mechanical dissociation, 7.2 capture gate, 4.9 wrap-aware
+index, section 11 constants). Items marked
 [phase 2] / [phase 3] are designed but not yet implemented.
 Provenance: reconciled from the founding conversation (preserved in
 git history, ADR-0010) with the final terminology applied
@@ -255,7 +259,10 @@ positions. Default cell size 10 angstroms. Index = col + row * cols.
 
 Spatial hash for neighbor queries. Default cell size 5 angstroms.
 Rebuilt every tick after position updates; rebuild is O(n), queries
-are O(1) average.
+are O(1) average. Wrap-aware (2026-09-05, finding F11): cell
+coordinates fold at the grid edges in Wrap worlds so seam-crossing
+candidates are found - consistent with the minimum-image chemistry
+that evaluates them; Wall and Open use raw coordinates.
 
     SpatialIndex { cells: HashMap<(i32, i32), Vec<AtomId>>,
                    cell_size: f32 }
@@ -309,30 +316,53 @@ in spatial scan order; ineligible pairs draw nothing.
 
 ### 6.1 Temperature and velocity
 
-The temperature field is the thermal bath: initialized by the world
-definition, perturbed by energy sources (8) and bond events
-(7.1, 7.2), and smoothed by diffusion (6.2). Atoms do NOT return
-kinetic energy to the field in v0.1; a thermostat (Langevin
-coupling, damping toward the local field temperature) is the open
-substrate decision that would close that loop.
+The temperature field is the thermal bath: initialized by the
+world definition, held near its declared setpoints (6.2), and
+perturbed by energy sources (8) and bond events (7.1, 7.2). The
+Langevin thermostat couples atoms to it (implemented 2026-09-05,
+gate K1.1):
 
-Thermal perturbation per tick (Maxwell-Boltzmann):
+    s   = sqrt(thermostat_damping * (2 - thermostat_damping))
+          * sqrt(thermal_kick_scale * T / mass)
+    v'  = v * (1 - thermostat_damping) + rng.normal(0, s)
 
-    sigma = sqrt(thermal_kick_scale * T / mass)
-    vx += rng.normal(0, sigma)
-    vy += rng.normal(0, sigma)
+so velocities relax to the local field temperature with the
+correct stationary variance instead of random-walking upward
+forever (finding F8's fix). T <= 0 gives s 0 (pure damping; the
+draws still happen, keeping the RNG stream uniform).
 
-T <= 0 gives sigma 0 (no kick; the draws still happen, keeping the
-RNG stream uniform). thermal_kick_scale is separate from the
-breaking kB (7.1): one physical constant set two incompatible sim
-scales (finding F8's analysis), so they decouple.
+Fluctuation-dissipation bookkeeping keeps the field the honest
+ledger: the damping DEPOSITS the KE it removed into the atom's
+cell, and the noise's energy is paid through the same signed
+delta (it arrives inside v'). Net zero at equilibrium; off
+equilibrium energy flows both ways. The invariant:
+field + KE * ke_field_scale is constant through the bath.
+
+A velocity clamp (max_atom_speed, a numerical guard, not physics)
+caps speeds: fast atoms tunnel through the short-range forces
+(~1.6-5 A range, steps up to 3-18 A measured) and the asymmetric
+force sampling mints energy; the clamp deposits what it removes.
+Proper collision sub-stepping replaces it in phase 2. The clamp
+pass also handles F = ma: all accumulated forces are divided by
+the atom's mass at application (the founding draft said "applied
+to both atoms" without /mass; with unit-mass hydrogen hiding the
+error, each oxygen interaction minted ~(0.5*m - 1) * F^2 -
+the measured pond furnace).
 
 ### 6.2 Temperature diffusion
 
 Executes at the start of PhysicsSystem::update_velocities, before
 the kicks sample the field (5.1 names no slot for it; the kernel
 pinned this one). Per cell, 4-connected neighbors, wrapped at the
-grid edges (grids wrap like the Wrap boundary, 4.8):
+grid edges (grids wrap like the Wrap boundary, 4.8). After
+diffusion, cells with a declared setpoint (> 0 in
+setpoint_field) relax toward it at field_relax_rate - the
+environment reservoir, the pond's heat sink. Without it a vented
+Wrap world only heats (a vent injects continuously; nothing
+leaves), and no steady state exists to be stable against (gate
+K1.1's vented-pond flatness criterion requires it). Region
+declarations (phase 3) are the setpoint source; the phase-1 pond
+declares 35 C everywhere.
 
     T_new = T * (1 - diffusion_rate) + mean(T_neighbors) * diffusion_rate
 
@@ -346,10 +376,18 @@ Hooke's law toward equilibrium distance (sum of covalent radii):
     F       = spring_k * (r - r_eq)
     spring_k = bond.energy * spring_energy_scale
 
-Applied to both atoms along the bond axis, equal and opposite.
-Strong repulsion when r < 0.5 * r_eq: F = -strong_repulsion / r^2.
-Coincident atoms (r ~ 0) have no defined axis; the force is skipped
-and the next kick separates them.
+Applied to both atoms along the bond axis, equal and opposite,
+divided by mass at application (F = ma; see 6.1). ONE smooth Hooke
+law both directions: stretched is attractive, compressed is
+repulsive through the same F = k * (r - r_eq), bounded at
+k * r_eq near coincidence. The founding draft's separate hard
+core (-strong_repulsion / r^2 below 0.5 * r_eq) is REMOVED
+(2026-09-05): it was a force discontinuity that symplectic Euler
+pumped into runaway oscillation whenever a thermal kick carried
+an atom through it - the measured furnace ignition (F9 revised:
+not a cannon to cap, a core to remove). Coincident atoms
+(r ~ 0) have no defined axis; the force is skipped and the next
+kick separates them.
 
 In Wrap worlds every pair displacement uses the minimum-image
 convention (the shortest vector between the atoms, crossing the
@@ -358,18 +396,43 @@ width - 1 angstroms apart and the spring shreds it (finding F10,
 found by test 2026-09-05, fixed the same day). All pair rules
 (springs, chemistry distance checks, bond midpoints) use it.
 
+The stability law (pinned by test for every formable bond at the
+configured scale): symplectic Euler is stable for
+dt * sqrt(k / reduced_mass) < 2. spring_energy_scale is set
+inside that bound with margin.
+
 ### 6.4 Pressure force
 
     pressure[cell] = atom_count_in_cell / cell_area
 
 Each atom feels force from the central-difference pressure gradient,
-scaled by pressure_sensitivity.
+scaled by pressure_sensitivity, divided by mass at application
+(6.1).
 
 ### 6.5 Position update
 
     x += vx * dt
     y += vy * dt
     dt = 1.0    (one tick = one femtosecond at default scale)
+
+### 6.5 Non-bonded interactions
+
+Excluded volume (implemented 2026-09-05; the founding draft had
+none - unbonded atoms passed through each other, and the lipid
+literature is unanimous that self-assembly needs non-bonded
+potentials, never springs alone):
+
+    cutoff = (radius_a + radius_b) * non_bonded_margin
+    F      = non_bonded_repulsion * (cutoff - r),  for r < cutoff
+
+Applied to every UNBONDED live pair (bonded pairs are exempt -
+springs own them; same-molecule 1,3 pairs are NOT exempt: real
+sterics, mild by construction since VSEPR ideals keep most
+beyond cutoff), along the minimum-image axis, equal and opposite,
+divided by mass at application. Candidates come from the
+wrap-aware spatial index (4.9). This is smuggled PHYSICS,
+documented as such: the substrate has excluded volume because
+matter does, not because any biology needs it.
 
 ### 6.6 Boundaries
 
@@ -381,7 +444,15 @@ scaled by pressure_sensitivity.
 
 ### 7.1 Bond breaking
 
-Per alive bond, in BondId order:
+Per alive bond, in BondId order. FIRST, mechanical dissociation:
+bonds stretched past bond_break_factor * r_eq break
+deterministically, no RNG roll, NO heat release - the stretch
+already spent the energy, and the vanishing spring potential is a
+sink (a heat-releasing length break cascaded in measurement:
+break heat -> kicks -> shoves -> breaks). Real bonds do not
+stretch to multiples of their length; without this rule the
+substrate carried 30-80 A "bonds" (measured). Then the thermal
+roll:
 
     T       = temperature at the bond midpoint (minimum-image)
     p_break = exp(-bond.energy / (kb_scaled * T))   // Boltzmann
@@ -397,9 +468,11 @@ For each atom A with available bond slots, candidates within
 bond_search_radius (default 4.0 angstroms) via the spatial index:
 each unordered pair is attempted at most once per tick, from the
 iteration of the lower AtomId (A is the geometry anchor; a small
-documented asymmetry). Eligibility (alive, capacity on both sides,
-minimum-image distance, not already bonded) is checked before the
-RNG draw.
+documented asymmetry). Eligibility (alive, capacity on both sides, minimum-image
+distance, not already bonded, and CAPTURE: relative speed below
+max_form_speed - a pair flying past cannot be captured; the bond
+would have to absorb their relative KE as stretch and become a
+comet, measured at ~80 A) is checked before the RNG draw.
 
     p_form = base_formation_rate
            * geometry_factor(A, B)
@@ -595,12 +668,20 @@ measurements that changed them:
                                      // from kb_scaled - one physical
                                      // constant set two
                                      // incompatible sim scales
+    thermostat_damping      0.1      // Langevin gamma (6.1, K1.1)
+    ke_field_scale          0.01     // field degrees per KE unit
+                                     // exchanged by the bath
+    max_atom_speed          2.0      // velocity clamp; below the
+                                     // tunneling-mint threshold
+                                     // (6.1, phase 2 removes it)
     diffusion_rate          0.1
+    field_relax_rate        0.002    // setpoint relaxation (6.2,
+                                     // K1.1: the environment
+                                     // reservoir / heat sink)
     pressure_sensitivity    0.01
-    spring_energy_scale     0.002    // literal 0.01 put every bond
-                                     // over the symplectic bound
-                                     // dt*sqrt(k) < 2 (F2)
-    strong_repulsion        1000.0
+    spring_energy_scale     0.004    // F2 + water rigidity; the
+                                     // dt*sqrt(k/mu) < 2 law is
+                                     // test-pinned per bond
     convection_rate         0.001
     vent_heat_rate          0.1      // used by 8.1's formula; was
                                      // missing from this block
@@ -613,6 +694,12 @@ measurements that changed them:
                                      // (F7)
     formation_fraction      0.3
     en_bonus                0.1
+    max_form_speed          1.5      // capture gate (7.2): no
+                                     // bonding above this relative
+                                     // speed
+    bond_break_factor       2.5      // mechanical dissociation
+                                     // (7.1): break past this
+                                     // multiple of r_eq, silently
     geometry_sigma          30.0     // degrees; 7.2 geometry-factor
                                      // tolerance (new)
     t_opt_scale             0.1      // T_opt = t_opt_scale * bond
@@ -625,9 +712,17 @@ measurements that changed them:
     compaction_interval     10000    // ticks [phase 2]
     surface_threshold       0.9      // fraction of world height
 
+    non_bonded_repulsion    1.0      // excluded volume strength
+                                     // (6.5)
+    non_bonded_margin      1.5      // cutoff = (r_a + r_b) *
+                                     // margin (6.5)
+
     bond_energy { ... }    // the section 7.3 table
     bond_angles { ... }    // the section 7.4 table
     uv_sensitivity { single 0.0001; double 0.0003; triple 0.0002 }
+
+Removed 2026-09-05: strong_repulsion and max_repulsion_force (the
+hard core is gone; 6.3 has the story).
 
 ## 12. Runtime guarantees
 
@@ -639,7 +734,10 @@ measurements that changed them:
     G03  The observer never modifies WorldState
     G04  Bond formation never exceeds an element's max_bonds
     G05  Boundary conditions are applied every tick without exception
-    G06  Energy sources are the only energy inputs
+    G06  Energy sources are the only energy inputs besides the
+         declared environment: setpoint-relaxation cells exchange
+         with an explicit declared reservoir (6.2); nothing else
+         couples the world to an outside bath
     G07  The spatial index is consistent with atom positions at the
          start of ChemistrySystem::update each tick
     G08  All validation errors are reported before tick 0

@@ -44,6 +44,43 @@ constants; numbers in the tuning commit):
       wrap, so formation candidates across the seam are suppressed
       (no dynamics corruption; phase 2 with K2/K3).
 
+## Resolution log (2026-09-05, K1.1 session)
+
+The substrate corrections that made K1.1 pass, each found by
+measurement (probe-first), each with a law test:
+
+- F8 RESOLVED: the Langevin thermostat (damping + matching noise
+  toward the local field temperature) with exact signed-delta
+  bookkeeping (the "injected" term double-counted and bled the
+  field; the exact invariant field + KE * ke_field_scale is now
+  test-pinned). K1.1 PASS: KE/atom -5.7%, mean bond length +0.5%
+  window drift over a 10k-tick vented run.
+- F9 REVISED AND RESOLVED: the hard core was not a cannon to cap
+  but a discontinuity to remove - symplectic Euler pumped it every
+  time a thermal kick carried an atom through. One smooth Hooke
+  law both directions; strong_repulsion deleted.
+- F12: the founding spec applied forces without /mass (F = ma
+  missing). Hidden in H-H tests (unit mass); oxygen interactions
+  minted ~(0.5*m - 1) * F^2 each tick - the primary furnace.
+  Found by the one-water probe (a pair decayed; a trio pumped).
+- F13: fast atoms tunnel through the ~2 A non-bonded zone; the
+  asymmetric discrete force sampling mints energy proportional to
+  speed (measured: runaway at vmax 3, calm at vmax 2). Velocity
+  clamp below the mint threshold, removed KE honestly deposited;
+  collision sub-stepping is the phase-2 proper fix.
+- F14: bonds formed between flyby pairs became 80 A comets.
+  Capture gate: no formation above max_form_speed relative speed.
+- F15: the substrate lacked mechanical dissociation - overstretched
+  bonds random-walked to 30-80 A alive. Break past
+  bond_break_factor * r_eq, silently (heat-releasing length breaks
+  cascaded in measurement; sinks cannot cascade).
+- F16: frozen breaking by composition - the H-dominated free mix
+  could only form strong bonds (zero breaks in 2000 ticks).
+  Pond rebalanced toward O/N for weak flickering pairs.
+- The pond gained its vent and the 35 C setpoint reservoir (spec
+  6.2): a vented Wrap world with no sink only heats; flatness
+  requires the environment to be a declared bath.
+
 ## Spec sync policy
 
 Owner decision 2026-09-05: the implementation and the canonical
@@ -212,7 +249,7 @@ exactly this reason. Measured 2026-09-05: the 3422-atom pond runs
 number comes with the phase-2 perf pass. No optimization before
 the pond is behaviorally sane.
 
-## 10. Thermostats: the missing bath (finding F8, the K1 blocker)
+## 10. Thermostats: the missing bath (finding F8 - RESOLVED, K1.1)
 
 Every MD system that samples a temperature couples to a bath, not
 just a noise source: Langevin dynamics adds friction alongside
@@ -229,7 +266,9 @@ field locally. Proposed model (owner sign-off pending):
 
     v <- v * (1 - damping) + normal(0, sigma(T_cell))
 
-a Langevin kick with damping toward the local field temperature:
+IMPLEMENTED 2026-09-05 as gate K1.1 (PASS): the exact form above
+plus signed-delta bookkeeping, the setpoint reservoir, and the
+velocity clamp (findings log).
 fast atoms relax toward the cell's temperature, the field diffuses
 and relaxes toward declared region values, energy bookkeeping
 stays closed except at the world boundary (which the spec pins as
