@@ -39,6 +39,20 @@ it:
     run          the testbench: how the simulation executes
     khem (bin)   the simulator
 
+The composition hierarchy, one level per declaration:
+
+    elements    the parts library: what atoms exist
+      |
+    struct      a part: atoms, bonds, ports (composite structs
+      |         instantiate and wire other structs)
+    chain       a polymer: parts repeated along a sequence
+      |
+    body        an organism: parts placed in space
+      |
+    world       the environment: regions, sources, placement
+      |
+    run         the testbench: how the simulation executes
+
 All definitions live in .kem files. The declaration type is declared
 inside the file; filenames are arbitrary; the extension is always
 .kem. The runtime entry point is a file declaring run.
@@ -67,6 +81,10 @@ Every .kem file has the same top-level shape:
   silently ignore.
 
 Declarations: elements | struct | chain | body | world | run
+
+Terms: a file declares one thing; the declaration defines a kind;
+use and place create instances of that kind; the file as a whole is
+the description the runtime elaborates into a world.
 
 ## 3. Syntax
 
@@ -132,7 +150,7 @@ Field constraints:
     valence            1 - 8
     electronegativity  0.0 - 4.0
     radius             > 0.0
-    max_bonds          >= valence
+    max_bonds          >= valence, <= 6
 
 All fields required. No defaults. Unknown fields are a parse error.
 
@@ -166,8 +184,8 @@ composite (built from other structs). It cannot be both.
           O1 - H2 : single
         }
 
-        port donor:    O1
-        port acceptor: H1, H2      // multi-atom port
+        port donors:   H1, H2      // multi-atom port
+        port acceptor: O1
 
       }
 
@@ -186,8 +204,8 @@ composite (built from other structs). It cannot be both.
       struct nucleotide_A {
 
         use "adenine_base.kem"  as base
-        use "ribose.kem"        as sugar
-        use "phosphate.kem"    as phos
+        use "ribose.kem"         as sugar
+        use "phosphate.kem"      as phos
 
         place base  at (0.0, 0.0)
         place sugar at (4.0, 0.0)
@@ -282,11 +300,12 @@ is just atoms; no behavior is defined here.
 
 Place forms:
 
-    place <alias> at (<x>, <y>)                    single placement
-    place <alias> at (<x>, <y>) rotate <deg>       rotated placement
-    place <alias> count <n> inside <alias> scatter N copies inside another
-                                                   struct
-    place <alias> count <n> scatter                N copies in body space
+    place <alias> at (<x>, <y>)               single placement
+    place <alias> at (<x>, <y>) rotate <deg>  rotated placement
+    place <alias> count <n> inside <alias> scatter
+                                            N copies inside another
+                                            struct
+    place <alias> count <n> scatter           N copies in body space
 
 - inside requires the target struct to declare an interior port (a
   closed structure such as a vesicle).
@@ -307,8 +326,8 @@ energy sources, and placement.
 
         use "minimal_cell.kem"  as cell
         use "water.kem"         as h2o
-        use "nucleotide_A.kem"   as free_A
-        use "lipid.kem"          as lipid
+        use "nucleotide_A.kem"  as free_A
+        use "lipid.kem"         as lipid
 
         region surface (y: 150 - 200) {
           temperature: 15
@@ -415,6 +434,15 @@ khem binary must declare run.
 All validation errors are reported before tick 0; the runtime does not
 start if any are present. Warnings are logged but do not halt.
 
+    V-ELEMENT-01  exactly one elements declaration per project
+    V-ELEMENT-02  symbol: 1-2 characters, uppercase letters only
+    V-ELEMENT-03  name: non-empty string
+    V-ELEMENT-04  atomic_number: 1 - 118
+    V-ELEMENT-05  mass: > 0.0
+    V-ELEMENT-06  valence: 1 - 8
+    V-ELEMENT-07  electronegativity: 0.0 - 4.0
+    V-ELEMENT-08  radius: > 0.0
+    V-ELEMENT-09  max_bonds: >= valence, <= 6 (substrate capacity)
     V-STRUCT-01  primitive struct: at least one atom required
     V-STRUCT-02  bond labels must reference defined atoms
     V-STRUCT-03  bond must not exceed max_bonds of either atom
@@ -456,15 +484,20 @@ start if any are present. Warnings are logged but do not halt.
 
     khem elements element struct chain body world run
     use place wire port link inside scatter count at as rotate
-    atoms bonds sequence description tier
+    atoms bonds sequence description tier chain_spacing
+    name atomic_number mass valence electronegativity radius
+    max_bonds from to bond
     single double triple
     region source size boundary wrap wall open
     temperature pressure uv type position intensity radius
-    surface_only
+    surface_only hydrothermal solar_uv radiation
     execution output watch tick_rate max_ticks seed
-    tick_interval bond_events notable_only
+    tick_interval bond_events notable_only stream format
+    stdout ndjson
+    molecule_size_above population_change_above extinction
     max unlimited random first last each
     true false
 
-Reserved for future extension mechanisms (parse error if used in
-v0.1): plugin, extend, override, macro.
+Every keyword and field name in the grammar; identifiers must not
+collide with any of them. Reserved for future extension mechanisms
+(parse error if used in v0.1): plugin, extend, override, macro.
