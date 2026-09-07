@@ -87,6 +87,24 @@ Thresholds are starting points; they move with evidence, never
 by wish. Gates are measured by the harness, never by eyeballing
 a viewer.
 
+RE-VALIDATION CONTRACT (owner decision 2026-09-07): a passed
+gate is passed against its operating assumptions; when a later
+gate's work moves those assumptions, the earlier gate RE-RUNS in
+that same commit - the re-run result is part of the later gate's
+evidence, not an optional follow-up. Current bindings:
+- K1.1 re-runs in K1.4's commit (K1.4 moves the pond's settled
+  operating temperature; K1.1 passed at the cold ~0.3 C point)
+- K1.1 re-runs in any integrator commit (sub-stepping removes
+  the velocity clamp and deepens bond wells - K1.3's lever;
+  the golden hash forces such commits to be conscious)
+- the velocity clamp (tunneling mint guard) must be REMOVED
+  before the E-gates run their long horizons - the mint is
+  bounded, measured, and absorbed by the reservoir, but it
+  accumulates over million-tick experiment runs
+- no soft spot exists only in prose: every known limitation
+  lives either in this contract or as a finding in
+  docs/research/abstraction-notes.md with a named owner gate
+
     K1  STABILITY - the substrate holds together
         [measured 2026-09-05: FAILING; the sub-gates name the
         measured causes - F6 through F9, F11]
