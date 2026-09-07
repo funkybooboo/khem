@@ -1,5 +1,6 @@
 //! The hardcoded primordial pond: phase-1 world construction
-//! (PLAN: "a hardcoded primordial pond"). Phase 3 replaces this with
+//! (docs/plans/phase-1-kernel.md: "a hardcoded primordial pond").
+//! Phase 3 replaces this with
 //! .kem world declarations parsed by khem-lang; every constant here
 //! is provisional and gets revisited when the language arrives.
 //!

@@ -1,6 +1,7 @@
 # Phase-0 notes: what each abstraction stands on
 
-Status: in progress (PLAN phase 0). Companion to references.md (the
+Status: in progress (docs/plans/phase-0-research.md). Companion to
+references.md (the
 bibliography); this file records, per abstraction khem uses, what
 prior work supports it, what it simplifies away, and what the phase-1
 kernel has already measured against it. Written 2026-09-05, after the
@@ -151,9 +152,9 @@ run by channel):
   fractions, and the vent/setpoint balance.
 - Substrate cost measured: 10k-tick pond runs went from ~77 s to
   ~189 s in release (~53 t/s) - 4x force passes plus per-sub-step
-  index rebuilds. The phase-2 perf pass owns this (PLAN: no
-  optimization before the substrate is behaviorally sane; the
-  gates are correctness gates).
+  index rebuilds. The phase-2 perf pass owns this
+  (docs/plans/phase-2-hardening.md: no optimization before the
+  substrate is behaviorally sane; the gates are correctness gates).
 
 ## Findings first analyzed before measurement
 
@@ -298,8 +299,9 @@ membrane GROWTH dynamics, not only "a ring formed".
 
 The Genesis Engine correction notice (references.md, required
 reading) governs watch-condition design: khem's NOTABLE events must
-be measurable state comparisons, preregistered before runs (PLAN
-thesis track), never a detector that cannot report "no".
+be measurable state comparisons, preregistered before runs (the
+thesis track, docs/plans/phase-4-experiments.md), never a detector
+that cannot report "no".
 
 ## 9. Performance envelope
 

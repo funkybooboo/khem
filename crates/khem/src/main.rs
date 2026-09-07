@@ -1,6 +1,7 @@
 //! khem - the runtime CLI for the khem artificial-chemistry language.
 //!
-//! Phase 1: the hardcoded primordial pond (PLAN.md). A file
+//! Phase 1: the hardcoded primordial pond
+//! (docs/plans/phase-1-kernel.md). A file
 //! argument is accepted but not read - the .kem parser arrives in
 //! phase 3 via the khem-lang crate; until then the only knobs are
 //! --seed and the constants in khem-core's config. The binary stays

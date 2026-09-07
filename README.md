@@ -115,7 +115,8 @@ because a language on a dead substrate is worthless.
 
 ## Documentation
 
-    PLAN.md            build order, validation gates, open decisions
+    PLAN.md            the plan hub: status, phase map, rules
+    docs/plans/       one file per phase (kernel, gates, language)
     ARCHITECTURE.md    crate map and scaling plan
     docs/specs/        the .kem language and runtime specs
     docs/adr/          the why behind every decision

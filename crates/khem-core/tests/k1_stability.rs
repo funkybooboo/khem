@@ -1,4 +1,5 @@
-//! The K1 stability harness (PLAN.md gate ladder, milestone K1).
+//! The K1 stability harness (docs/plans/phase-1-kernel.md gate
+//! ladder, milestone K1).
 //!
 //! Five levels:
 //!

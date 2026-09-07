@@ -1,0 +1,261 @@
+# Phase 1 - the physics/chemistry kernel (no DSL)
+
+The kernel lives in the khem-core lib; the khem bin stays a thin
+entry point (see ARCHITECTURE.md). Everything is hardcoded:
+
+- the tick loop from docs/specs/runtime-spec.md (spec 5.1):
+  energy -> bath -> [index -> forces -> motion] x substeps ->
+  boundary -> index -> bond breaking -> bond formation ->
+  observe -> flush
+- a hardcoded primordial pond (pond.rs; a hardcoded minimal cell
+  follows the same pattern when the K3 gates need it)
+- NDJSON events to stdout (tick + bond events; watch conditions
+  are phase 2)
+
+Explicit non-goals: no parser, no .kem files, no plugins, no CLI
+flags beyond --seed. Hardcode everything. The kernel is
+disposable; the answer to the K-gates is not.
+
+## The gate ladder
+
+The ladder is the project's spine, and all of it must pass before
+any parser work. A milestone (K_n) passes when its sub-gates do; a
+sub-gate is a harness test with a measured pass criterion - pass
+it, commit it, move to the next. Each milestone gets a harness
+file in tests/ (k1_stability.rs exists; k2_self_assembly.rs,
+k3_replication.rs, k4_variation.rs, k5_selection.rs follow).
+Constants retune inside a sub-gate as the harness demands (F1's
+lesson), but no sub-gate may be passed by adding a rule above the
+atom/bond level (G01). Thresholds are starting points; they move
+with evidence, never by wish. Gates are measured by the harness,
+never by eyeballing a viewer.
+
+Sub-gates are sized to be attackable - a sitting to a week each;
+if one sprawls, split it.
+
+## The re-validation contract
+
+Owner decision 2026-09-07: a passed gate is passed against its
+operating assumptions; when a later gate's work moves those
+assumptions, the earlier gate RE-RUNS in that same commit - the
+re-run result is part of the later gate's evidence, not an
+optional follow-up. Current bindings:
+
+- K1.1 re-runs in K1.4's commit (K1.4 moves the pond's settled
+  operating temperature; K1.1 passed at the cold ~0.3 C point)
+- K1.1 re-runs in any integrator commit (sub-stepping removes
+  the velocity clamp and deepens bond wells - K1.3's lever; the
+  golden hash forces such commits to be conscious). EXERCISED
+  2026-09-07, K1.3's commit: the re-run FAILED the original
+  letter (KE/atom +32% window drift) and the measurement showed
+  why - the quiesced chemistry starved the old refrigeration, so
+  the vent + setpoint reservoir warm the field over ~6k ticks
+  and KE rides the recovery. Re-validated PASS: thermostat
+  coupling (KE/atom vs the field's warm-cell thermal level)
+  constant 1.09-1.13 at every sample through the transient, KE
+  bounded throughout, flatness over the steady tail (6.25k-8k vs
+  8.25k-10k: KE +10.6%, bond length +0.3%)
+- the velocity clamp (tunneling mint guard) was REMOVED in the
+  K1.3 integrator commit (2026-09-07): the sub-stepping resolves
+  the crossings the clamp guarded, satisfying this contract's
+  requirement that the clamp be gone before the E-gates run
+  their long horizons
+- no soft spot exists only in prose: every known limitation
+  lives either in this contract or as a finding in
+  docs/research/abstraction-notes.md with a named owner gate
+
+## Milestone K1 - stability: the substrate holds together
+
+K1.1-K1.3 passed 2026-09-05/07 (thermostat, force sanity, water
+persistence); K1.4 and K1.5 remain. The findings that shaped them:
+F6-F11, F17, F18.
+
+### K1.1 - thermostat: PASSED
+
+Langevin damping toward the local field temperature. PASSED
+2026-09-05: KE/atom window drift -5.7%, mean bond length +0.5%
+over the 10k-tick vented run (tests/k1_stability.rs, release
+--ignored). The pass required the substrate corrections F8-F16
+(findings log in docs/research/abstraction-notes.md) and the
+setpoint reservoir + vent (spec 6.1/6.2/11 synced).
+
+RE-VALIDATED 2026-09-07 (K1.3's integrator commit, the contract's
+integrator binding): coupling ratio constant 1.09-1.13 through
+the measured field-recovery transient, KE bounded throughout,
+steady-tail windows (6.25k-8k vs 8.25k-10k) KE +10.6%, bond
+length +0.3%.
+
+### K1.2 - force sanity: PASSED
+
+A bonded overlap imparts bounded velocity (F9 measured v ~ 1e4 -
+a cannon). PASSED 2026-09-07: the overlap probe (two bonded O
+atoms at 0.05 * r_eq, zero field, one tick) imparts 0.046 A/tick
+per atom against the analytic single-tick Hooke bound
+k * r_eq / m = 0.048; the mean per-bond stretch ratio holds
+1.000-1.002 (p95 <= 1.013, worst sample 13/1496 bonds outside
+the band) at every sample of the same 10k-tick vented run
+(tests/k1_stability.rs, release --ignored).
+
+RE-VALIDATED 2026-09-07 in K1.3's integrator commit (stiffer
+springs move the operating point): PASS - probe under the
+analytic bound, band mean ratio 1.003-1.010, p95 <= 1.21, every
+sample inside [0.8, 1.5].
+
+### K1.3 - water persists: PASSED
+
+A 35 C pond of H2O keeps its molecules - intact count flat, O-H
+essentially never breaks (real chemistry's own exp(-29) answer),
+the form+break cycle mints no energy (the F7 regression stays
+green). PASSED 2026-09-07: intact 1024/1024 at every sample
+through the 10k-tick vented run (one new water even assembled
+from free atoms), ZERO seeded-water O-H breaks; the failing
+substrate measured 1482 mechanical O-H breaks (all bombardment
+overstretch, none thermal) and 206/1024 intact.
+
+The fix was the re-validation contract's named lever, pulled
+forward from phase 2: integration sub-stepping (4 sub-steps/tick,
+dt_sub = 0.25) lets springs sit 8x stiffer inside the symplectic
+bound evaluated at dt_sub - the O-H mechanical well went from
+~10 kT (a thermal-speed hydrogen carries enough to shatter it)
+to ~80 kT, real water's own ratio - and removes the velocity
+clamp by resolving the crossings it guarded. Runtime O-H pairs
+the free population forms and re-separates (26 breaks vs 41
+formations) are reactive churn, counted and reported for K1.4,
+not water loss. Spec 5.1/6.1/6.3/6.5/11 synced; golden hash
+consciously updated; K1.1 and K1.2 re-ran in the same commit
+(the contract's integrator binding, above).
+
+### K1.4 - reactive balance: OPEN (next)
+
+A beaker of free atoms settles to a STATIONARY molecule-size
+distribution - weak bonds break (O-O on a ~10k-tick scale),
+strong ones persist; no runaway crosslinking, no frozen
+inertness; formation refrigeration (F6) stays bounded and
+recovers. Measured context for the attack: the K1.3 substrate
+quiesced the old shatter-fed refrigeration machine (field avg
+went from -162 C to a ~26-28 C recovery vs the 35 C setpoint),
+and finding F18 (wide-capture phantom churn: pairs formed inside
+the 4 A search radius but past the 2.5 * r_eq break length break
+silently, absorbing 0.3 * E per cycle) is the named lever set -
+search radius, formation fractions, vent/setpoint balance.
+
+### K1.5 - seam correctness: OPEN
+
+The spatial index wraps in Wrap worlds (F11) - cross-seam
+formation is symmetric with the bulk. Originally queued for
+phase 2; promoted, because a Wrap world with asymmetric formation
+cannot pass honest gates.
+
+## Milestone K2 - self-assembly: membranes are consequences, not rules
+
+Precondition: K1. The literature is unanimous that amphiphiles
+assemble through non-bonded potentials, never through springs
+alone - hence K2.1 comes first.
+
+### K2.1 - excluded volume
+
+Soft non-bonded repulsion (F4 - smuggled PHYSICS, documented as
+such): free atoms no longer pass through each other. PASS:
+minimum approach distance >= 0.8 * (r_a + r_b) in a scattering
+test. (Implemented with the K1.1 substrate work, spec 6.6; the
+scattering-test PASS run is the gate's own commit.)
+
+### K2.2 - condensed medium
+
+The pond behaves as matter, not free flight - most atoms hold a
+non-bonded neighbor within 3 A, and pair distances show
+structure.
+
+### K2.3 - amphiphile sorting
+
+A lipid (polar head, nonpolar tails) in water - head-water and
+tail-tail contact fractions beat chance by a set margin. No
+"membrane" rule exists anywhere in the runtime.
+
+### K2.4 - vesicle closes
+
+Lipids form a persistent cluster with an interior (union-find:
+cluster >= 12 lipids, survives >= 10k ticks), heads pointing
+outward.
+
+### K2.5 - contents held
+
+Free nucleotides placed inside a vesicle stay inside above a
+leak threshold.
+
+### K2.6 - vesicle grows
+
+A fed vesicle incorporates lipids and grows (Squirm3 lesson:
+membranes must grow, not just close). Division is NOT gated in
+v0.1 - it is the first thing to chase after K5.
+
+## Milestone K3 - replication: copying is chemistry, not code
+
+Precondition: K2.5; the strand lives in a vesicle with free
+nucleotides.
+
+### K3.1 - pairing
+
+Free nucleotides bond the correct complement (A-U, G-C) far more
+often than the wrong one (starting threshold 4:1) in a minimal
+beaker. Base-pair geometry targets stay flagged as smuggled
+biology (ADR-0003's honesty rule).
+
+### K3.2 - templating
+
+A seeded strand acquires a full complement - >= 80% of bases
+paired within a fixed tick budget.
+
+### K3.3 - separation
+
+A thermal window exists - pairing holds at T_low, the duplex
+releases at T_high - and the window moves by retuning constants,
+not by adding rules.
+
+### K3.4 - the copy
+
+Template + free nucleotides + thermal cycling yields a free
+daughter strand (complement signature in the event stream), and
+the daughter templates a second generation.
+
+## Milestone K4 - variation: copies carry errors
+
+### K4.1 - copy errors
+
+Wrong-base incorporation happens, and the measured mismatch rate
+tracks a single tunable constant across a sweep.
+
+### K4.2 - viable mutants
+
+Most single-substitution daughters still copy (the K3.4 criteria)
+- variation is not instantly lethal.
+
+## Milestone K5 - selection: the pond has ecology
+
+Precondition: K4; long runs - the phase-2 perf target and
+dead-slot compaction are what make K5 practical.
+
+### K5.1 - competition
+
+Two lineages (differing fidelity or speed) share one pond with
+capped nucleotide supply - both copy, one wins by a preregistered
+margin. Needs lineage identity in the harness.
+
+### K5.2 - turnover
+
+With material feed + decay (the Squirm3 lesson - selection
+starves without turnover), populations grow, crash, recover,
+persisting for many generations without extinction or monoculture
+takeover.
+
+### K5.3 - novelty probe
+
+Reconstructed lineage trees keep producing new sequences over
+time - open-endedness or convergence, measured against a metric
+preregistered BEFORE looking (the Genesis Engine rule).
+
+## Exit criterion
+
+If K1-K3 do not pass after honest parameter sweeps (weeks, not
+days), stop and redesign the substrate before building anything
+on top. A beautiful language on a dead substrate is worthless.
