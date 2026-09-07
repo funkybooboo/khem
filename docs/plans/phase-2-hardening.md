@@ -46,3 +46,15 @@ Remaining (the spec's [phase 2] markers):
   baseline first - a 4 A query scans up to 27 cells versus 9 at
   the 5 A cell size - so the port records the honest new number
   against the same spec 13 targets.
+- OPEN QUESTION (registered in PLAN.md; phase-0 re-open before
+  this pass): ~60 t/s measured at 3.4k atoms extrapolates to
+  ~20 t/s at 10k atoms - ~25x short of spec 13's >500 t/s, with
+  the port's ~3x pair cost on top, while the named levers look
+  like 5-10x. Whether the E-gates need that target at all is
+  unexamined: a billion ticks at the extrapolated 10k-atom
+  rate is ~1.6 years, and E1 save/resume makes multi-session
+  runs legal. Re-derive the targets from the experiments' real
+  requirements (sustained rate + resume cost + the pond sizes
+  the E-gates actually use) before optimizing anything; if SoA
+  layout is the answer, decide whether the 3D port bundles it -
+  that decision sits with the port (phase-1.5-3d-port.md).

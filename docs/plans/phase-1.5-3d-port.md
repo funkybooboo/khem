@@ -94,6 +94,16 @@ why is the port's evidence.
 - Pond density: keep the 2D pond's ~3.4 A mean interatomic
   spacing or re-derive. Part of the K1.4 re-tune, not a separate
   question.
+- AtomState layout (registered in PLAN.md): keep the current
+  array-of-structs through the port, or bundle the SoA
+  conversion (phase 2's likely perf lever) into it so the layout
+  churn is paid once. Decided with the perf target re-derivation
+  (the phase-0 re-open; phase-2-hardening.md).
+- Port re-climb observability (registered in PLAN.md): no
+  viewer exists and 3D occludes what 2D showed by default.
+  Decide the debugging surface before the re-climb starts -
+  harness-side statistics (per-layer field sums, projected
+  distance histograms) rather than viewer work.
 
 ## Out of scope
 

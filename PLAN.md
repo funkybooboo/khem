@@ -5,9 +5,9 @@ cheap enough to run a billion ticks, seed it with a minimal cell,
 and let the chemistry do everything above the atom/bond level - if
 anything alive appears, it built itself from the rules.
 
-This file is the hub: the hinge question, where the repo stands,
-the phase map, and the project-wide rules. The detail lives in
-docs/plans/, one file per phase.
+This file is the hub: the hinge question, where the repo
+stands, the phase map, the known gaps, and the project-wide
+rules. The detail lives in docs/plans/, one file per phase.
 
 ## The one question this project hinges on
 
@@ -100,9 +100,9 @@ All of this is enabled by choices already fixed (runtime spec section
 
 ## How this plan is maintained
 
-- PLAN.md is the hub (status, phase map, project-wide rules);
-  docs/plans/ holds one file per phase, written to be read top
-  to bottom.
+- PLAN.md is the hub (status, phase map, gap register,
+  project-wide rules); docs/plans/ holds one file per phase,
+  written to be read top to bottom.
 - The WHY of every decision lives in docs/adr/ (Nygard format;
   immutable once accepted - change means a new ADR).
 - The implementation and the specs must AGREE (owner decision
@@ -118,6 +118,24 @@ All of this is enabled by choices already fixed (runtime spec section
 - The founding conversation is recoverable from git history only:
   the transcript at commit d8205f1, the spec-draft extractions at
   83a2688 and fefc4b9.
+
+## Known gaps and open questions
+
+Gate-status questions (which gate is open, what its pass
+criteria are) live in the ladder: docs/plans/phase-1-kernel.md.
+This register is the cross-cutting material: mechanisms the
+ladder assumes but no phase designs, and questions that are not
+any single gate's to answer. Each row names the trigger - we
+answer it when we get there, not before.
+
+| Gap / open question | Bites | Answered by | Detail |
+|---|---|---|---|
+| Non-bonded polarity attraction: the substrate's only attraction is the bond spring (spec 6.6 is repulsion-only and says so); K2's amphiphile sorting needs an element-derived attractive potential, designed and honesty-flagged first | K2.3-K2.6 | before K2.3 tuning | phase-1-kernel.md (K2.3 note); phase-0 re-open |
+| K3 mechanism: which bonds pair bases, how the duplex releases (the thermal window), and whether adjacent paired nucleotides reach ligation distance - all undesigned or uncalculated | K3.1-K3.4 | the K3 mechanism memo, before K3 starts (it feeds the port's grammar decisions) | phase-1-kernel.md (K3 note); phase-0 re-open |
+| Turnover mechanisms: decay (UV photolysis is the honest candidate, undeclared) and material feed (no mechanism at all) | K5.2 | the turnover memo, before K5 | phase-1-kernel.md (K5.2 note); phase-0 re-open |
+| Perf target re-derivation: ~60 t/s measured at 3.4k atoms extrapolates to ~20 t/s at 10k vs spec 13's >500 t/s (~25x), the port's ~3x pair cost lands on top, and the named levers look like 5-10x; whether the E-gates need that target at all is unexamined | phase-2 perf pass | re-derive spec 13 from the E-gates' real requirements before the perf pass; the layout-bundle question decides with the port | phase-2-hardening.md; phase-1.5-3d-port.md |
+| Port re-climb observability: no viewer exists, and the 3D K1.4 retune happens without one | phase 1.5 | decide the debugging surface before the re-climb starts | phase-1.5-3d-port.md |
+| The port's own open decisions (NDJSON encoding, world shape, rotation grammar, density, layout bundling) | phase 1.5 | the port phase, in order | phase-1.5-3d-port.md, "Decisions this phase owns" |
 
 ## Open decisions (owner: nate)
 

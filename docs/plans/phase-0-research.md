@@ -8,10 +8,24 @@ docs/research/references.md is the bibliography (with the
 prior-work table), and docs/research/abstraction-notes.md records,
 for each abstraction khem uses, what prior work supports it, what
 it simplifies away, and what the phase-1 kernel has measured
-against it (findings F1-F18). Phase 0 re-opens once, before any
-watch-condition detector is designed: the Genesis Engine
-correction notice is required reading first (the phase-4 file
-carries that binding).
+against it (findings F1-F18). Phase 0 re-opens at named trigger points (the gap register in
+PLAN.md is the index) - each re-open is a short memo against
+the literature before the gate that needs the design pays for
+it instead:
+
+- before K2.3 tuning - the non-bonded polarity potential memo
+  (phantom-solvent and four-bead amphiphile models;
+  abstraction-notes section 4 is the lesson)
+- before K3 starts - the K3 mechanism memo (pairing channel,
+  thermal window, ligation geometry, preregistered honesty
+  line)
+- before K5 - the turnover memo (decay = UV photolysis
+  candidate; material feed)
+- before the phase-2 perf pass - the spec 13 target
+  re-derivation from the E-gates' real requirements
+- before any watch-condition detector is designed - the Genesis
+  Engine correction notice is required reading first (the
+  phase-4 file carries that binding)
 
 The reading list, in priority order:
 
