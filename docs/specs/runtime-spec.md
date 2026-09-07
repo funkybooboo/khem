@@ -17,8 +17,8 @@ numbers fixed by renumbering non-bonded interactions to 6.6 and
 boundaries to 6.7). Items marked
 [phase 2] / [phase 3] are designed but not yet implemented.
 Provenance: reconciled from the founding conversation (preserved in
-git history, ADR-0010) with the final terminology applied
-(ADR-0007, ADR-0009).
+git history) with the final terminology applied (ADR-0007,
+ADR-0009).
 
 ## 1. Overview
 

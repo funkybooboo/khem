@@ -20,7 +20,7 @@ and both documents are revised against kernel reality at that point
 ## History and provenance
 
 The founding conversation and its verbatim spec drafts are not kept
-in the working tree; git history is the archive (ADR-0010):
+in the working tree; git history is the archive:
 
 - the founding conversation, verbatim: commit d8205f1
   (git show d8205f1:initial-idea.md)

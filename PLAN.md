@@ -23,8 +23,8 @@ before specs.
   physics, chemistry, energy, observer with union-find molecule
   detection, hand-rolled NDJSON v:1, the hardcoded pond, the khem
   bin streaming real output. Canonical specs (docs/specs/) and
-  twelve ADRs (docs/adr/) stay synced with the code; the founding
-  conversation lives in git history only (ADR-0010).
+  nine ADRs (docs/adr/) stay synced with the code; the founding
+  conversation lives in git history only.
 - The gate ladder is climbing: K1.1-K1.3 PASSED (thermostat,
   force sanity, water persistence - the pond's 1024 waters hold
   intact through 10k-tick vented runs). Next: K1.4 reactive
@@ -39,7 +39,7 @@ before specs.
   the K gates pass (ADR-0006).
 - Toolchain pinned in mise.toml; `mise run check` is the gate,
   identical in CI. Hosted at github.com/funkybooboo/khem,
-  public (ADR-0011).
+  public.
 
 ## The phase map
 
@@ -101,9 +101,9 @@ All of this is enabled by choices already fixed (runtime spec section
   and ARCHITECTURE.md (crate map).
 - The gate is `mise run check` locally and identical in CI; the
   toolchain is pinned in mise.toml.
-- The founding conversation is recoverable from git history only
-  (ADR-0010): the transcript at commit d8205f1, the spec-draft
-  extractions at 83a2688 and fefc4b9.
+- The founding conversation is recoverable from git history only:
+  the transcript at commit d8205f1, the spec-draft extractions at
+  83a2688 and fefc4b9.
 
 ## Open decisions (owner: nate)
 
@@ -123,9 +123,9 @@ All of this is enabled by choices already fixed (runtime spec section
 - [ ] first world file name: primordial_pond.kem ("warm little
       pond" is Darwin's phrase for the setting).
 - [x] license: RESOLVED 2026-09-05 - MIT (LICENSE at root, SPDX MIT
-      in crate metadata; ADR-0012).
+      in crate metadata).
 - [x] remote hosting: RESOLVED 2026-09-05 - github.com/funkybooboo/khem,
-      public (ADR-0011; CI green on the very first push).
+      public (CI green on the very first push).
 - [x] phase 1 placement: RESOLVED 2026-09-04 - kernel code lands in
       the khem-core lib, driven by the khem bin on main
       (ARCHITECTURE.md).
