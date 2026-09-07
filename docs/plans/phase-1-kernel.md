@@ -143,6 +143,12 @@ springs move the operating point): PASS - probe under the
 analytic bound, band mean ratio 1.003-1.010, p95 <= 1.21, every
 sample inside [0.8, 1.5].
 
+RE-CLIMBED AND PASSED IN 3D 2026-09-08: the band is
+dimension-agnostic exactly as the port plan predicted - probe
+0.334 vs the analytic bound 0.578 (the 2D pair: 0.334/0.578),
+band mean ratio 1.008-1.026, p95 <= 1.216, every sample inside
+[0.8, 1.5].
+
 ### K1.3 - water persists: PASSED
 
 A 35 C pond of H2O keeps its molecules - intact count flat, O-H
@@ -166,6 +172,12 @@ formations) are reactive churn, counted and reported for K1.4,
 not water loss. Spec 5.1/6.1/6.3/6.5/11 synced; golden hash
 consciously updated; K1.1 and K1.2 re-ran in the same commit
 (the contract's integrator binding, above).
+
+RE-CLIMBED AND PASSED IN 3D 2026-09-08: intact 1025/1024 flat
+(one water self-assembled from free atoms), ZERO O-H breaks of
+any kind, 14 runtime O-H formations, 1 weak-pair break - the
+persistence law is dimension-agnostic; the ~80 kT mechanical
+well and the exp(-29) thermal scale hold in 3D unchanged.
 
 ### K1.4 - reactive balance: PASSED
 

@@ -110,6 +110,9 @@ dimension-agnostic regression reference:
    rides ~1 C above setpoint (avg ~36.1) - the vent's larger
    fraction of the 72-cell field.
 2. K1.2 force sanity: overlap probe + per-bond band.
+   PASSED 2026-09-08: dimension-agnostic as predicted - probe
+   0.334 vs the bound 0.578 (2D: 0.334/0.578), band mean
+   1.008-1.026, p95 <= 1.216, every sample inside [0.8, 1.5].
 3. K1.3 water persistence: the seeded waters stay intact.
 4. K1.4 reactive balance: F18 fix active from day one; rates
    re-tuned with the 2D methodology (starve-then-retune).

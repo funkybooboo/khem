@@ -19,7 +19,8 @@
 //!   in the K1.3 commit): a bonded overlap imparts bounded
 //!   velocity (the probe), and the mean bond stretch ratio stays
 //!   within [0.8, 1.5] over the same vented-pond run (the band).
-//! - `k1_3_water_persistence` (gate K1.3, PASSED 2026-09-07):
+//! - `k1_3_water_persistence` (gate K1.3, PASSED 2026-09-07;
+//!   3D re-climb PASSED 2026-09-08):
 //!   the pond keeps its molecules - intact count high and flat,
 //!   seeded-water O-H breaks essentially never (the census
 //!   splits them from runtime-formed pair churn, which is K1.4's
@@ -394,6 +395,13 @@ fn k1_1_thermostat_flatness() {
 /// bound 0.578, band mean ratio 1.003-1.014, p95 <= 1.21, every
 /// sample inside [0.8, 1.5]).
 ///
+/// 3D RE-CLIMB PASS (2026-09-08): the band is dimension-agnostic
+/// exactly as the port plan predicted - probe 0.334 vs the bound
+/// 0.578 (the 2D pair measured 0.334/0.578), band mean ratio
+/// 1.008-1.026, p95 <= 1.216, every sample inside [0.8, 1.5];
+/// outside-band bonds up to 73/~2300 (~3%, the formed-pair churn
+/// riding the hotter 3D tail; reported, not barred).
+///
 /// Two measurements:
 ///
 /// - Overlap probe: two bonded O atoms placed at 0.05 * r_eq in a
@@ -508,6 +516,14 @@ fn k1_2_force_sanity() {
 /// K1.4's material. Re-run PASS in K1.5's commit (F20's anchor
 /// fix moves the pond trajectory): intact 1024/1024 flat, ZERO
 /// O-H breaks of any kind.
+///
+/// 3D RE-CLIMB PASS (2026-09-08): intact 1025/1024 flat (one
+/// water self-assembled from free atoms, as the 2D substrate
+/// also measured), ZERO O-H breaks of any kind (seeded or
+/// churn), 14 runtime O-H formations, 1 weak-pair break - the
+/// water-persistence law is dimension-agnostic; the ~80 kT
+/// mechanical well and the exp(-29) thermal scale neither know
+/// what a z axis is.
 ///
 /// Measurement over the same 10k-tick vented pond as K1.1/K1.2
 /// (seed 42), every bond event classified by channel: a broken

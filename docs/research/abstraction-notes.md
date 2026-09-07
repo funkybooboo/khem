@@ -347,7 +347,7 @@ measured:
   with their rationale in docs/plans/phase-2-3d-port.md,
   "Decisions this phase owns".
 
-## Resolution log (2026-09-08, the K1.1 3D re-climb)
+## Resolution log (2026-09-08, the 3D re-climb: K1.1-K1.3)
 
 - Gate K1.1 PASSED in 3D - the port's first re-climbed gate, and
   the run falsified one port-commit claim in its first sample,
@@ -378,6 +378,24 @@ measured:
   reservoir, the vent an additional input) - but the K1.4
   ledger's vent column and the tail-avg band [30, 40] must be
   re-measured against this pond, not the 2D one's numbers.
+
+- Gate K1.2 PASSED in 3D the same day, dimension-agnostic
+  exactly as the port plan predicted (the 2D pass records were
+  the regression vector for precisely this): probe 0.334 vs the
+  analytic single-impulse bound 0.578 (2D: 0.334/0.578), band
+  mean stretch ratio 1.008-1.026 (2D: 1.003-1.014), p95 <= 1.216
+  (2D: <= 1.21), every sample's mean inside [0.8, 1.5]. The
+  springs, the sub-stepping, and the stretch law do not know
+  what a z axis is - and the measurement confirms it.
+
+- Gate K1.3 PASSED in 3D the same day: intact 1025/1024 flat
+  (one water self-assembled from free atoms - the 2D substrate
+  also measured 1025 at its K1.4 re-run), ZERO O-H breaks of
+  any kind (seeded or churn), 14 runtime O-H formations, 1
+  weak-pair break. Water persistence is dimension-agnostic
+  down to the number: the mechanical well depth (~80 kT) and
+  the thermal scale (exp(-29)) are energy arguments, not
+  geometry.
 
 ## Findings first analyzed before measurement
 
