@@ -10,13 +10,34 @@ ADR-0009).
 
 ## 1. What khem is
 
-khem is a domain-specific language for defining physical and
-biological structures in terms of fundamental atomic primitives.
+khem is a hardware description language (HDL): a DSL that does
+for matter what Verilog does for circuits - describes physical
+and biological structures in terms of fundamental atomic
+primitives.
 
 khem describes WHAT EXISTS. The runtime decides WHAT RULES APPLY.
-The two never mix. A khem definition is purely structural: no
+The two never mix - the description/simulator split that hardware
+languages run on. A khem definition is purely structural: no
 behavior, no logic, no lifecycle - only atoms, bonds, positions,
 and composition.
+
+A .kem file is a description, not a template: no macros, no text
+substitution, no expansion rules - plugin, extend, override, and
+macro are parse errors in v0.1 (section 13). What the file says
+exists is what exists.
+
+The composition model is the HDL model, and the vocabulary follows
+it:
+
+    struct       a module definition: atoms, bonds, ports
+    use ... as   module instantiation under an alias
+    place        instance placement (position, rotation)
+    wire         the netlist: connect port to port
+    port         a module's connection points
+    chain        repeated instantiation along a sequence
+    body, world  the top-level hierarchies
+    run          the testbench: how the simulation executes
+    khem (bin)   the simulator
 
 All definitions live in .kem files. The declaration type is declared
 inside the file; filenames are arbitrary; the extension is always

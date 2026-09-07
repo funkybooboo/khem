@@ -22,9 +22,9 @@ ADR-0009).
 
 ## 1. Overview
 
-khem is a physics engine. It accepts .kem definitions, outputs a
-structured event stream, and knows about atoms, bonds, forces, and
-energy - nothing above that level (G01).
+khem is the simulator: a physics engine. It accepts .kem
+descriptions, outputs a structured event stream, and knows about
+atoms, bonds, forces, and energy - nothing above that level (G01).
 
 khem is designed to scale from a laptop to a large multi-machine
 system. v0.1 implements single-machine execution. The architecture

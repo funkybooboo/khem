@@ -4,9 +4,10 @@ This directory holds the canonical, current-state specifications:
 khem as it is defined now, not the path the founding conversation
 took to get here.
 
-- language-spec.md - the khem language: .kem files, the six
-  declarations (elements, struct, chain, body, world, run), syntax,
-  units, validation codes, reserved words
+- language-spec.md - the khem language: a hardware description
+  language for matter - .kem files, the six declarations (elements,
+  struct, chain, body, world, run), syntax, units, validation
+  codes, reserved words
 - runtime-spec.md - the khem runtime: CLI, NDJSON event schema, core
   data structures, tick execution, physics and chemistry systems,
   energy and observer systems, scalability, configuration,

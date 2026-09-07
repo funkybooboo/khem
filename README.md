@@ -42,7 +42,8 @@ determinism is by construction, not luck.
   hydrothermal vent, UV from above.
 - Seed life, simple or complex - anything built from atoms and
   bonds.
-- Compose worlds from small reusable templates; the standard
+- Compose worlds the way hardware is composed - parts with
+  ports, instantiated and wired into hierarchies; the standard
   library ships water, nucleotides, lipids, a vesicle, a cell.
 - Pipe the stream anywhere: one JSON event per line is the whole
   output contract, and anything that reads it is a viewer.
@@ -75,8 +76,11 @@ Nothing is built on the substrate until it passes measured gates:
 ## The language
 
 Everything above atoms and bonds is described, never programmed.
-Worlds are `.kem` files that compose bottom-up - element to
-molecule to strand to cell to world to run:
+khem is a hardware description language: what Verilog is to
+circuits, .kem is to matter. A struct is a module - atoms, bonds,
+ports - composition is instantiation and wiring, and the runtime
+is the simulator. Worlds are `.kem` files that compose bottom-up -
+element to molecule to strand to cell to world to run:
 
     struct water {
       atoms {

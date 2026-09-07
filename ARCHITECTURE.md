@@ -1,16 +1,19 @@
 # khem architecture
 
-The target crate layout and the rules that keep it honest. The Cargo
-workspace holds any number of library and binary crates; a new crate
-joins by adding a directory under crates/ and a line in the root
-Cargo.toml members list. The WHY behind each decision lives in
-docs/adr/; this file describes the shape they produced.
+The target crate layout and the rules that keep it honest. khem is
+a hardware description language plus a simulator, the Verilog
+pattern, and the crates split along that line: khem-lang describes,
+khem-core simulates. The Cargo workspace holds any number of
+library and binary crates; a new crate joins by adding a
+directory under crates/ and a line in the root Cargo.toml members
+list. The WHY behind each decision lives in docs/adr/; this file
+describes the shape they produced.
 
 ## Crate map (target)
 
     crates/
     |-- khem-core   lib   the simulation engine
-    |-- khem-lang   lib   .kem parsing, validation, flattening (phase 3)
+    |-- khem-lang   lib   the .kem front end: parse, validate, flatten (phase 3)
     |-- khem        bin   the runtime CLI
     |-- khem-view   bin   terminal UI; reads the NDJSON stream (future)
     `-- khem-log    bin   structured logging and replay (future)
@@ -26,8 +29,10 @@ docs/adr/; this file describes the shape they produced.
    It knows nothing about the .kem language and never will - runtime
    guarantee G01 (nothing above atom/bond level exists in the
    runtime) is enforced at the crate boundary.
-2. khem-lang turns .kem definitions into a khem-core WorldState. It
-   depends on khem-core. khem-core never depends on khem-lang.
+2. khem-lang is the .kem front end: it elaborates descriptions into
+   a khem-core WorldState, the way an HDL compiler elaborates
+   modules into a netlist. It depends on khem-core. khem-core never
+   depends on khem-lang.
 3. khem (bin) stays thin forever: parse arguments, construct a world,
    run the tick loop, stream events. In phase 1 it hardcodes world
    construction directly against khem-core, no language involved.
@@ -38,10 +43,11 @@ docs/adr/; this file describes the shape they produced.
    stream is a valid viewer - that is the point of stdout-only
    output.
 5. New tools (khem-check for deep offline validation, khem-build for
-   template composition helpers) follow the same pattern. One bin per
-   crate so each tool has its own dependency graph, tests, and
-   release cadence; a single crate with multiple [[bin]] targets
-   would work, but would let a viewer accidentally link the engine.
+   assembling new structures from library parts) follow the same
+   pattern. One bin per crate so each tool has its own dependency
+   graph, tests, and release cadence; a single crate with multiple
+   [[bin]] targets would work, but would let a viewer accidentally
+   link the engine.
 
 ## Multiple libraries, multiple binaries
 

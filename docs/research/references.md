@@ -99,6 +99,16 @@ links were checked 2026-09-04.
   Reaction-Diffusion Systems with Python Interface. PLOS Comput.
   Biol. (2024). doi:10.1371/journal.pcbi.1011800 [verify authors]
 
+## Hardware description languages - the shape of the .kem language
+
+- Verilog (IEEE 1364) and VHDL (IEEE 1076): structure described
+  once, simulated by a separate tool - modules instantiated and
+  wired into hierarchies, with the behavior belonging to the
+  simulator. The .kem language is this pattern moved to matter:
+  struct = module, place = instantiation, wire = netlist, chain =
+  generate, run = testbench, the khem runtime = the simulator
+  (language-spec.md section 1).
+
 ## Reactive and coarse-grained MD - the fidelity ceiling
 
 - van Duin, A.C.T. et al. (2001). ReaxFF: A Reactive Force Field for
@@ -195,6 +205,7 @@ ways:
 
 | Project | What it is | khem builds on | khem differs |
 |---|---|---|---|
+| Verilog (IEEE 1364) | hardware description language: circuits described as modules and wires, simulated by separate tools | the .kem language's shape - structural description, separate simulator; modules, ports, wires, instantiation | digital circuits, not matter or chemistry |
 | Kappa (kappalanguage.org) | rule-based language for interacting molecular agents + KaSim simulator | DSL/runtime split; rules over agents with binding sites (khem's ports/wire) | models known biochemistry at protein granularity; no space, energy, or evolution |
 | BioNetGen (github.com/RuleWorld/bionetgen) | rule-based biochemical modeling | rule composition, network-free simulation | reaction networks, no spatial matter substrate |
 | SBML (sbml.org) | standard exchange format for biochemical models | auditable text models consumed by many runtimes | describes known networks; no emergence |
@@ -221,6 +232,9 @@ Compressed:
   Szostak, Ganti): the classic seed - replicator plus compartment.
 - From rule-based modeling (Kappa, BioNetGen, SBML, MCell's MDL):
   the DSL/runtime split; grammar lessons for .kem.
+- From hardware description languages (Verilog, VHDL): describe
+  structure, never behavior - modules, ports, wires, hierarchy;
+  the simulator is a separate tool that runs the description.
 - From reactive MD (ReaxFF): the fidelity ceiling this project steps
   back from - real reactive atom chemistry is six-plus orders of
   magnitude too slow for evolutionary timescales.
