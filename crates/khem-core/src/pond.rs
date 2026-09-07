@@ -66,12 +66,8 @@ pub fn primordial_pond(seed: u64, config: PhysicsConfig) -> WorldState {
     // The field starts AT its setpoint; the vent and chemistry
     // perturb from there (G06 as amended: the declared environment
     // is a reservoir, sources are additional inputs).
-    for v in w.temp_field.data.iter_mut() {
-        *v = POND_TEMP;
-    }
-    for v in w.setpoint_field.data.iter_mut() {
-        *v = POND_TEMP;
-    }
+    w.temp_field.data.fill(POND_TEMP);
+    w.setpoint_field.data.fill(POND_TEMP);
     // The vent (the language-spec pond carries one at the floor).
     w.energy_sources.push(EnergySource::hydrothermal(
         (POND_WIDTH * 0.5, 5.0),

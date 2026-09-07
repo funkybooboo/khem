@@ -35,7 +35,6 @@ pub struct ElementProperties {
 impl ElementProperties {
     /// Table-building constructor. `const` so [`ELEMENTS`] is a true
     /// compile-time table.
-    #[allow(clippy::too_many_arguments)]
     pub const fn new(
         symbol: &'static str,
         atomic_number: u8,

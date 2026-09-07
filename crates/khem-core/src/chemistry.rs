@@ -40,7 +40,7 @@
 
 use crate::config::PhysicsConfig;
 use crate::observer::Event;
-use crate::world::{AtomId, BondId, ElementId, WorldState};
+use crate::world::{AtomId, AtomState, BondId, BondState, ElementId, WorldState};
 
 /// The chemistry system interface, decomposed per the tick order
 /// (runtime spec 5.1: break_bonds, form_bonds). v0.1 compiles exactly
@@ -180,6 +180,28 @@ fn ideal_angle(world: &WorldState, a: AtomId, candidate_order: u8) -> Option<f32
     }
 }
 
+/// The bond a candidate pair would form, its per-tick formation
+/// probability (spec 7.2), and the pair's midpoint for the field
+/// exchange. Callers have already checked eligibility (alive,
+/// capacity, distance, capture speed, not bonded) before asking;
+/// the RNG draw also stays in the caller (RNG discipline).
+/// Extracted as its own method so the probability LAWS are
+/// directly testable (order preference, temperature optimum,
+/// electronegativity bonus, geometry gate) without statistical
+/// sampling.
+struct PairOutcome {
+    order: u8,
+    /// Bond energy, kJ/mol.
+    energy: f32,
+    /// Formation probability this tick.
+    p: f32,
+    /// Midpoint via the minimum-image delta (F10); field reads
+    /// wrap, so the midpoint may fall outside [0, width)
+    /// harmlessly.
+    mx: f32,
+    my: f32,
+}
+
 /// The v0.1 chemistry implementation (runtime spec 10.4: exactly one).
 pub struct Chemistry {
     config: PhysicsConfig,
@@ -233,21 +255,11 @@ impl Chemistry {
     }
 
     /// The bond a pair would form and its per-tick formation
-    /// probability (spec 7.2): (order, energy, probability,
-    /// midpoint_x, midpoint_y). Callers have already checked
-    /// eligibility (alive, capacity, distance, not bonded); this
-    /// computes the chemistry and the midpoint for heat exchange.
-    /// Extracted as its own method so the probability LAWS are
-    /// directly testable (order preference, temperature optimum,
-    /// electronegativity bonus, geometry gate) without statistical
-    /// sampling - the RNG draw stays in the caller (RNG
-    /// discipline).
-    fn pair_probability(
-        &self,
-        world: &WorldState,
-        a: AtomId,
-        b: AtomId,
-    ) -> (u8, f32, f32, f32, f32) {
+    /// probability (spec 7.2). Callers have already checked
+    /// eligibility (alive, capacity, distance, capture speed, not
+    /// bonded); this computes the chemistry and the midpoint for
+    /// heat exchange.
+    fn pair_probability(&self, world: &WorldState, a: AtomId, b: AtomId) -> PairOutcome {
         let atom_a = world.atom(a);
         let atom_b = world.atom(b);
         let (a_el, b_el) = (atom_a.element, atom_b.element);
@@ -274,15 +286,23 @@ impl Chemistry {
             * self.geometry_factor(world, a, dy.atan2(dx), order)
             * t_factor
             * (1.0 + en * self.config.en_bonus);
-        (order, energy, p, mx, my)
+        PairOutcome {
+            order,
+            energy,
+            p,
+            mx,
+            my,
+        }
     }
 
     /// Spec 7.2 geometry factor, 0.0-1.0: how well the candidate
     /// direction fits the atom's VSEPR ideals. Unconstrained atoms
     /// score 1.0. Otherwise the best-scoring existing bond anchors
     /// the ideal (on either side of it), scored by a gaussian in
-    /// angular deviation with sigma = geometry_sigma.
-    pub fn geometry_factor(
+    /// angular deviation with sigma = geometry_sigma. Private:
+    /// pair_probability is the only production caller, and the
+    /// law tests live in this module.
+    fn geometry_factor(
         &self,
         world: &WorldState,
         a: AtomId,
@@ -319,16 +339,16 @@ impl ChemistrySystem for Chemistry {
     fn break_bonds(&mut self, world: &mut WorldState) {
         let n = world.bonds.len();
         for i in 0..n {
-            let (alive, a, b, order, energy) = {
-                let bond = &world.bonds[i];
-                (
-                    bond.alive,
-                    bond.atom_a,
-                    bond.atom_b,
-                    bond.order,
-                    bond.energy,
-                )
-            };
+            // Copy the fields out up front (all Copy): the pass
+            // below mutates world while working from these.
+            let BondState {
+                alive,
+                atom_a: a,
+                atom_b: b,
+                order,
+                energy,
+                ..
+            } = world.bonds[i];
             if !alive {
                 continue;
             }
@@ -377,11 +397,26 @@ impl ChemistrySystem for Chemistry {
         let radius2 = radius * radius;
         let n = world.atoms.len();
         for i in 0..n {
-            let (a_id, a_el, ax, ay, a_alive) = {
-                let a = &world.atoms[i];
-                (a.id, a.element, a.x, a.y, a.alive)
-            };
+            // Copy the fields out up front (all Copy): bonds formed
+            // below mutate world while this loop works from these.
+            let AtomState {
+                id: a_id,
+                element: a_el,
+                x: ax,
+                y: ay,
+                alive: a_alive,
+                ..
+            } = world.atoms[i];
             if !a_alive {
+                continue;
+            }
+            let a_max = world.element(a_el).max_bonds;
+            // A full atom cannot form anything: skip the neighbor
+            // query entirely (the pond is mostly saturated water,
+            // so this removes most of the per-tick queries). RNG
+            // discipline is untouched - a full atom drew nothing
+            // before the first candidate's break either.
+            if world.atom(a_id).bond_count >= a_max {
                 continue;
             }
             // Candidates come from the spatial index the tick loop
@@ -395,9 +430,7 @@ impl ChemistrySystem for Chemistry {
                     continue;
                 }
                 // Capacity may have changed by a bond formed below.
-                let a_count = world.atom(a_id).bond_count;
-                let a_max = world.element(a_el).max_bonds;
-                if a_count >= a_max {
+                if world.atom(a_id).bond_count >= a_max {
                     break;
                 }
                 let (b_el, bx, by, b_alive) = {
@@ -428,16 +461,19 @@ impl ChemistrySystem for Chemistry {
                 if rvx * rvx + rvy * rvy > self.config.max_form_speed * self.config.max_form_speed {
                     continue;
                 }
-                let (order, energy, p, mx, my) = self.pair_probability(world, a_id, b_id);
-                if world.rng.f01() < p as f64
-                    && let Some(bond_id) = world.form_bond(a_id, b_id, order, energy)
+                let outcome = self.pair_probability(world, a_id, b_id);
+                if world.rng.f01() < outcome.p as f64
+                    && let Some(bond_id) =
+                        world.form_bond(a_id, b_id, outcome.order, outcome.energy)
                 {
                     // Spec 7.2: formation absorbs heat at the bond's
                     // midpoint (minimum-image; F10). May go
                     // negative; see break_bonds.
-                    world
-                        .temp_field
-                        .add(mx, my, -energy * self.config.formation_fraction);
+                    world.temp_field.add(
+                        outcome.mx,
+                        outcome.my,
+                        -outcome.energy * self.config.formation_fraction,
+                    );
                     world.event_queue.push(Event::BondFormed {
                         tick: world.tick,
                         bond_id: bond_id.0,
@@ -445,10 +481,10 @@ impl ChemistrySystem for Chemistry {
                         atom_b: b_id,
                         elem_a: a_el,
                         elem_b: b_el,
-                        order,
-                        energy,
-                        x: mx,
-                        y: my,
+                        order: outcome.order,
+                        energy: outcome.energy,
+                        x: outcome.mx,
+                        y: outcome.my,
                     });
                 }
             }
@@ -904,9 +940,7 @@ mod tests {
         let mut w = world(9);
         let a = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0);
         let b = w.spawn_atom(element_id("H").unwrap(), 51.0, 50.0);
-        for v in w.temp_field.data.iter_mut() {
-            *v = 20.0;
-        }
+        w.temp_field.data.fill(20.0);
         w.temp_field.set(50.5, 50.0, 43.6); // H-H optimum
         let before: f32 = w.temp_field.data.iter().sum();
         rebuild_index(&mut w);
@@ -960,9 +994,7 @@ mod tests {
         }
 
         let mut hot = oo_pair_lattice(21);
-        for v in hot.temp_field.data.iter_mut() {
-            *v = 847.0;
-        }
+        hot.temp_field.data.fill(847.0);
         let expected = (-(146.0f32 / (0.45 * 847.0))).exp();
         chemistry(PhysicsConfig::default()).break_bonds(&mut hot);
         let broken = hot.bonds.iter().filter(|b| !b.alive).count();
@@ -973,9 +1005,7 @@ mod tests {
         );
 
         let mut cold = oo_pair_lattice(21);
-        for v in cold.temp_field.data.iter_mut() {
-            *v = 35.0;
-        }
+        cold.temp_field.data.fill(35.0);
         chemistry(PhysicsConfig::default()).break_bonds(&mut cold);
         let cold_broken = cold.bonds.iter().filter(|b| !b.alive).count();
         assert!(
@@ -995,35 +1025,31 @@ mod tests {
         let ho_a = w.spawn_atom(element_id("H").unwrap(), 60.0, 50.0);
         let ho_b = w.spawn_atom(element_id("O").unwrap(), 61.0, 50.0);
         // Same field temperature for all pairs.
-        for v in w.temp_field.data.iter_mut() {
-            *v = 43.6; // H-H optimum
-        }
+        w.temp_field.data.fill(43.6); // H-H optimum
         let chem = chemistry(config);
-        let (_, hh_energy, p_hh, _, _) = chem.pair_probability(&w, hh_a, hh_b);
-        let (_, ho_energy, p_ho, _, _) = chem.pair_probability(&w, ho_a, ho_b);
-        assert_eq!(hh_energy, 436.0);
-        assert_eq!(ho_energy, 463.0);
+        let hh = chem.pair_probability(&w, hh_a, hh_b);
+        let ho = chem.pair_probability(&w, ho_a, ho_b);
+        assert_eq!(hh.energy, 436.0);
+        assert_eq!(ho.energy, 463.0);
         // Electronegativity bonus: |3.44 - 2.20| = 1.24 vs 0 for
         // H-H; H-O must be strictly more probable at the same
         // temperature.
         assert!(
-            p_ho > p_hh,
-            "EN bonus law: H-O {p_ho} should exceed H-H {p_hh}"
+            ho.p > hh.p,
+            "EN bonus law: H-O {} should exceed H-H {}",
+            ho.p,
+            hh.p
         );
         // Temperature gaussian: at the pair's optimum the
         // probability is maximal; 60 degrees away it collapses.
         let mut cold = world(13);
         let a = cold.spawn_atom(element_id("H").unwrap(), 50.0, 50.0);
         let b = cold.spawn_atom(element_id("H").unwrap(), 51.0, 50.0);
-        for v in cold.temp_field.data.iter_mut() {
-            *v = 43.6;
-        }
+        cold.temp_field.data.fill(43.6);
         let chem = chemistry(config);
-        let (_, _, p_opt, _, _) = chem.pair_probability(&cold, a, b);
-        for v in cold.temp_field.data.iter_mut() {
-            *v = 103.6; // optimum + 60 (3 sigma)
-        }
-        let (_, _, p_far, _, _) = chem.pair_probability(&cold, a, b);
+        let p_opt = chem.pair_probability(&cold, a, b).p;
+        cold.temp_field.data.fill(103.6); // optimum + 60 (3 sigma)
+        let p_far = chem.pair_probability(&cold, a, b).p;
         assert!(p_opt > p_far, "temperature optimum law: {p_opt} vs {p_far}");
         assert!(p_far / p_opt < 0.05, "3 sigma off-peak must be tiny");
     }

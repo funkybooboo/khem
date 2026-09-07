@@ -9,6 +9,10 @@
 //! print without a trailing ".0" (200, not 200.0) - valid JSON,
 //! parseable by every consumer, deterministic.
 //!
+//! Lines are built with `fmt::Write` into one String (no
+//! intermediate `format!` allocations); the exact-string tests pin
+//! every byte of output.
+//!
 //! Non-finite floats cannot exist in JSON; they serialize as 0 and
 //! should never occur (guarded here so a NaN can never corrupt the
 //! stream even if a kernel bug produces one).
@@ -16,6 +20,8 @@
 //! Key order matches the spec 3.3 examples exactly; consumers must
 //! not depend on it, but byte-stable output makes diffs and golden
 //! tests meaningful.
+
+use std::fmt::Write as _;
 
 use crate::elements::element;
 use crate::observer::{Event, WorldStats};
@@ -36,14 +42,14 @@ pub fn emit(event: &Event) -> String {
             world_height,
         } => {
             out.push_str("{\"v\":1,\"type\":\"start\",\"tick\":0");
-            out.push_str(&format!(",\"khem_version\":\"{khem_version}\""));
-            out.push_str(&format!(",\"run_name\":\"{}\"", escape(run_name)));
-            out.push_str(&format!(",\"world_name\":\"{}\"", escape(world_name)));
-            out.push_str(&format!(",\"seed\":{seed}"));
-            out.push_str(&format!(",\"atom_count\":{atom_count}"));
-            out.push_str(&format!(",\"bond_count\":{bond_count}"));
-            out.push_str(&format!(",\"world_width\":{}", num(*world_width)));
-            out.push_str(&format!(",\"world_height\":{}", num(*world_height)));
+            let _ = write!(out, ",\"khem_version\":\"{khem_version}\"");
+            let _ = write!(out, ",\"run_name\":\"{}\"", escape(run_name));
+            let _ = write!(out, ",\"world_name\":\"{}\"", escape(world_name));
+            let _ = write!(out, ",\"seed\":{seed}");
+            let _ = write!(out, ",\"atom_count\":{atom_count}");
+            let _ = write!(out, ",\"bond_count\":{bond_count}");
+            let _ = write!(out, ",\"world_width\":{}", num(*world_width));
+            let _ = write!(out, ",\"world_height\":{}", num(*world_height));
             out.push('}');
         }
         Event::Tick {
@@ -52,26 +58,25 @@ pub fn emit(event: &Event) -> String {
             stats,
         } => {
             out.push_str("{\"v\":1,\"type\":\"tick\"");
-            out.push_str(&format!(",\"tick\":{tick}"));
-            out.push_str(&format!(",\"elapsed_ms\":{}", timing.elapsed_ms));
-            out.push_str(&format!(
-                ",\"ticks_per_sec\":{}",
-                num64(timing.ticks_per_sec)
-            ));
-            out.push_str(&format!(",\"atom_count\":{}", stats.atom_count));
-            out.push_str(&format!(",\"bond_count\":{}", stats.bond_count));
-            out.push_str(&format!(
+            let _ = write!(out, ",\"tick\":{tick}");
+            let _ = write!(out, ",\"elapsed_ms\":{}", timing.elapsed_ms);
+            let _ = write!(out, ",\"ticks_per_sec\":{}", num64(timing.ticks_per_sec));
+            let _ = write!(out, ",\"atom_count\":{}", stats.atom_count);
+            let _ = write!(out, ",\"bond_count\":{}", stats.bond_count);
+            let _ = write!(
+                out,
                 ",\"temp_min\":{},\"temp_max\":{},\"temp_avg\":{}",
                 num(stats.temp_min),
                 num(stats.temp_max),
                 num(stats.temp_avg)
-            ));
-            out.push_str(&format!(
+            );
+            let _ = write!(
+                out,
                 ",\"pressure_min\":{},\"pressure_max\":{},\"pressure_avg\":{}",
                 num(stats.pressure_min),
                 num(stats.pressure_max),
                 num(stats.pressure_avg)
-            ));
+            );
             out.push_str(",\"free_atoms\":");
             push_free_atoms(&mut out, stats);
             out.push_str(",\"mol_size_dist\":");
@@ -91,15 +96,16 @@ pub fn emit(event: &Event) -> String {
             y,
         } => {
             out.push_str("{\"v\":1,\"type\":\"bond_formed\"");
-            out.push_str(&format!(",\"tick\":{tick},\"bond_id\":{bond_id}"));
-            out.push_str(&format!(",\"atom_a\":{},\"atom_b\":{}", atom_a.0, atom_b.0));
-            out.push_str(&format!(
+            let _ = write!(out, ",\"tick\":{tick},\"bond_id\":{bond_id}");
+            let _ = write!(out, ",\"atom_a\":{},\"atom_b\":{}", atom_a.0, atom_b.0);
+            let _ = write!(
+                out,
                 ",\"elem_a\":\"{}\",\"elem_b\":\"{}\"",
                 element(*elem_a).symbol,
                 element(*elem_b).symbol
-            ));
-            out.push_str(&format!(",\"order\":{order},\"energy\":{}", num(*energy)));
-            out.push_str(&format!(",\"x\":{},\"y\":{}", num(*x), num(*y)));
+            );
+            let _ = write!(out, ",\"order\":{order},\"energy\":{}", num(*energy));
+            let _ = write!(out, ",\"x\":{},\"y\":{}", num(*x), num(*y));
             out.push('}');
         }
         Event::BondBroken {
@@ -112,18 +118,20 @@ pub fn emit(event: &Event) -> String {
             y,
         } => {
             out.push_str("{\"v\":1,\"type\":\"bond_broken\"");
-            out.push_str(&format!(",\"tick\":{tick},\"bond_id\":{bond_id}"));
-            out.push_str(&format!(
+            let _ = write!(out, ",\"tick\":{tick},\"bond_id\":{bond_id}");
+            let _ = write!(
+                out,
                 ",\"elem_a\":\"{}\",\"elem_b\":\"{}\"",
                 element(*elem_a).symbol,
                 element(*elem_b).symbol
-            ));
-            out.push_str(&format!(
+            );
+            let _ = write!(
+                out,
                 ",\"energy_released\":{},\"x\":{},\"y\":{}",
                 num(*energy_released),
                 num(*x),
                 num(*y)
-            ));
+            );
             out.push('}');
         }
         Event::End {
@@ -132,9 +140,9 @@ pub fn emit(event: &Event) -> String {
             reason,
         } => {
             out.push_str("{\"v\":1,\"type\":\"end\"");
-            out.push_str(&format!(",\"tick\":{tick}"));
-            out.push_str(&format!(",\"elapsed_ms\":{}", timing.elapsed_ms));
-            out.push_str(&format!(",\"reason\":\"{reason}\""));
+            let _ = write!(out, ",\"tick\":{tick}");
+            let _ = write!(out, ",\"elapsed_ms\":{}", timing.elapsed_ms);
+            let _ = write!(out, ",\"reason\":\"{reason}\"");
             out.push('}');
         }
     }
@@ -145,19 +153,22 @@ pub fn emit(event: &Event) -> String {
 /// 0. Rust's Display is shortest-round-trip and cross-platform
 /// stable (module doc).
 fn num(v: f32) -> String {
-    if v.is_finite() {
-        format!("{}", if v == 0.0 { 0.0 } else { v })
+    let v = if v.is_finite() {
+        if v == 0.0 { 0.0 } else { v }
     } else {
-        "0".to_string()
-    }
+        0.0
+    };
+    format!("{v}")
 }
 
+/// f64 twin of [`num`] (ticks_per_sec).
 fn num64(v: f64) -> String {
-    if v.is_finite() {
-        format!("{}", if v == 0.0 { 0.0 } else { v })
+    let v = if v.is_finite() {
+        if v == 0.0 { 0.0 } else { v }
     } else {
-        "0".to_string()
-    }
+        0.0
+    };
+    format!("{v}")
 }
 
 /// Minimal JSON string escaping for the run/world names: quote,
@@ -192,23 +203,21 @@ fn push_free_atoms(out: &mut String, stats: &WorldStats) {
             out.push(',');
         }
         first = false;
-        out.push_str(&format!(
-            "\"{}\":{count}",
-            crate::elements::ELEMENTS[i].symbol
-        ));
+        let _ = write!(out, "\"{}\":{count}", crate::elements::ELEMENTS[i].symbol);
     }
     out.push('}');
 }
 
 /// mol_size_dist: all four buckets, always, fixed key order.
 fn push_mol_dist(out: &mut String, stats: &WorldStats) {
-    out.push_str(&format!(
+    let _ = write!(
+        out,
         "{{\"1\":{},\"2_5\":{},\"6_20\":{},\"21plus\":{}}}",
         stats.mol_size_dist[0],
         stats.mol_size_dist[1],
         stats.mol_size_dist[2],
         stats.mol_size_dist[3]
-    ));
+    );
 }
 
 #[cfg(test)]
@@ -344,8 +353,9 @@ mod tests {
         let line = emit(&event);
         assert!(line.contains("\"run_name\":\"weird \\\"name\\\"\\\\\\n\""));
         assert!(line.contains("\"world_width\":0,\"world_height\":0"));
-        // -0.0 normalizes.
+        // -0.0 normalizes; non-finite guards to 0.
         assert_eq!(num(-0.0), "0");
+        assert_eq!(num(f32::NAN), "0");
     }
 
     #[test]

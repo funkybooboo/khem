@@ -44,7 +44,7 @@
 
 use crate::config::PhysicsConfig;
 use crate::observer::Event;
-use crate::world::{AtomId, BoundaryType, WorldState};
+use crate::world::{AtomId, AtomState, BoundaryType, WorldState};
 
 /// The physics system interface, decomposed per the tick order
 /// (runtime spec 5.1: apply_bath once per tick, then the
@@ -132,18 +132,22 @@ impl Physics {
             }
         }
         world.temp_field.data.copy_from_slice(buf);
-        // Setpoint relaxation (spec 6.2, K1.1): the environment
-        // reservoir. Cells with a declared setpoint (> 0) relax
-        // toward it - the pond's heat sink; a vented Wrap world
-        // with no sink only heats.
+        self.relax_toward_setpoints(world);
+    }
+
+    /// Setpoint relaxation (spec 6.2, K1.1): the environment
+    /// reservoir. Cells with a declared setpoint (> 0) relax toward
+    /// it - the pond's heat sink; a vented Wrap world with no sink
+    /// only heats.
+    fn relax_toward_setpoints(&self, world: &mut WorldState) {
         let rate = self.config.field_relax_rate;
-        if rate > 0.0 {
-            let field = &mut world.temp_field;
-            for i in 0..field.data.len() {
-                let set = world.setpoint_field.data[i];
-                if set > 0.0 {
-                    field.data[i] += (set - field.data[i]) * rate;
-                }
+        if rate <= 0.0 {
+            return;
+        }
+        for i in 0..world.temp_field.data.len() {
+            let set = world.setpoint_field.data[i];
+            if set > 0.0 {
+                world.temp_field.data[i] += (set - world.temp_field.data[i]) * rate;
             }
         }
     }
@@ -175,31 +179,27 @@ impl Physics {
         for i in 0..world.atoms.len() {
             // Index-based loop: the write below borrows atoms[i]
             // mutably while rng and temp_field are borrowed through
-            // their own fields (disjoint borrows).
-            let (x, y, vx, vy, mass, alive) = {
-                let atom = &world.atoms[i];
-                (
-                    atom.x,
-                    atom.y,
-                    atom.vx,
-                    atom.vy,
-                    world.element(atom.element).mass,
-                    atom.alive,
-                )
-            };
+            // their own fields (disjoint borrows). All fields Copy:
+            // the destructure copies out; mass comes from the table.
+            let AtomState {
+                x,
+                y,
+                vx,
+                vy,
+                element,
+                alive,
+                ..
+            } = world.atoms[i];
             if !alive {
                 continue;
             }
+            let mass = world.element(element).mass;
             let t = world.temp_field.get(x, y).max(0.0);
             let s = noise * (kb * t / mass).sqrt();
             let vx_new = vx * (1.0 - gamma) + (world.rng.normal(0.0, s as f64) as f32);
             let vy_new = vy * (1.0 - gamma) + (world.rng.normal(0.0, s as f64) as f32);
-            // The signed KE delta is the COMPLETE exchange: the
-            // noise energy is already inside vx_new (the field pays
-            // for it there), the damping removal likewise. A
-            // separate "injected" term double-counts and bleeds the
-            // field - found while diagnosing the furnace; the old
-            // drift test's tolerance masked the bleed.
+            // Signed KE delta = the complete exchange (function doc
+            // above); a separate "injected" term double-counts.
             let delta_ke = 0.5 * mass * (vx * vx + vy * vy - vx_new * vx_new - vy_new * vy_new);
             world.temp_field.add(x, y, delta_ke * ke_scale);
             let atom = &mut world.atoms[i];
@@ -308,10 +308,16 @@ impl Physics {
             .map(|e| e.radius)
             .fold(0.0f32, f32::max);
         for i in 0..world.atoms.len() {
-            let (a_id, a_el, ax, ay, a_alive) = {
-                let a = &world.atoms[i];
-                (a.id, a.element, a.x, a.y, a.alive)
-            };
+            // All fields Copy: the destructure copies out; the
+            // force accumulators below mutate while these are held.
+            let AtomState {
+                id: a_id,
+                element: a_el,
+                x: ax,
+                y: ay,
+                alive: a_alive,
+                ..
+            } = world.atoms[i];
             if !a_alive {
                 continue;
             }
@@ -369,9 +375,11 @@ impl Physics {
     /// re-validation contract required the clamp's removal before
     /// the E-gates run their long horizons.
     fn apply_forces(&mut self, world: &mut WorldState) {
-        // Mass lookup without borrowing world against the mutable
-        // atom loop (Arc clone, cheap).
-        let table = world.element_table.clone();
+        // Split field borrows: the table is read-only while atoms
+        // are mutated - disjoint fields of one struct, no Arc clone
+        // needed (the clone-per-sub-step was dodging a borrow that
+        // does not exist).
+        let table = &world.element_table;
         let dt = self.dt;
         for (i, atom) in world.atoms.iter_mut().enumerate() {
             if !atom.alive {
@@ -734,9 +742,7 @@ mod tests {
             ..PhysicsConfig::default()
         };
         let mut w = world(2, BoundaryType::Wrap);
-        for v in w.temp_field.data.iter_mut() {
-            *v = 35.0;
-        }
+        w.temp_field.data.fill(35.0);
         let a = w.spawn_atom(ElementId(3), 50.0, 50.0);
         w.atom_mut(a).vx = 17.0; // far from equilibrium: exchanges flow
         // The exchange rate: depositing X KE units raises the field

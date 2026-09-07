@@ -338,9 +338,7 @@ mod tests {
         let config = PhysicsConfig::default();
         let mut world = crate::pond::primordial_pond(99, config);
         // A warm pond: chemistry is active, not frozen.
-        for v in world.temp_field.data.iter_mut() {
-            *v = 55.0;
-        }
+        world.temp_field.data.fill(55.0);
         let mut sim = Sim::new(config, observer(1000));
         let _ = sim.start(&world);
         for _ in 0..100 {
@@ -381,9 +379,7 @@ mod tests {
         fn run() -> Vec<String> {
             let config = PhysicsConfig::default();
             let mut world = crate::pond::primordial_pond(5, config);
-            for v in world.temp_field.data.iter_mut() {
-                *v = 55.0;
-            }
+            world.temp_field.data.fill(55.0);
             let mut sim = Sim::new(config, observer(3));
             let mut lines = vec![crate::ndjson::emit(&sim.start(&world))];
             for _ in 0..10 {
