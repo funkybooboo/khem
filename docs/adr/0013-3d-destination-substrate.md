@@ -1,7 +1,10 @@
 # ADR-0013: 3D is the destination substrate; the port follows K1.5
 
 Date: 2026-09-07 (owner decision)
-Status: Accepted
+Status: Accepted (renumbered 2026-09-07: the port phase is
+phase 2, plan file docs/plans/phase-2-3d-port.md; the body's
+phase numbers predate the renumbering - hardening is now
+phase 3, the language phase 4; the decision is unchanged)
 
 ## Context
 

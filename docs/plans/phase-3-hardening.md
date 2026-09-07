@@ -1,4 +1,4 @@
-# Phase 2 - runtime hardening
+# Phase 3 - runtime hardening
 
 What makes the kernel runnable for the long horizons the K5 and
 E gates need: persistence, speed, and the missing runtime
@@ -18,12 +18,12 @@ Landed early, with the phase-1 kernel commits:
 - the Langevin thermostat + setpoint reservoir (F8's fix, gate
   K1.1) - a phase-1 necessity that the founding spec had punted
 
-Remaining (the spec's [phase 2] markers):
+Remaining (the spec's [phase 3] markers):
 
 - save/load world state: SAVE events (spec 3.3) + G09 - a
   resumed run is byte-identical to an uninterrupted one. E1 is
   this wearing its working clothes. Lands after the 3D port
-  (phase 1.5, ADR-0013), so the state layout it serializes is
+  (phase 2, ADR-0013), so the state layout it serializes is
   natively 3D.
 - dead-slot compaction (spec 5.2): atoms and bonds are flagged
   dead, never removed mid-tick; compaction every
@@ -42,7 +42,7 @@ Remaining (the spec's [phase 2] markers):
   behaviorally sane; the gates are correctness gates. The
   obvious levers: per-sub-step neighbor-query allocation reuse,
   the index rebuild schedule, and a profile before anything
-  clever. The 3D port (phase 1.5, ADR-0013) re-opens this
+  clever. The 3D port (phase 2, ADR-0013) re-opens this
   baseline first - a 4 A query scans up to 27 cells versus 9 at
   the 5 A cell size - so the port records the honest new number
   against the same spec 13 targets.
@@ -57,4 +57,4 @@ Remaining (the spec's [phase 2] markers):
   requirements (sustained rate + resume cost + the pond sizes
   the E-gates actually use) before optimizing anything; if SoA
   layout is the answer, decide whether the 3D port bundles it -
-  that decision sits with the port (phase-1.5-3d-port.md).
+  that decision sits with the port (phase-2-3d-port.md).

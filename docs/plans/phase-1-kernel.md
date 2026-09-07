@@ -10,7 +10,7 @@ entry point (see ARCHITECTURE.md). Everything is hardcoded:
 - a hardcoded primordial pond (pond.rs; a hardcoded minimal cell
   follows the same pattern when the K3 gates need it)
 - NDJSON events to stdout (tick + bond events; watch conditions
-  are phase 2)
+  are phase 3)
 
 Explicit non-goals: no parser, no .kem files, no plugins, no
 behavioral CLI options beyond --seed. Hardcode everything. The kernel is
@@ -60,7 +60,7 @@ optional follow-up. Current bindings:
   the crossings the clamp guarded, satisfying this contract's
   requirement that the clamp be gone before the E-gates run
   their long horizons
-- the 3D port (phase 1.5, ADR-0013) moves EVERY gate's
+- the 3D port (phase 2, ADR-0013) moves EVERY gate's
   assumptions at once - dimension itself. Its exit criterion is
   the whole K1 ladder re-run in 3D, gate by gate, in order, with
   the 2D pass records as the dimension-agnostic regression
@@ -122,7 +122,7 @@ substrate measured 1482 mechanical O-H breaks (all bombardment
 overstretch, none thermal) and 206/1024 intact.
 
 The fix was the re-validation contract's named lever, pulled
-forward from phase 2: integration sub-stepping (4 sub-steps/tick,
+forward from phase 3: integration sub-stepping (4 sub-steps/tick,
 dt_sub = 0.25) lets springs sit 8x stiffer inside the symplectic
 bound evaluated at dt_sub - the O-H mechanical well went from
 ~10 kT (a thermal-speed hydrogen carries enough to shatter it)
@@ -152,10 +152,10 @@ search radius, formation fractions, vent/setpoint balance.
 
 The spatial index wraps in Wrap worlds (F11) - cross-seam
 formation is symmetric with the bulk. Originally queued for
-phase 2; promoted, because a Wrap world with asymmetric formation
+phase 3; promoted, because a Wrap world with asymmetric formation
 cannot pass honest gates.
 
-K1.5 is the 2D ladder's close: the 3D port follows (phase 1.5,
+K1.5 is the 2D ladder's close: the 3D port follows (phase 2,
 ADR-0013) and re-climbs K1.1-K1.5 in 3D before K2; K2-K5 then
 climb in 3D.
 
@@ -278,7 +278,7 @@ Most single-substitution daughters still copy (the K3.4 criteria)
 
 ## Milestone K5 - selection: the pond has ecology
 
-Precondition: K4; long runs - the phase-2 perf target and
+Precondition: K4; long runs - the phase-3 perf target and
 dead-slot compaction are what make K5 practical.
 
 ### K5.1 - competition

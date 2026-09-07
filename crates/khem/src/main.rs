@@ -3,7 +3,7 @@
 //! Phase 1: the hardcoded primordial pond
 //! (docs/plans/phase-1-kernel.md). A file
 //! argument is accepted but not read - the .kem parser arrives in
-//! phase 3 via the khem-lang crate; until then the only knobs are
+//! phase 4 via the khem-lang crate; until then the only knobs are
 //! --seed and the constants in khem-core's config. The binary stays
 //! thin forever: parse arguments, construct a world, run, stream
 //! (see ARCHITECTURE.md).
@@ -12,12 +12,12 @@
 //! only NDJSON events, stderr only human diagnostics. stdout is
 //! flushed per tick (spec 9.4) so pipe consumers receive data
 //! promptly. SIGINT handling (exit 3, END with user_interrupt)
-//! arrives with phase 2 hardening; in phase 1 ctrl-c simply kills
+//! arrives with phase 3 hardening; in phase 1 ctrl-c simply kills
 //! the process.
 //!
 //! Argument parsing is hand-rolled std-only for now: phase 1 needs
 //! nothing beyond --seed, and keeping the engine dependency-free
-//! matters more than CLI ergonomics. Phase 3 CLI growth
+//! matters more than CLI ergonomics. Phase 4 CLI growth
 //! (--check/--test/--info) may adopt a parser crate; that decision
 //! gets an ADR when it is made.
 
@@ -32,7 +32,7 @@ const USAGE: &str = "\
 usage: khem [OPTIONS] [<file.kem>]
 
 phase 1: runs the hardcoded primordial pond; a file argument is
-accepted but ignored (the .kem parser arrives in phase 3)
+accepted but ignored (the .kem parser arrives in phase 4)
 
 options:
   --seed <N>   set the run seed (default 42)
@@ -54,7 +54,7 @@ const TICK_INTERVAL: u64 = 1000;
 #[derive(Debug, PartialEq)]
 enum Invocation {
     /// Run the pond: an optional .kem path (accepted but not read
-    /// until the phase-3 parser) and an optional seed.
+    /// until the phase-4 parser) and an optional seed.
     Run {
         path: Option<String>,
         seed: Option<u64>,
@@ -124,7 +124,7 @@ fn main() -> ExitCode {
 fn run(path: Option<&str>, seed: Option<u64>) -> ExitCode {
     if let Some(path) = path {
         eprintln!(
-            "khem: phase 1: {path:?} not read - parser arrives in phase 3; \
+            "khem: phase 1: {path:?} not read - parser arrives in phase 4; \
              running the hardcoded primordial pond"
         );
     }
@@ -154,7 +154,7 @@ fn run(path: Option<&str>, seed: Option<u64>) -> ExitCode {
         if wrote.is_err() || out.flush().is_err() {
             // A closed pipe (e.g. `khem ... | head`) surfaces here;
             // phase-1 behavior: exit 2 with a stderr note (spec 2.3
-            // has no dedicated code; revisited with phase 2).
+            // has no dedicated code; revisited with phase 3).
             eprintln!("khem: stdout write failed; stopping");
             return ExitCode::from(2);
         }

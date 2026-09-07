@@ -3,7 +3,7 @@
 //! Everything the runtime knows lives in this crate: `WorldState`,
 //! atoms, bonds, fields, energy, the tick loop, and the observer.
 //! Nothing here knows about the .kem language; world definition and
-//! parsing arrive in phase 3 as the khem-lang crate. The crate
+//! parsing arrive in phase 4 as the khem-lang crate. The crate
 //! boundary enforces runtime guarantee G01: no concept above the
 //! atom/bond level exists in the engine (see ARCHITECTURE.md and
 //! docs/specs/runtime-spec.md).
@@ -26,7 +26,7 @@
 //!   molecule detection (spec 9); [`ndjson`]: the schema v:1 emitter
 //! - [`sim`]: the tick loop driving all systems in spec 5.1 order
 //! - [`pond`]: the hardcoded phase-1 vented primordial pond (the
-//!   K1 gate world; phase 3 replaces it with .kem declarations)
+//!   K1 gate world; phase 4 replaces it with .kem declarations)
 
 pub mod chemistry;
 pub mod config;

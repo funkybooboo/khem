@@ -173,7 +173,7 @@ fn num64(v: f64) -> String {
 
 /// Minimal JSON string escaping for the run/world names: quote,
 /// backslash, and the C0 control range. Names are phase-1 ASCII,
-/// but the contract must hold for whatever phase 3 parses in.
+/// but the contract must hold for whatever phase 4 parses in.
 fn escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {

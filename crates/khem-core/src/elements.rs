@@ -6,7 +6,7 @@
 //! conversation's values; so are the H and C radii. The remaining
 //! radii are standard covalent radii, chosen so equilibrium bond
 //! lengths (sum of radii, runtime spec 6.3) are plausible. All values
-//! are phase-1 tuning knobs; phase 3 moves them into .kem
+//! are phase-1 tuning knobs; phase 4 moves them into .kem
 //! `elements` declarations loaded at runtime.
 //!
 //! Spec: docs/specs/runtime-spec.md, section 4.6.
@@ -85,12 +85,12 @@ pub fn element_id(symbol: &str) -> Option<ElementId> {
 /// (metrics, pond construction). Kept in lockstep with [`ELEMENTS`]
 /// by the `canonical_id_constants_match_the_table` test;
 /// [`element_id`] stays the general lookup for names that arrive
-/// at runtime (the FREE_ATOMS table, phase-3 definitions).
+/// at runtime (the FREE_ATOMS table, phase-4 definitions).
 pub const H: ElementId = ElementId(0);
 pub const O: ElementId = ElementId(3);
 
 /// Properties for an element id, straight from the const table. For
-/// the world's table (phase 3: custom tables), use
+/// the world's table (phase 4: custom tables), use
 /// [`crate::world::WorldState::element`].
 ///
 /// # Panics

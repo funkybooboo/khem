@@ -21,11 +21,11 @@ it instead:
   line)
 - before K5 - the turnover memo (decay = UV photolysis
   candidate; material feed)
-- before the phase-2 perf pass - the spec 13 target
+- before the phase-3 perf pass - the spec 13 target
   re-derivation from the E-gates' real requirements
 - before any watch-condition detector is designed - the Genesis
   Engine correction notice is required reading first (the
-  phase-4 file carries that binding)
+  phase-5 file carries that binding)
 
 The reading list, in priority order:
 

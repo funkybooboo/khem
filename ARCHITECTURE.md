@@ -13,7 +13,7 @@ describes the shape they produced.
 
     crates/
     |-- khem-core   lib   the simulation engine
-    |-- khem-lang   lib   the .kem front end: parse, validate, flatten (phase 3)
+    |-- khem-lang   lib   the .kem front end: parse, validate, flatten (phase 4)
     |-- khem        bin   the runtime CLI
     |-- khem-view   bin   terminal UI; reads the NDJSON stream (future)
     `-- khem-log    bin   structured logging and replay (future)
@@ -79,7 +79,7 @@ describes the shape they produced.
              K1 harness)
              khem (bin: runs the pond, streams NDJSON; runtime
              spec section 2)
-    phase 3  khem-lang (after the K1-K5 gates pass)
+    phase 4  khem-lang (after the K1-K5 gates pass)
     later    khem-view, khem-log, khem-check, khem-build (the
              stream and the parts library they consume come
              first)

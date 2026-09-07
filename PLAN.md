@@ -33,17 +33,17 @@ before specs.
 - The gate ladder is climbing: K1.1-K1.3 PASSED (thermostat,
   force sanity, water persistence - the pond's 1024 waters hold
   intact through 10k-tick vented runs). Next: K1.4 reactive
-  balance, then K1.5 seam symmetry, then the 3D port (phase 1.5).
+  balance, then K1.5 seam symmetry, then the 3D port (phase 2).
   Ladder, rules, and pass history: docs/plans/phase-1-kernel.md.
 - Findings F1-F18 live in docs/research/abstraction-notes.md;
   the open one is F18 (wide-capture churn, K1.4's lever).
 - Dimensionality is decided (ADR-0013): 2D carries the K1 gates -
   the F18 fix is dimension-generic, and the 2D passes become the
   port's regression vector - then the 3D port lands before K2
-  tuning, the phase-2 save format, or the phase-3 grammar encodes
-  more 2D. Port plan: docs/plans/phase-1.5-3d-port.md.
+  tuning, the phase-3 save format, or the phase-4 grammar encodes
+  more 2D. Port plan: docs/plans/phase-2-3d-port.md.
 - Release speed measured ~60 t/s at 3.4k atoms (2026-09-07;
-  K1.3's sub-stepping costs 4x force passes); the phase-2 perf
+  K1.3's sub-stepping costs 4x force passes); the phase-3 perf
   pass owns the target (10k atoms at >500 t/s).
 - The .kem language is spec-only; the parser starts only after
   the K gates pass (ADR-0006).
@@ -57,10 +57,17 @@ before specs.
 |-------|------|--------|
 | 0 - literature grounding | [phase-0-research.md](docs/plans/phase-0-research.md) | notes + bibliography landed; re-opens before detector design |
 | 1 - physics/chemistry kernel | [phase-1-kernel.md](docs/plans/phase-1-kernel.md) | in progress: K1.1-K1.3 passed, K1.4 next; K2-K5 climb after the port |
-| 1.5 - the 3D port | [phase-1.5-3d-port.md](docs/plans/phase-1.5-3d-port.md) | planned; gated on K1.5, before K2 tuning |
-| 2 - runtime hardening | [phase-2-hardening.md](docs/plans/phase-2-hardening.md) | not started; cheap items landed early with phase 1 |
-| 3 - the khem language | [phase-3-language.md](docs/plans/phase-3-language.md) | spec-only; gated on K1-K5 |
-| 4 - experiments and the thesis | [phase-4-experiments.md](docs/plans/phase-4-experiments.md) | gated on phases 2-3 |
+| 2 - the 3D port | [phase-2-3d-port.md](docs/plans/phase-2-3d-port.md) | planned; gated on K1.5, before K2 tuning |
+| 3 - runtime hardening | [phase-3-hardening.md](docs/plans/phase-3-hardening.md) | not started; cheap items landed early with phase 1 |
+| 4 - the khem language | [phase-4-language.md](docs/plans/phase-4-language.md) | spec-only; gated on K1-K5 |
+| 5 - experiments and the thesis | [phase-5-experiments.md](docs/plans/phase-5-experiments.md) | gated on phases 3-4 |
+
+Renumbered 2026-09-07: the 3D port (ADR-0013) was inserted as
+phase 2, shifting hardening to 3, the language to 4, and
+experiments to 5. Dated records - ADRs, the findings log, pass
+histories - keep the numbering of their day: pre-renumbering
+text calls the port 1.5, hardening 2, the language 3,
+experiments 4.
 
 ## Non-goals and guardrails
 
@@ -76,7 +83,7 @@ before specs.
   lines of Python" to a full language spec before one tick ran. This
   plan exists to prevent a repeat.
 - one dimensionality at a time: the runtime is 2D through the K1
-  gates, then the phase-1.5 port makes it 3D - no dual-mode
+  gates, then the phase-2 port makes it 3D - no dual-mode
   runtime, no per-world dimension flag (ADR-0013); 2D survives
   in git history.
 
@@ -108,8 +115,8 @@ All of this is enabled by choices already fixed (runtime spec section
 - The implementation and the specs must AGREE (owner decision
   2026-09-05): any divergence between code and
   docs/specs/runtime-spec.md is fixed in both in the same commit,
-  piecemeal. Designed-but-unbuilt items are marked [phase 2] /
-  [phase 3] in the spec rather than allowed to drift.
+  piecemeal. Designed-but-unbuilt items are marked [phase 3] /
+  [phase 4] in the spec rather than allowed to drift.
 - The WHAT lives in docs/specs/ (canonical, current-state specs,
   edited in commits and revised against phase-1 reality per ADR-0006)
   and ARCHITECTURE.md (crate map).
@@ -133,9 +140,9 @@ answer it when we get there, not before.
 | Non-bonded polarity attraction: the substrate's only attraction is the bond spring (spec 6.6 is repulsion-only and says so); K2's amphiphile sorting needs an element-derived attractive potential, designed and honesty-flagged first | K2.3-K2.6 | before K2.3 tuning | phase-1-kernel.md (K2.3 note); phase-0 re-open |
 | K3 mechanism: which bonds pair bases, how the duplex releases (the thermal window), and whether adjacent paired nucleotides reach ligation distance - all undesigned or uncalculated | K3.1-K3.4 | the K3 mechanism memo, before K3 starts (it feeds the port's grammar decisions) | phase-1-kernel.md (K3 note); phase-0 re-open |
 | Turnover mechanisms: decay (UV photolysis is the honest candidate, undeclared) and material feed (no mechanism at all) | K5.2 | the turnover memo, before K5 | phase-1-kernel.md (K5.2 note); phase-0 re-open |
-| Perf target re-derivation: ~60 t/s measured at 3.4k atoms extrapolates to ~20 t/s at 10k vs spec 13's >500 t/s (~25x), the port's ~3x pair cost lands on top, and the named levers look like 5-10x; whether the E-gates need that target at all is unexamined | phase-2 perf pass | re-derive spec 13 from the E-gates' real requirements before the perf pass; the layout-bundle question decides with the port | phase-2-hardening.md; phase-1.5-3d-port.md |
-| Port re-climb observability: no viewer exists, and the 3D K1.4 retune happens without one | phase 1.5 | decide the debugging surface before the re-climb starts | phase-1.5-3d-port.md |
-| The port's own open decisions (NDJSON encoding, world shape, rotation grammar, density, layout bundling) | phase 1.5 | the port phase, in order | phase-1.5-3d-port.md, "Decisions this phase owns" |
+| Perf target re-derivation: ~60 t/s measured at 3.4k atoms extrapolates to ~20 t/s at 10k vs spec 13's >500 t/s (~25x), the port's ~3x pair cost lands on top, and the named levers look like 5-10x; whether the E-gates need that target at all is unexamined | phase-3 perf pass | re-derive spec 13 from the E-gates' real requirements before the perf pass; the layout-bundle question decides with the port | phase-3-hardening.md; phase-2-3d-port.md |
+| Port re-climb observability: no viewer exists, and the 3D K1.4 retune happens without one | phase 2 | decide the debugging surface before the re-climb starts | phase-2-3d-port.md |
+| The port's own open decisions (NDJSON encoding, world shape, rotation grammar, density, layout bundling) | phase 2 | the port phase, in order | phase-2-3d-port.md, "Decisions this phase owns" |
 
 ## Open decisions (owner: nate)
 
@@ -156,9 +163,9 @@ answer it when we get there, not before.
       pond" is Darwin's phrase for the setting).
 - [x] dimensionality (ADR-0013): RESOLVED 2026-09-07 - 3D is the
       destination substrate. 2D stands through the K1 gates; the
-      port is phase 1.5, gated on K1.5 and landed before K2 tuning
-      or any phase 2/3 surface encodes more 2D. Port plan:
-      docs/plans/phase-1.5-3d-port.md.
+      port is phase 2, gated on K1.5 and landed before K2 tuning
+      or any phase 3/4 surface encodes more 2D. Port plan:
+      docs/plans/phase-2-3d-port.md.
 - [x] license: RESOLVED 2026-09-05 - MIT (LICENSE at root, SPDX MIT
       in crate metadata).
 - [x] remote hosting: RESOLVED 2026-09-05 - github.com/funkybooboo/khem,

@@ -2,8 +2,9 @@
 
 Date: 2026-09-04 (decision made in the founding conversation)
 Status: Accepted (amended 2026-09-07 by ADR-0013: 3D is the
-committed destination substrate, ported as phase 1.5 after K1.5;
-the 2D decision stands for V1 through the close of the K1 gates)
+committed destination substrate, ported as phase 2 after K1.5
+- renumbered from 1.5 the same day; the 2D decision stands for
+V1 through the close of the K1 gates)
 
 ## Context
 

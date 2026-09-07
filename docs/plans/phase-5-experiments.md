@@ -1,4 +1,4 @@
-# Phase 4 - experiments and (maybe) the thesis
+# Phase 5 - experiments and (maybe) the thesis
 
 The K-gates prove the substrate; the E-gates prove the
 instrument - that khem can run real evolution experiments. Each
@@ -14,7 +14,7 @@ assumptions).
 ### E1 - save/resume
 
 A resumed run is byte-identical to an uninterrupted one (G09) -
-long experiments span sessions. This is phase 2's save/load
+long experiments span sessions. This is phase 3's save/load
 wearing its working clothes.
 
 ### E2 - lineage tracking

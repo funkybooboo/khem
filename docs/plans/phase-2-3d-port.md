@@ -1,7 +1,7 @@
-# Phase 1.5 - the 3D port
+# Phase 2 - the 3D port
 
 Gated on K1.5 (phase 1's K gates close in 2D); lands before K2
-tuning, phase-2 save/load, and the phase-3 parser. The WHY is
+tuning, phase-3 save/load, and the phase-4 parser. The WHY is
 ADR-0013; the timing in one line: the re-validation contract makes
 any dimension change a full ladder re-climb wherever it lands, and
 this window is the last one where nothing downstream has encoded
@@ -87,7 +87,7 @@ why is the port's evidence.
   slab keeps atom budgets nearer 2D while restoring 3D geometry;
   a cube is the honest pond. Decide from the K1.1/K1.4 re-climb
   evidence, not taste.
-- Phase 3's coordinate grammar: 3-tuples and the rotation
+- Phase 4's coordinate grammar: 3-tuples and the rotation
   representation (degrees per axis versus quaternion), decided
   here so the language lands once; language-spec is revised in
   the port commits, not after the parser exists.
@@ -96,9 +96,9 @@ why is the port's evidence.
   question.
 - AtomState layout (registered in PLAN.md): keep the current
   array-of-structs through the port, or bundle the SoA
-  conversion (phase 2's likely perf lever) into it so the layout
+  conversion (phase 3's likely perf lever) into it so the layout
   churn is paid once. Decided with the perf target re-derivation
-  (the phase-0 re-open; phase-2-hardening.md).
+  (the phase-0 re-open; phase-3-hardening.md).
 - Port re-climb observability (registered in PLAN.md): no
   viewer exists and 3D occludes what 2D showed by default.
   Decide the debugging surface before the re-climb starts -
@@ -109,7 +109,7 @@ why is the port's evidence.
 
 - No dual-mode runtime (ADR-0013): 2D survives in git history.
 - No perf optimization beyond honest re-measurement against
-  spec 13 - phase 2 owns the perf pass; the port records the new
+  spec 13 - phase 3 owns the perf pass; the port records the new
   baseline.
 - No viewer work; khem-view is future either way.
 
