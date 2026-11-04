@@ -159,7 +159,7 @@ save - [phase 3] when state is saved:
 
 end - last line, emitted once:
 
-    {"v":1,"type":"end","tick":5000000,"elapsed_ms":620000,
+    {"v":2,"type":"end","tick":5000000,"elapsed_ms":620000,
      "reason":"max_ticks_reached"}
 
 Reason vocabulary: max_ticks_reached, user_interrupt, extinction,

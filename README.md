@@ -1,9 +1,7 @@
 # khem
 
 khem simulates 3D worlds of atoms - real elements, real
-chemistry, thermodynamics deciding what forms and what breaks
-(2D through the K1 gates; the 3D port landed 2026-09-08,
-ADR-0013).
+chemistry, thermodynamics deciding what forms and what breaks.
 The runtime has no concept of a cell, a genome, or reproduction:
 if anything alive appears, it built itself from the rules.
 
@@ -26,13 +24,13 @@ and one command streams a live world to stdout:
 
     cargo run --release -p khem    # the hardcoded primordial pond
 
-    {"v":1,"type":"start","tick":0,"run_name":"primordial_pond",
+    {"v":2,"type":"start","tick":0,"run_name":"primordial_pond",
      "seed":42,"atom_count":3432,"bond_count":2048}
-    {"v":1,"type":"bond_formed","tick":16,"elem_a":"O","elem_b":"O",
+    {"v":2,"type":"bond_formed","tick":38,"elem_a":"O","elem_b":"O",
      "order":2,"energy":498}
-    {"v":1,"type":"tick","tick":1000,"atom_count":3432,
-     "bond_count":2091,"mol_size_dist":{"1":290,"2_5":1052,
-     "6_20":1,"21plus":0}}
+    {"v":2,"type":"tick","tick":1000,"atom_count":3432,
+     "bond_count":2090,"mol_size_dist":{"1":281,"2_5":1062,
+     "6_20":0,"21plus":0}}
 
 Every number above came off this run; the events are abridged
 for width - the full field lists are the runtime spec, section 3.3.
@@ -89,9 +87,9 @@ element to molecule to strand to cell to world to run:
 
     struct water {
       atoms {
-        O1: O at ( 0.00, 0.00)
-        H1: H at (-0.96, 0.58)
-        H2: H at ( 0.96, 0.58)
+        O1: O  at ( 0.00, 0.00, 0.00)
+        H1: H  at (-0.96, 0.58, 0.00)
+        H2: H  at ( 0.96, 0.58, 0.00)
       }
       bonds {
         O1 - H1 : single
@@ -137,8 +135,9 @@ Dimensionality is decided and DONE: the K1 gates landed in 2D,
 then the 3D port ran as its own phase before K2 (ADR-0013,
 landed 2026-09-08) - so vesicles, base pairs, and carbon get
 true geometry instead of 2D shadows before anything tunes
-against it. The K1 ladder now re-climbs in 3D, one gate per
-commit.
+against it - and the ladder re-climbed in 3D the same day, one
+gate per commit: K1 is closed in 3D too. Next up the ladder:
+the K2 self-assembly gates, in 3D.
 
 ## Documentation
 
