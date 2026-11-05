@@ -136,8 +136,14 @@ then the 3D port ran as its own phase before K2 (ADR-0013,
 landed 2026-09-08) - so vesicles, base pairs, and carbon get
 true geometry instead of 2D shadows before anything tunes
 against it - and the ladder re-climbed in 3D the same day, one
-gate per commit: K1 is closed in 3D too. Next up the ladder:
-the K2 self-assembly gates, in 3D.
+gate per commit: K1 is closed in 3D too. The K2
+self-assembly gates are climbing now, in 3D: K2.1 (excluded
+volume) passed 2026-11-04 - and it earned its keep before it
+passed, measuring the tuned soft core letting thermal-tail
+atoms pass clean through each other; the gate swept its own
+lever, stiffened the wall 8x inside the integrator's stability
+bound, and the whole K1 ladder re-passed in the same commit.
+Next: K2.2, the condensed medium.
 
 ## Documentation
 

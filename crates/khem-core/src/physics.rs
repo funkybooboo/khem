@@ -694,7 +694,8 @@ mod tests {
         // F4 law: excluded volume. Two free H 0.5 A apart (cutoff
         // 1.59) push apart; the force is the soft linear core, not
         // the bonded hard core. One sub-step applies F/m * dt_sub:
-        // scale * (cutoff - r) * dt_sub = 1.09 * 0.25 ~ 0.27.
+        // S * (cutoff - r) / m * dt_sub = 8 * 1.09 / 1.008 * 0.25
+        // ~ 2.16.
         let mut w = world(1, BoundaryType::Wrap);
         let a = w.spawn_atom(ElementId(0), 50.0, 50.0, 50.0);
         let b = w.spawn_atom(ElementId(0), 50.5, 50.0, 50.0);
@@ -707,7 +708,7 @@ mod tests {
         // Magnitude: the sub-step impulse law, F/m * dt_sub.
         let dt = dt_sub();
         assert!(
-            (w.atom(b).vx - 1.09 * dt).abs() < 0.05,
+            (w.atom(b).vx - 8.0 * 1.09 / 1.008 * dt).abs() < 0.05,
             "soft-core sub-step impulse {}",
             w.atom(b).vx
         );

@@ -94,7 +94,19 @@ pub struct PhysicsConfig {
     /// force `non_bonded_repulsion * (cutoff - r)`. Without excluded
     /// volume, atoms pass through each other and every lipid model
     /// in the literature fails to self-assemble (abstraction-notes
-    /// section 4).
+    /// section 4). Retuned 2026-11-04 from 1.0 with gate K2.1: the
+    /// scattering census measured the strength-1 core failing the
+    /// gate's own letter at the pond's thermal tail - an H-H pair
+    /// at the p99 closing speed (2.28 A/tick at 35 C) passed clean
+    /// through (min approach 0.015 of r_sum, 8/8 crossings) and a
+    /// 2-sigma pair penetrated to 0.48 against the 0.8 bar. At 8.0
+    /// the symplectic bound sits at dt_sub * sqrt(S/mu) = 1.00 for
+    /// the worst pair (H-H; the stiffest spring's own bound is
+    /// 1.375), every bin then holds the 0.8 bar with 20% margin
+    /// (worst 0.959), and the bounce stays energy-honest (pair KE
+    /// at exit 1.00-1.01 x launch). 32.0 was measured and rejected:
+    /// the bound hits 1.99 and the discretized wall mints 2.0-3.6x
+    /// pair KE. Evidence: tests/k2_self_assembly.rs (gate + sweep).
     pub non_bonded_repulsion: f32,
     /// Non-bonded cutoff multiplier: cutoff = (radius_a + radius_b)
     /// * margin.
@@ -224,7 +236,7 @@ impl Default for PhysicsConfig {
             pressure_sensitivity: 0.01,
             spring_energy_scale: 0.032,
             integration_substeps: 4,
-            non_bonded_repulsion: 1.0,
+            non_bonded_repulsion: 8.0,
             non_bonded_margin: 1.5,
             convection_rate: 0.001,
             vent_heat_rate: 0.1,
@@ -265,7 +277,7 @@ mod tests {
         assert_eq!(c.thermal_kick_scale, 0.008314);
         assert_eq!(c.thermostat_damping, 0.1);
         assert_eq!(c.ke_field_scale, 0.01);
-        assert_eq!(c.non_bonded_repulsion, 1.0);
+        assert_eq!(c.non_bonded_repulsion, 8.0);
         assert_eq!(c.non_bonded_margin, 1.5);
         assert_eq!(c.spring_energy_scale, 0.032);
         assert_eq!(c.integration_substeps, 4);

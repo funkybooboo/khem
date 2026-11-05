@@ -128,6 +128,13 @@ dimension-normalized by construction and the first sample
 (1.042) falsified it in one read. THE K1 LADDER IS NOW CLOSED
 IN 3D TOO: see the K1.5 entry below for the close's evidence.
 
+RE-RUN 2026-11-04 in K2.1's retune commit (the contract: the
+excluded-volume strength 1.0 -> 8.0 moves the pond's collision
+energetics): PASS - coupling 1.041-1.152 at every sample (the
+3D re-climb band: 1.037-1.121), KE bounded throughout,
+steady-tail windows (21k-22.75k vs 23k-25k) KE -7.5%, bond
+length -0.2%.
+
 ### K1.2 - force sanity: PASSED
 
 A bonded overlap imparts bounded velocity (F9 measured v ~ 1e4 -
@@ -179,6 +186,15 @@ RE-CLIMBED AND PASSED IN 3D 2026-09-08: intact 1025/1024 flat
 any kind, 14 runtime O-H formations, 1 weak-pair break - the
 persistence law is dimension-agnostic; the ~80 kT mechanical
 well and the exp(-29) thermal scale hold in 3D unchanged.
+
+RE-RUN 2026-11-04 in K2.1's retune commit: PASS - intact
+1025/1024 flat (one water self-assembled), ZERO O-H breaks of
+any kind, 19 runtime O-H formations, 0 other-pair breaks. The
+S=8 wall never engages a water at equilibrium: the ideal H-H
+distance (1.88 A) holds an 18% margin over the stiffened cutoff
+(1.59 A), and a settle probe (bath off) holds the geometry
+frozen to four decimals - the retune touches free pairs and
+third-atom sterics only.
 
 ### K1.4 - reactive balance: PASSED
 
@@ -246,6 +262,23 @@ thermal 0, seeded 0, phantoms 0, mechanical 1; tail active (42
 formations, 6 thermal over 15k-20k); largest 22, 21+ bucket 1,
 bonds 2403. The ledger closes: vent 0.454 degrees-sum/tick,
 every 1k window's five columns explain the delta.
+
+RE-RUN 2026-11-04 in K2.1's retune commit: PASS after one honest
+reclassification - the harness's weak class was the 2D record's
+observed pair set {O-O, N-N}, not the table's weak entries; the
+K3 note's own list is "O-O 146, N-N 163, N-O 201 kJ/mol", and
+the S=8 run drew one N-O thermal break at age 14,510 ticks -
+201 kJ/mol's Boltzmann answer at 35 C (~30 concurrent N-O
+bonds expect ~1-2 breaks per 20k ticks; the prior runs' zeros
+were the same law's lucky draws). N-O moved to the weak class
+(the strong-zero bar unchanged, now measuring the truly strong
+pairs). Bars at S=8: weak thermal 15 (O-O at the ladder's
+9,951-tick scale), strong thermal 0, seeded 0, phantoms 0,
+mechanical 1; field min avg 11.68, tail avg 35.75 against the
+35 C setpoint; stationarity green (2-5 -0.1%, singles -12.4%,
+bonds +0.4%, clusters +3%); no runaway (largest 21, 21+
+bucket 1, bonds 2344); tail alive (36 formations, 13 thermal
+over 15k-20k).
 
 ### K1.5 - seam correctness: PASSED
 
@@ -336,19 +369,86 @@ falsification). K1 IS CLOSED IN 3D: K1.1-K1.5 all re-climbed
 with harness evidence; the 3D port's exit criterion is met;
 K2 climbs in 3D.
 
+RE-RUN 2026-11-04 in K2.1's retune commit: PASS, and the F21
+scan-order artifact is GONE - pooled seam/bulk efficiency 0.980
+against the [0.6, 1.4] bar with all three axes within 0.1 of
+1.0 (the re-climb's axis 0 sat at z +2.9): the stiffer core's
+elastic bounces randomize encounter geometry enough to wash
+the anchor-order offset the 3D re-climb exposed. Gathering law
+pair-for-pair complete every tick of both seeds.
+
 ## Milestone K2 - self-assembly: membranes are consequences, not rules
 
 Precondition: K1. The literature is unanimous that amphiphiles
 assemble through non-bonded potentials, never through springs
 alone - hence K2.1 comes first.
 
-### K2.1 - excluded volume
+### K2.1 - excluded volume: PASSED
 
 Soft non-bonded repulsion (F4 - smuggled PHYSICS, documented as
-such): free atoms no longer pass through each other. PASS:
+such): free atoms no longer pass through each other. Bar:
 minimum approach distance >= 0.8 * (r_a + r_b) in a scattering
 test. (Implemented with the K1.1 substrate work, spec 6.6; the
 scattering-test PASS run is the gate's own commit.)
+
+PASSED 2026-11-04 (tests/k2_self_assembly.rs: the gate, the
+strength-sweep probe, and an always-on smoke) - and the gate
+EARNED ITS KEEP BEFORE IT PASSED. The harness, two phases:
+
+- PHASE A, controlled scattering: pairs launched head-on and
+  grazing at closing speeds c x sigma_rel(35 C), c in {1, 2, 3}
+  (a common collision, a fast one, the p99 tail a 10k-tick
+  beaker samples routinely), four element classes (H-H the
+  worst tunneling case, H-O, O-O, Na-Cl), physics-only at the
+  integrator's exact sub-step structure, minimum approach
+  measured at every sub-step boundary. It MEASURED THE
+  STRENGTH-1 CORE FAILING THE GATE'S OWN LETTER: an H-H pair at
+  the p99 closing speed (2.28 A/tick) passed clean THROUGH
+  (min approach 0.015 of the radius sum, 8/8 crossings), a
+  2-sigma pair penetrated to 0.48, and every crossing was
+  energy-honest (pair KE at exit 0.99x launch) - the sub-
+  stepping resolved the wall exactly as spec 5.1 claims; the
+  wall was too weak to matter at the thermal tail (F22).
+- The strength sweep ({1, 4, 8, 16, 32} head-on bins, the
+  symplectic bound as the ceiling) picked the retune:
+  non_bonded_repulsion 1.0 -> 8.0, the minimal swept strength
+  that holds every bin (worst: H-H c=3 at 0.959, 20% over the
+  bar, the analytic turning point to three decimals; mint
+  1.00-1.04; dt_sub * sqrt(S/mu) = 1.00 for the worst pair,
+  against the stiffest spring's own 1.375). 16.0 holds more
+  margin but spends it closer to the bound (1.41); 32.0 was
+  measured and REJECTED - the bound hits 1.99 and the
+  discretized wall mints 2.0-3.6x pair KE (the mint law found
+  the stability edge exactly where the bound said it would).
+  Spec 6.6/11 synced; golden hash re-cut consciously.
+- The wall does not touch the molecules: water's ideal H-H
+  sits at 1.88 A against its 1.59 A cutoff (18% margin) and a
+  settle probe (bath off) holds the geometry frozen - the
+  stiffened core engages free pairs and third-atom sterics
+  only.
+- PHASE B, the operating soak: the K1.5 beaker mix (760 free
+  atoms, 30x30x30 Wrap) at the pond's 35 C, full Sim with
+  chemistry live (bonded pairs excluded from the census - a
+  bonded pair is the spring's business, K1.2's band), 10k
+  ticks, spawn keep-apart 2 A per the pond's own sprinkle
+  margin (a uniform spawn measured 8 pair-ticks below the bar -
+  all spawn artifacts the wall cleaned within ticks; initial
+  conditions are matter, not a transient the census must
+  forgive). PASS with the operating point far from the bar:
+  minimum unbonded approach 1.001 over the run - never below
+  the radius sum, zero violations, zero pair-ticks below 1.0,
+  62 in [1.0, 1.25), 173 formations.
+
+THE RE-VALIDATION CONTRACT, EXERCISED AT FULL FORCE (the retune
+moves every gate's operating point): K1.1-K1.5 all re-ran in
+this commit and all PASS - see each gate's RE-RUN 2026-11-04
+entry above (the K1.4 re-run realigned the harness's weak class
+to the table's own entries - N-O is the K3 note's weak
+candidate - and the K1.5 re-run watched the F21 scan-order
+artifact wash out at the stiffer core).
+
+K2.2 climbs next (condensed medium), on a substrate whose atoms
+bounce instead of passing through.
 
 ### K2.2 - condensed medium
 

@@ -508,7 +508,17 @@ tail) stays under half the narrowest interaction zone.
 Excluded volume (implemented 2026-09-05; the founding draft had
 none - unbonded atoms passed through each other, and the lipid
 literature is unanimous that self-assembly needs non-bonded
-potentials, never springs alone):
+potentials, never springs alone). Retuned 2026-11-04 from
+strength 1.0 with gate K2.1: the scattering census measured the
+strength-1 core failing the gate's own letter at the pond's
+thermal tail - an H-H pair at the p99 closing speed passed clean
+through (min approach 0.015 of the radius sum, 8/8 crossings).
+At 8.0 the symplectic bound sits at dt_sub * sqrt(S/mu) = 1.00
+for the worst pair (H-H; the stiffest spring's own bound is
+1.375), every scattering bin holds the 0.8 * (r_a + r_b) bar
+with 20% margin, and the bounce stays energy-honest (pair KE at
+encounter exit 1.00-1.04 x launch); 32.0 was measured and
+rejected (the bound hits 1.99 and the wall mints 2.0-3.6x):
 
     cutoff = (radius_a + radius_b) * non_bonded_margin
     F      = non_bonded_repulsion * (cutoff - r),  for r < cutoff
@@ -516,7 +526,9 @@ potentials, never springs alone):
 Applied to every UNBONDED live pair (bonded pairs are exempt -
 springs own them; same-molecule 1,3 pairs are NOT exempt: real
 sterics, mild by construction since VSEPR ideals keep most
-beyond cutoff), along the minimum-image axis, equal and opposite,
+beyond cutoff - water's own H-H sits at 1.88 A against its 1.59
+A cutoff, an 18% margin the stiffer core does not close),
+along the minimum-image axis, equal and opposite,
 divided by mass at application. Candidates come from the
 wrap-aware spatial index (4.9). This is smuggled PHYSICS,
 documented as such: the substrate has excluded volume because
@@ -866,8 +878,9 @@ measurements that changed them:
     surface_threshold       0.9      // fraction of world depth (z,
                                      // the vertical since the port)
 
-    non_bonded_repulsion    1.0      // excluded volume strength
-                                     // (6.6)
+    non_bonded_repulsion    8.0      // excluded volume strength
+                                     // (6.6; K2.1 retune
+                                     // 2026-11-04, from 1.0)
     non_bonded_margin      1.5      // cutoff = (r_a + r_b) *
                                      // margin (6.6)
 

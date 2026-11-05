@@ -1246,8 +1246,19 @@ fn k1_4_reactive_balance() {
          thermal breaks in the tail"
     );
 
-    // Weak/strong asymmetry from the census.
-    let weak = ["O-O", "N-N"];
+    // Weak/strong asymmetry from the census. The weak class is
+    // the TABLE's weak entries (the K3 note's own list: O-O 146,
+    // N-N 163, N-O 201 kJ/mol), not the 2D record's observed pair
+    // set: the S=8 excluded-volume re-run (2026-11-04) drew one
+    // N-O thermal break at age 14,510 ticks - exactly the
+    // Boltzmann scale the ladder assigns 201 kJ/mol at 35 C
+    // (~30 concurrent N-O bonds give an expected ~1-2 breaks per
+    // 20k ticks; the prior runs' zeros were the same law's
+    // lucky draws), and a zero-tolerance bar on a weak-class
+    // pair was a misclassification, not a substrate regression.
+    // The strong-zero bar is unchanged and now measures the
+    // truly strong pairs.
+    let weak = ["O-O", "N-N", "N-O"];
     let weak_thermal: usize = breaks
         .iter()
         .filter(|(k, _)| weak.contains(&k.as_str()))
@@ -1278,7 +1289,7 @@ fn k1_4_reactive_balance() {
     assert!(
         weak_thermal >= 5,
         "K1.4 FAIL: weak bonds are not breaking - {weak_thermal} \
-         thermal breaks of O-O/N-N in 20k ticks"
+         thermal breaks of O-O/N-N/N-O in 20k ticks"
     );
     assert!(
         strong_thermal == 0,

@@ -473,6 +473,39 @@ measured:
     reverse the scan as a falsification probe when a class
     excess appears, or instrument the mid-pass anchor state.
 
+## Resolution log (2026-11-04, gate K2.1)
+
+- F22 (RESOLVED, K2.1's commit): the strength-1 excluded-volume
+  core was softer than its own claim - the gate's scattering
+  census measured H-H pairs at the pond's p99 closing speed
+  (2.28 A/tick at 35 C) passing clean THROUGH each other (min
+  approach 0.015 of the radius sum, 8/8 crossings; a 2-sigma
+  pair penetrated to 0.48 against the 0.8 bar), while every
+  crossing stayed energy-honest (pair KE at exit 0.99x launch)
+  - the sub-stepping resolved the wall exactly as spec 5.1
+  claims, the wall was just too weak to matter at the thermal
+  tail. The fix is the gate's own lever, swept with the
+  symplectic bound as the ceiling: non_bonded_repulsion 1.0 ->
+  8.0 (worst bin holds the bar with 20% margin, turning point
+  matching the analytic prediction to three decimals;
+  dt_sub * sqrt(S/mu) = 1.00 for the worst pair - the stiffest
+  spring's own bound is 1.375), 32.0 measured and REJECTED
+  (the bound hits 1.99 and the discretized wall mints 2.0-3.6x
+  pair KE - the mint law found the stability edge exactly where
+  the bound said it would). The whole K1 ladder re-ran per the
+  re-validation contract (K1.1-K1.5 all PASS; the K1.4 weak
+  class realigned to the table's entries - N-O 201 kJ/mol is
+  the K3 note's own weak candidate, its one thermal break at
+  age 14,510 ticks is the Boltzmann answer at 35 C; the K1.5
+  F21 scan-order artifact washed out at the stiffer core -
+  pooled seam/bulk efficiency 0.980, all three axes within 0.1
+  of 1.0). Water is untouched by the retune: its ideal H-H
+  distance (1.88 A) holds an 18% margin over the stiffened
+  cutoff (1.59 A), and a settle probe holds the geometry
+  frozen - the wall engages free pairs and third-atom sterics
+  only. The operating soak never dipped below the radius sum
+  (min unbonded approach 1.001 over 10k ticks at 35 C).
+
 ## Findings first analyzed before measurement
 
 - F1  Literal kB (0.008314) with pond temperatures (15-80 C) makes

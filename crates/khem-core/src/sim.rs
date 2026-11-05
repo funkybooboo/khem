@@ -178,7 +178,9 @@ mod tests {
     /// 0xDD4E_87CD_A7FD_94CE (the K1.1 substrate, 2026-09-05).
     /// Pre-fix values live in git history.
     /// Update ONLY with a justification in the commit message.
-    const GOLDEN_HASH: u64 = 0x4B84_4F68_14CC_5899;
+    // Re-cut 2026-11-04 with gate K2.1: non_bonded_repulsion 1.0 -> 8.0
+    // (the excluded-volume retune; config.rs carries the measured why).
+    const GOLDEN_HASH: u64 = 0xDE40_651D_ADFF_6361;
 
     fn observer(interval: u64) -> Observer {
         Observer::new(ObserverConfig {
@@ -429,9 +431,18 @@ mod tests {
         // the law is asserted over a short window (a bond can only
         // form through the REBUILT index either way - the initial
         // 1.8 A gap sits outside the cap).
+        //
+        // The WHOLE field is warm, not one cell: the pair's
+        // formation midpoint is trajectory-dependent, and a
+        // one-cell warm spot is a cell-face trap - the K2.1
+        // excluded-volume retune (2026-11-04) shifted the bounce
+        // trajectory 0.012 A across the warm cell's y-face, the
+        // midpoint read a cold neighbor, and the temperature
+        // factor collapsed to 0.1. The G07 law is indifferent to
+        // which cell the pair sits in.
         w.atom_mut(a).vx = 1.0;
         w.atom_mut(b).vx = 0.5;
-        w.temp_field.set(11.0, 10.0, 10.0, 43.6);
+        w.temp_field.data.fill(43.6); // t_opt for H-H: 0.1 * 436
         let mut sim = Sim::new(config, observer(1000));
         let _ = sim.start(&w);
         let mut bonded = false;

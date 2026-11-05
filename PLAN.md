@@ -60,15 +60,28 @@ before specs.
   O-O thermal 12 at age 10,117 ticks), K1.5 all three seams -
   the per-axis census exposed a scan-order artifact (F21,
   resolved by reversal falsification), the substrate's seams
-  are symmetric. PHASE 2 IS COMPLETE; K2 climbs in 3D next.
+  are symmetric. PHASE 2 IS COMPLETE. K2 IS OPEN IN 3D: K2.1
+  (excluded volume) PASSED 2026-11-04 - the gate measured the
+  strength-1 soft core failing its own letter at the thermal
+  tail (H-H pairs passing clean through at the p99 closing
+  speed, finding F22), swept the lever, and retuned
+  non_bonded_repulsion 1.0 -> 8.0 (symplectic bound 1.00 for
+  the worst pair against the stiffest spring's 1.375; every
+  scattering bin holds the 0.8 bar with 20% margin; 32.0
+  rejected at the bound's edge with the wall minting 2.0-3.6x
+  pair KE) - and the whole K1 ladder re-ran per the
+  re-validation contract, all five PASS (K1.5's F21
+  scan-order artifact washed out at the stiffer core: pooled
+  seam/bulk 0.980, all axes within 0.1 of 1.0). K2.2
+  (condensed medium) climbs next.
   Ladder, rules, and pass history:
   docs/plans/phase-1-kernel.md; port decisions and evidence:
   docs/plans/phase-2-3d-port.md.
-- Findings F1-F20 live in docs/research/abstraction-notes.md;
-  all resolved through K1.5; the newest is F20 (the mirrored
-  VSEPR anchor - a seam-straddling bond's raw direction scored
-  candidates against a phantom ideal; fixed with the
-  minimum-image direction).
+- Findings F1-F22 live in docs/research/abstraction-notes.md;
+  all resolved; the newest is F22 (the strength-1 excluded-
+  volume core was softer than its own claim - K2.1's scattering
+  census measured thermal-tail pairs passing clean through it;
+  retuned to 8.0 with the symplectic bound as the ceiling).
 - Dimensionality is decided (ADR-0013): 2D carries the K1 gates -
   the F18 fix is dimension-generic, and the 2D passes become the
   port's regression vector - then the 3D port lands before K2
@@ -88,7 +101,7 @@ before specs.
 | Phase | Plan | Status |
 |-------|------|--------|
 | 0 - literature grounding | [phase-0-research.md](docs/plans/phase-0-research.md) | notes + bibliography landed; re-opens before detector design |
-| 1 - physics/chemistry kernel | [phase-1-kernel.md](docs/plans/phase-1-kernel.md) | K1 passed in 2D (2026-09-07) and re-climbed in 3D (2026-09-08); K2 climbs next, in 3D |
+| 1 - physics/chemistry kernel | [phase-1-kernel.md](docs/plans/phase-1-kernel.md) | K1 passed in 2D (2026-09-07), re-climbed in 3D (2026-09-08), re-validated at the K2.1 retune (2026-11-04); K2 open: K2.1 passed, K2.2 next |
 | 2 - the 3D port | [phase-2-3d-port.md](docs/plans/phase-2-3d-port.md) | COMPLETE 2026-09-08: substrate ported, K1.1-K1.5 re-climbed in 3D, exit criterion met |
 | 3 - runtime hardening | [phase-3-hardening.md](docs/plans/phase-3-hardening.md) | not started; cheap items landed early with phase 1 |
 | 4 - the khem language | [phase-4-language.md](docs/plans/phase-4-language.md) | spec-only; gated on K1-K5 |
@@ -187,10 +200,16 @@ answer it when we get there, not before.
       steady-tail windows (the re-validation contract's integrator
       binding, first exercise); the velocity clamp that was part
       of the K1.1 pass is gone - sub-stepping replaced it (K1.3).
-- [ ] non-bonded soft repulsion (finding F4; gate K2.1):
-      IMPLEMENTED with the K1.1 commit (spec 6.6, chemistry/physics
-      tests); the K2.1 scattering-test PASS run is the gate's own
-      work, lands only with harness evidence, as its own commit.
+- [x] non-bonded soft repulsion (finding F4; gate K2.1):
+      RESOLVED 2026-11-04 - PASSED. The gate's own scattering
+      harness measured the strength-1 core failing its letter
+      at the thermal tail (F22), the strength sweep picked
+      8.0 (every bin 20% over the 0.8 bar, mint 1.00-1.04,
+      symplectic bound 1.00; 32.0 rejected at the bound edge),
+      and the operating soak never dipped below the radius
+      sum. The K1 ladder re-ran in the same commit, all five
+      PASS. See the K2.1 entry in
+      docs/plans/phase-1-kernel.md and tests/k2_self_assembly.rs.
 - [ ] first world file name: primordial_pond.kem ("warm little
       pond" is Darwin's phrase for the setting).
 - [x] dimensionality (ADR-0013): RESOLVED 2026-09-07 - 3D is the
