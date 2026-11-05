@@ -15,7 +15,11 @@ it instead:
 
 - before K2.3 tuning - the non-bonded polarity potential memo
   (phantom-solvent and four-bead amphiphile models;
-  abstraction-notes section 4 is the lesson)
+  abstraction-notes section 4 is the lesson). WRITTEN 2026-11-04:
+  docs/research/polarity-attraction-memo.md - the
+  like-dissolves-like electronegativity law, the honesty flag,
+  the preregistered tuning lines, and the re-validation list the
+  substrate commit owes
 - before K3 starts - the K3 mechanism memo (pairing channel,
   thermal window, ligation geometry, preregistered honesty
   line)
