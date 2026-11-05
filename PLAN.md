@@ -73,7 +73,17 @@ before specs.
   re-validation contract, all five PASS (K1.5's F21
   scan-order artifact washed out at the stiffer core: pooled
   seam/bulk 0.980, all axes within 0.1 of 1.0). K2.2
-  (condensed medium) climbs next.
+  (condensed medium) PASSED 2026-11-04, pure measurement (no
+  constants moved): the steady-tail pond is contact-dense
+  matter - 0.978 of atoms hold an intermolecular non-bonded
+  neighbor within 3 A (bar 0.5), and the intermolecular g(r)
+  shows the excluded-volume hole (g = 0 below 0.75 A, monotone
+  below uniform out to 3.25 A, uniform beyond) - with the
+  no-first-shell baseline PREREGISTERED (g_max 1.002 beyond
+  3.0 A): repulsion cannot build cohesion; the attraction
+  channel (the K2.3 design debt) re-runs this gate and must
+  beat that baseline. Next: the K2.3 attraction memo
+  (phase-0 re-open), then the K2.3 substrate and its gates.
   Ladder, rules, and pass history:
   docs/plans/phase-1-kernel.md; port decisions and evidence:
   docs/plans/phase-2-3d-port.md.
@@ -101,7 +111,7 @@ before specs.
 | Phase | Plan | Status |
 |-------|------|--------|
 | 0 - literature grounding | [phase-0-research.md](docs/plans/phase-0-research.md) | notes + bibliography landed; re-opens before detector design |
-| 1 - physics/chemistry kernel | [phase-1-kernel.md](docs/plans/phase-1-kernel.md) | K1 passed in 2D (2026-09-07), re-climbed in 3D (2026-09-08), re-validated at the K2.1 retune (2026-11-04); K2 open: K2.1 passed, K2.2 next |
+| 1 - physics/chemistry kernel | [phase-1-kernel.md](docs/plans/phase-1-kernel.md) | K1 passed in 2D (2026-09-07), re-climbed in 3D (2026-09-08), re-validated at the K2.1 retune (2026-11-04); K2 open: K2.1-K2.2 passed (2026-11-04), the K2.3 attraction memo is next |
 | 2 - the 3D port | [phase-2-3d-port.md](docs/plans/phase-2-3d-port.md) | COMPLETE 2026-09-08: substrate ported, K1.1-K1.5 re-climbed in 3D, exit criterion met |
 | 3 - runtime hardening | [phase-3-hardening.md](docs/plans/phase-3-hardening.md) | not started; cheap items landed early with phase 1 |
 | 4 - the khem language | [phase-4-language.md](docs/plans/phase-4-language.md) | spec-only; gated on K1-K5 |
@@ -182,7 +192,7 @@ answer it when we get there, not before.
 
 | Gap / open question | Bites | Answered by | Detail |
 |---|---|---|---|
-| Non-bonded polarity attraction: the substrate's only attraction is the bond spring (spec 6.6 is repulsion-only and says so); K2's amphiphile sorting needs an element-derived attractive potential, designed and honesty-flagged first | K2.3-K2.6 | before K2.3 tuning | phase-1-kernel.md (K2.3 note); phase-0 re-open |
+| Non-bonded polarity attraction: the substrate's only attraction is the bond spring (spec 6.6 is repulsion-only and says so); K2's amphiphile sorting needs an element-derived attractive potential, designed and honesty-flagged first | K2.3-K2.6 | before K2.3 tuning | phase-1-kernel.md (K2.3 note; K2.2's measured baseline: no first shell, g_max 1.002 - the number the design must beat); phase-0 re-open |
 | K3 mechanism: which bonds pair bases, how the duplex releases (the thermal window), and whether adjacent paired nucleotides reach ligation distance - all undesigned or uncalculated | K3.1-K3.4 | the K3 mechanism memo, before K3 starts (it feeds the port's grammar decisions) | phase-1-kernel.md (K3 note); phase-0 re-open |
 | Turnover mechanisms: decay (UV photolysis is the honest candidate, undeclared) and material feed (no mechanism at all) | K5.2 | the turnover memo, before K5 | phase-1-kernel.md (K5.2 note); phase-0 re-open |
 | Perf target re-derivation: ~60 t/s measured at 3.4k atoms extrapolates to ~20 t/s at 10k vs spec 13's >500 t/s (~25x), the port's ~3x pair cost lands on top, and the named levers look like 5-10x; whether the E-gates need that target at all is unexamined | phase-3 perf pass | re-derive spec 13 from the E-gates' real requirements before the perf pass; the layout-bundle question decides with the port | phase-3-hardening.md; phase-2-3d-port.md |

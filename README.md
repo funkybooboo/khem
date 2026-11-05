@@ -143,7 +143,13 @@ passed, measuring the tuned soft core letting thermal-tail
 atoms pass clean through each other; the gate swept its own
 lever, stiffened the wall 8x inside the integrator's stability
 bound, and the whole K1 ladder re-passed in the same commit.
-Next: K2.2, the condensed medium.
+K2.2 (condensed medium) passed the same day, pure measurement:
+the pond's steady tail is contact-dense matter (97.8% of atoms
+hold an intermolecular neighbor within 3 A) with the
+excluded-volume hole in its pair distances - and honestly no
+cohesion, because the substrate is repulsion-only by design
+and the attraction channel (the next design step) has that
+measured baseline to beat.
 
 ## Documentation
 

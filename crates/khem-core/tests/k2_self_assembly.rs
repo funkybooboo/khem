@@ -43,6 +43,35 @@
 //!     sorting) will run on.
 //!     Run: `mise exec -- cargo test --release -p khem-core
 //!     --test k2_self_assembly -- --ignored --nocapture`
+//! - `k2_2_condensed_medium` (gate K2.2): the pond behaves as
+//!   matter, not free flight. Two bars from the letter, measured
+//!   over the 25k-tick pond's steady tail (the K1.1 windows,
+//!   21k-25k, every 100 ticks):
+//!   - THE CENSUS: most atoms hold a non-bonded INTERMOLECULAR
+//!     neighbor within 3 A (different molecule by the bond
+//!     graph's union-find - a gas of free-flying molecules
+//!     passes a naive census on intramolecular 1,3 pairs, which
+//!     is exactly the free-flight failure this gate exists to
+//!     catch; different-molecule also implies not-bonded, so the
+//!     census needs no is_bonded check).
+//!   - THE STRUCTURE: intermolecular pair distances deviate from
+//!     the uniform reference - the excluded-volume hole. The
+//!     hole is the structure a REPULSION-ONLY substrate can hold
+//!     (spec 6.6 says so; a first-shell peak needs the
+//!     attraction channel, the registered K2.3 design debt), so
+//!     the gate bars the hole and PREREGISTERS the no-peak
+//!     baseline: the measured g(r) has no shell above uniform,
+//!     and the attraction channel's substrate commit re-runs
+//!     this gate and must replace the baseline bar with a peak
+//!     bar - the number the K2.3 memo's design has to beat.
+//!     PASSED 2026-11-04: census 0.978 (bar 0.5; min over samples
+//!     0.973), hole core g <= 0.025 below 1.25 A (bar 0.05), hole
+//!     extent g <= 0.944 below 3.0 A (bar < 1.0), baseline max g
+//!     1.002 beyond 3.0 A (bar 1.05) - the first measured picture
+//!     of the medium: contact-dense, excluded volume held, no
+//!     cohesion (as designed, as documented).
+//!     Run: `mise exec -- cargo test --release -p khem-core
+//!     --test k2_self_assembly k2_2 -- --ignored --nocapture`
 //! - `k2_1_strength_sweep` (the lever probe, not a gate): the
 //!   same phase A across non_bonded_repulsion in {1, 4, 8, 16,
 //!   32} - the curve that picked the default (8.0; PASS record
@@ -537,7 +566,267 @@ fn k2_1_excluded_volume() {
     eprintln!("K2.1 PASS: excluded volume holds at the operating point");
 }
 
-// ---- The lever probe ---------------------------------------------------
+// ---- Gate K2.2: condensed medium ------------------------------------
+
+/// The intermolecular shell grid for the g(r) measurement: bins
+/// of 0.25 A from 0 to 4.5 A (the first shell of the pond's fluid
+/// sits inside 4.5; the sphere fits the slab's 7.5 A half-depth,
+/// so no minimum-image shell distortion).
+const GR_BIN: f32 = 0.25;
+const GR_MAX: f32 = 4.5;
+
+/// K2.2 CONDENSED MEDIUM (gate ladder): the pond behaves as
+/// matter, not free flight. Measured over the 25k-tick pond's
+/// steady tail (the K1.1 windows, 21k-25k, sampled every 100
+/// ticks), on INTERMOLECULAR pairs only (different molecule by
+/// the bond graph's union-find - intramolecular 1,3 pairs like a
+/// water's own H-H at 1.88 A are real structure but they are
+/// MOLECULAR structure; a gas of free-flying waters would pass a
+/// naive census on them alone, which is the failure this gate
+/// catches):
+///
+/// - CENSUS BAR: the mean (over samples) fraction of atoms
+///   holding a non-bonded intermolecular neighbor within 3.0 A
+///   is >= 0.5 (the letter's "most").
+/// - STRUCTURE BARS: against the uniform reference (rho =
+///   N / V of the Wrap world), the intermolecular g(r) shows
+///   the excluded-volume hole - g <= 0.05 for every shell below
+///   1.25 A (the wall's hard core; the thermal tail can press
+///   small pairs to ~1.0 * r_sum, so the hole's floor is
+///   pair-dependent and the core bar sits below the smallest
+///   pair's standoff) and g < 1.0 for every shell below 3.0 A
+///   (the hole's extent: pair distances deviate from uniform
+///   across the whole contact range - free flight reads g = 1
+///   everywhere).
+/// - BASELINE BAR (preregistered): max g over the 3.0-4.5 A
+///   shells <= 1.05 - the repulsion-only substrate has NO
+///   first-shell peak, by design (spec 6.6 is repulsion-only
+///   and says so; the peak needs the attraction channel, the
+///   registered K2.3 design debt). This bar exists so the
+///   attraction channel's effect is measurable against the
+///   K2.2 baseline: its substrate commit re-runs this gate and
+///   REPLACES this bar with a peak bar. The number is the
+///   target the K2.3 memo's design has to beat.
+///
+/// The pond is the gate's world (not a beaker): 1024 waters on
+/// the port's 3.75 A cubic lattice plus the 360-atom free
+/// sprinkle, the vent, the 35 C setpoint. By the tail the
+/// Langevin diffusion has melted the lattice (O RMS ~ 100+ A
+/// over 20k ticks) - what is measured is the FLUID the substrate
+/// actually holds, the medium K2.3's amphiphiles will swim in.
+#[test]
+#[ignore] // explicit: cargo test --release -- --ignored --nocapture
+fn k2_2_condensed_medium() {
+    let config = PhysicsConfig::default();
+    let seed = 42u64;
+    let mut world = khem_core::pond::primordial_pond(seed, config);
+    let observer = Observer::new(ObserverConfig {
+        khem_version: "0.1.0",
+        run_name: "k2_harness".to_string(),
+        world_name: "primordial_pond".to_string(),
+        seed,
+        tick_interval: 10_000,
+    });
+    let mut sim = Sim::new(config, observer);
+    let _ = sim.start(&world);
+    eprintln!(
+        "K2.2: the pond, 25k ticks, sampling the steady tail \
+         (21k-25k every 100 ticks)"
+    );
+
+    // Union-find over the alive bonds, per sample: the molecule
+    // identity the census and the g(r) split on. Atom ids are
+    // indexes (spawn order; no compaction in a Wrap world).
+    let n = world.atoms.len();
+    let mut parent = vec![0u32; n];
+    let find = |parent: &mut Vec<u32>, mut x: u32| -> u32 {
+        while parent[x as usize] != x {
+            // Path halving: the census runs 41 samples over ~2k
+            // bonds; flat is fine, halving is free.
+            let grandparent = parent[parent[x as usize] as usize];
+            parent[x as usize] = grandparent;
+            x = grandparent;
+        }
+        x
+    };
+
+    let n_bins = (GR_MAX / GR_BIN) as usize;
+    let mut bin_counts = vec![0u64; n_bins];
+    let mut census_sum = 0.0f64;
+    let mut census_min = f64::INFINITY;
+    let mut census_max = 0.0f64;
+    let mut samples = 0u64;
+    let mut alive_atoms = 0u64;
+    for t in 1..=25_000u64 {
+        sim.tick(&mut world);
+        if t < 21_000 || !t.is_multiple_of(100) {
+            continue;
+        }
+        // Rebuild the molecule partition for this sample.
+        for (i, slot) in parent.iter_mut().enumerate() {
+            *slot = i as u32;
+        }
+        for bond in &world.bonds {
+            if bond.alive {
+                let ra = find(&mut parent, bond.atom_a.0);
+                let rb = find(&mut parent, bond.atom_b.0);
+                if ra != rb {
+                    parent[ra as usize] = rb;
+                }
+            }
+        }
+        let alive = world.atoms.iter().filter(|a| a.alive).count();
+        alive_atoms = alive as u64;
+        // Census: nearest INTERmolecular neighbor within 3 A,
+        // plus the g(r) shells (intermolecular pairs, counted
+        // once by id order).
+        let mut within = 0u64;
+        for atom in &world.atoms {
+            if !atom.alive {
+                continue;
+            }
+            let near = world.spatial_index.neighbors(atom.x, atom.y, atom.z, 3.0);
+            let root = find(&mut parent, atom.id.0);
+            let mut nearest = f32::INFINITY;
+            for b_id in near {
+                let b = world.atom(b_id);
+                if !b.alive {
+                    continue;
+                }
+                if b_id == atom.id {
+                    continue;
+                }
+                if find(&mut parent, b_id.0) == root {
+                    continue; // same molecule: intramolecular
+                }
+                let (dx, dy, dz) = world.delta(atom.x, atom.y, atom.z, b.x, b.y, b.z);
+                let r = (dx * dx + dy * dy + dz * dz).sqrt();
+                if r < nearest {
+                    nearest = r;
+                }
+            }
+            if nearest <= 3.0 {
+                within += 1;
+            }
+        }
+        let fraction = within as f64 / alive as f64;
+        census_sum += fraction;
+        census_min = census_min.min(fraction);
+        census_max = census_max.max(fraction);
+
+        // g(r): every intermolecular pair within 4.5 A, once.
+        for atom in &world.atoms {
+            if !atom.alive {
+                continue;
+            }
+            let near = world
+                .spatial_index
+                .neighbors(atom.x, atom.y, atom.z, GR_MAX);
+            let root = find(&mut parent, atom.id.0);
+            for b_id in near {
+                if b_id.0 <= atom.id.0 {
+                    continue;
+                }
+                let b = world.atom(b_id);
+                if !b.alive {
+                    continue;
+                }
+                if find(&mut parent, b_id.0) == root {
+                    continue;
+                }
+                let (dx, dy, dz) = world.delta(atom.x, atom.y, atom.z, b.x, b.y, b.z);
+                let r = (dx * dx + dy * dy + dz * dz).sqrt();
+                if r < GR_MAX {
+                    bin_counts[(r / GR_BIN) as usize] += 1;
+                }
+            }
+        }
+        samples += 1;
+        if samples.is_multiple_of(10) {
+            eprintln!(
+                "  t={t}: census {fraction:.3} (nearest intermolecular \
+                 neighbor <= 3 A)"
+            );
+        }
+    }
+    let census_mean = census_sum / samples as f64;
+
+    // g(r) per shell against the uniform reference: expected
+    // pair count per bin = 0.5 * N * rho * V_bin (pairs counted
+    // once), averaged per sample.
+    let volume = world.width * world.height * world.depth;
+    let rho = alive_atoms as f64 / volume as f64;
+    eprintln!(
+        "K2.2 census: mean {census_mean:.3} (bar >= 0.5), \
+         min {census_min:.3}, max {census_max:.3}, over {samples} samples"
+    );
+    eprintln!("K2.2 g(r) vs uniform (rho {rho:.4} atoms/A^3):");
+    let mut gr = vec![0.0f64; n_bins];
+    for (b, count) in bin_counts.iter().enumerate() {
+        let r0 = b as f64 * GR_BIN as f64;
+        let r1 = r0 + GR_BIN as f64;
+        let v_bin = 4.0 * std::f64::consts::PI / 3.0 * (r1.powi(3) - r0.powi(3));
+        let expected = 0.5 * alive_atoms as f64 * rho * v_bin * samples as f64;
+        gr[b] = *count as f64 / expected;
+        let g_val = gr[b];
+        eprintln!("  r [{r0:.2},{r1:.2}): pairs {count:>9} expected {expected:>9.0} g {g_val:.3}");
+    }
+
+    // ---- The bars ----------------------------------------------------
+    assert!(
+        census_mean >= 0.5,
+        "K2.2 FAIL: census mean {census_mean:.3} < 0.5 - the pond \
+         is not holding most atoms in intermolecular contact"
+    );
+    // The hole's core: below 1.25 A (under the smallest pair's
+    // thermal-tail standoff; K2.1 measured fast pairs pressing
+    // to ~1.0 * r_sum, so 1.0-1.25 A can carry rare tail counts
+    // and the core bar sits below that).
+    let hole_core_max = gr
+        .iter()
+        .take((1.25f32 / GR_BIN) as usize)
+        .cloned()
+        .fold(0.0f64, f64::max);
+    assert!(
+        hole_core_max <= 0.05,
+        "K2.2 FAIL: the excluded-volume core is not clean - g \
+         {hole_core_max:.3} below 1.25 A (bar 0.05)"
+    );
+    // The hole's extent: every shell below 3.0 A sits below
+    // uniform - pair distances deviate from the free-flight
+    // reference across the whole contact range.
+    let hole_extent_max = gr
+        .iter()
+        .take((3.0f32 / GR_BIN) as usize)
+        .cloned()
+        .fold(0.0f64, f64::max);
+    assert!(
+        hole_extent_max < 1.0,
+        "K2.2 FAIL: the hole does not extend - g {hole_extent_max:.3} \
+         at or above uniform below 3.0 A"
+    );
+    // The preregistered baseline: repulsion-only cannot build a
+    // first shell (spec 6.6); the attraction channel's commit
+    // re-runs this gate and replaces this bar with a peak bar.
+    let baseline_max = gr
+        .iter()
+        .skip((3.0f32 / GR_BIN) as usize)
+        .cloned()
+        .fold(0.0f64, f64::max);
+    assert!(
+        baseline_max <= 1.05,
+        "K2.2: the repulsion-only baseline moved - g {baseline_max:.3} \
+         beyond 3.0 A (baseline bar 1.05); if the attraction \
+         channel landed, replace this bar with a peak bar and \
+         re-run per the contract"
+    );
+    eprintln!(
+        "K2.2 PASS: census {census_mean:.3} (bar 0.5), hole core \
+         {hole_core_max:.3} (<= 0.05), hole extent max \
+         {hole_extent_max:.3} (< 1.0 below 3 A), baseline \
+         {baseline_max:.3} (<= 1.05 - no shell, as designed)"
+    );
+}
 
 /// The strength sweep that picks non_bonded_repulsion's default:
 /// phase A's head-on bins (the binding case) across

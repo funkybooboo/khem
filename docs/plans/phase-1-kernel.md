@@ -450,11 +450,53 @@ artifact wash out at the stiffer core).
 K2.2 climbs next (condensed medium), on a substrate whose atoms
 bounce instead of passing through.
 
-### K2.2 - condensed medium
+### K2.2 - condensed medium: PASSED
 
 The pond behaves as matter, not free flight - most atoms hold a
 non-bonded neighbor within 3 A, and pair distances show
 structure.
+
+PASSED 2026-11-04 (tests/k2_self_assembly.rs: the 25k-tick pond,
+steady tail sampled every 100 ticks over 21k-25k; INTERMOLECULAR
+pairs only - different molecule by the bond graph's union-find:
+intramolecular 1,3 pairs are molecular structure, and a gas of
+free-flying waters would pass a naive census on them alone,
+which is exactly the free-flight failure this gate exists to
+catch):
+
+- THE CENSUS: 0.978 of atoms hold a non-bonded intermolecular
+  neighbor within 3.0 A (bar: the letter's "most" = 0.5; min
+  over the 41 samples 0.973) - the medium is contact-dense.
+- THE STRUCTURE: the intermolecular g(r) against the uniform
+  reference (rho 0.0636 atoms/A^3) shows the excluded-volume
+  hole - the structure a repulsion-only substrate CAN hold: g =
+  0 below 0.75 A, <= 0.025 below 1.25 A (the hole's core; the
+  thermal tail presses small pairs to ~1.0 * r_sum, so the
+  core bar sits below the smallest pair's standoff), a
+  monotone ramp below uniform out to 3.25 A (max g 0.944
+  below 3.0 A, against the free-flight reference's flat 1.0),
+  uniform beyond (1.001-1.002 out to 4.5 A).
+- THE BASELINE, PREREGISTERED (max g beyond 3.0 A: 1.002, bar
+  <= 1.05): there is NO first-shell peak. Repulsion cannot
+  build one (spec 6.6 is repulsion-only and says so); the
+  peak needs the element-derived attraction channel - the
+  registered K2.3 design debt (PLAN gap register). The bar
+  exists so the attraction channel's effect is measurable
+  against THIS baseline: its substrate commit re-runs this
+  gate and replaces the baseline bar with a peak bar. The
+  K2.3 memo's design has to beat: census 0.978, hole to
+  uniform by 3.5 A, g_max 1.002 - a uniform-plateau fluid with
+  a 3 A correlation hole.
+
+The pond is molten by the tail (Langevin diffusion carries an
+O ~100+ A over the run; the port's 3.75 A water lattice is
+fully mixed), so the measured object is the fluid the substrate
+actually holds: contact-dense matter with excluded volume, no
+cohesion. No constants moved; no re-validation trigger - this
+gate is pure measurement.
+
+The K2.3 attraction memo is the next precondition (phase-0
+re-open), then the K2.3 substrate and its gates.
 
 ### K2.3 - amphiphile sorting
 
