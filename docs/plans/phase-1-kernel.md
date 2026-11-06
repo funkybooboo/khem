@@ -135,6 +135,17 @@ energetics): PASS - coupling 1.041-1.152 at every sample (the
 steady-tail windows (21k-22.75k vs 23k-25k) KE -7.5%, bond
 length -0.2%.
 
+RE-RUN 2026-11-06 with the pond RE-DENSITY (the pond is a new
+world - 3.2 A lattice, 0.1022 atoms/A^3, keep-apart
+construction; the port plan pre-authorized the re-derivation on
+evidence; cohesion still dormant, so this is a WORLD re-run,
+not a physics one): PASS - coupling 0.988-1.180 at every
+sample of the 25k-tick run (the [0.8, 1.4] band; the wider
+spread rides the denser medium's vent plume holding more of
+the field), the tail at ~39-41 C against the 35 C setpoint, KE
+bounded throughout. Perf ~17-28 t/s (the same atom budget in
+a smaller box; the machine was busy during the final run).
+
 ### K1.2 - force sanity: PASSED
 
 A bonded overlap imparts bounded velocity (F9 measured v ~ 1e4 -
@@ -156,6 +167,20 @@ dimension-agnostic exactly as the port plan predicted - probe
 0.334 vs the analytic bound 0.578 (the 2D pair: 0.334/0.578),
 band mean ratio 1.008-1.026, p95 <= 1.216, every sample inside
 [0.8, 1.5].
+
+RE-RUN 2026-11-04 in K2.1's retune commit (the record the
+commit message carried; now written where it belongs): PASS -
+the probe holds to three decimals (0.334 vs bound 0.578; the
+excluded-volume stiffening does not touch bonded overlaps),
+band mean 1.012-1.030, p95 <= 1.233, every sample inside
+[0.8, 1.5].
+
+RE-RUN 2026-11-06 with the pond re-density: PASS - the probe
+unchanged (0.3335 vs bound 0.5782), band mean 1.009-1.025, p95
+<= 1.229, every sample inside [0.8, 1.5] (the denser medium
+presses more: outside-band grows to ~77/2316 bonds at 10k
+against ~70/2270 at the old density - the mean and p95 bars
+hold).
 
 ### K1.3 - water persists: PASSED
 
@@ -195,6 +220,15 @@ distance (1.88 A) holds an 18% margin over the stiffened cutoff
 (1.59 A), and a settle probe (bath off) holds the geometry
 frozen to four decimals - the retune touches free pairs and
 third-atom sterics only.
+
+RE-RUN 2026-11-06 with the pond re-density: PASS - intact
+1025/1024 flat from t=2000 (one water self-assembled early and
+persists), ZERO O-H breaks of any kind (mechanical 0, seeded 0,
+churn 0) - the keep-apart construction seeds every water
+outside every neighbor's excluded volume (best-of-N
+placement; a place-the-last-draft fallback manufactured deep
+overlaps before the fix, the same lesson the K2.1 beaker
+measured).
 
 ### K1.4 - reactive balance: PASSED
 
@@ -450,6 +484,28 @@ artifact wash out at the stiffer core).
 K2.2 climbs next (condensed medium), on a substrate whose atoms
 bounce instead of passing through.
 
+RE-RUN 2026-11-06 with the pond re-density: PASS, with one
+honest bar re-derivation. The beaker matches the pond's new
+operating point (760 atoms of the K1.5 mix in a 19.5^3 box,
+0.1022 atoms/A^3 - the soak must be what the pond feels),
+seeded by the pond's own keep-apart law. The first draft kept
+phase B's flat 0.8 bar, which the SPARSE beaker held - but the
+dense beaker measured transient CLUSTER SQUEEZES to 0.6-0.8
+* r_sum: a third atom sandwiched inside a bonded pair's span,
+held by the bond and the geometry against the (linear,
+deep-soft) wall until the cluster rearranges (18 pair-ticks
+in 10k, all in the formation window, none from spawn once
+the placement fell back to BEST-OF-N instead of place-the-
+last-draft). Free pairs hold 0.8+ (phase A unchanged to the
+digit: worst bin 0.959, mint 1.043, zero crossings), and the
+excluded-volume claim's strongest testable form at the
+operating point is NOTHING PASSES THROUGH: the phase B bar
+is min ratio >= 0.5 (measured 0.608, far above any crossing -
+a passed-through pair samples ~0), with the squeeze channel
+counted and reported as evidence. If K2.3+ shows the squeeze
+channel matters (membrane defects), the wall's shape at deep
+overlap is the named lever.
+
 ### K2.2 - condensed medium: PASSED
 
 The pond behaves as matter, not free flight - most atoms hold a
@@ -497,6 +553,17 @@ gate is pure measurement.
 
 The K2.3 attraction memo is the next precondition (phase-0
 re-open), then the K2.3 substrate and its gates.
+
+RE-RUN 2026-11-06 with the pond re-density (a WORLD re-run at
+dormant cohesion - the medium is the same repulsion-only
+physics at the new 0.1022 atoms/A^3): PASS with every bar
+unchanged, and the numbers moved the way denser matter
+should: census 0.999 (min 0.997 over 41 samples - at real
+water's own atomic density essentially every atom holds an
+intermolecular neighbor within 3 A), hole core 0.035 below
+1.25 A, hole extent max 0.963 below 3.0 A, and the
+repulsion-only baseline still flat: max g 0.978 beyond 3.0 A,
+no shell - the number the activation must beat.
 
 ### K2.3 - amphiphile sorting
 

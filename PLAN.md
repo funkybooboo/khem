@@ -88,13 +88,24 @@ before specs.
   the unit tests (double-sided quartic - the pure-attractive
   ramp had a PE step at the range boundary, F18's lesson at
   the force level; flat 4 A range; intermolecular 1,3
-  exemption, measurement-forced); the sweep
-  (k2_3_cohesion_sweep) measured every useful depth
-  condensing the seeded pond into a droplet, so activation is
-  gated on the POND RE-DENSITY the port plan pre-authorized -
-  the substrate-ON commit owns that, the depth, and the full
-  re-validation list (memo). Dormancy is provably free: the
-  golden hash returns the pre-channel value byte-for-byte.
+  exemption, measurement-forced). THE POND RE-DENSITY landed
+  2026-11-06 at dormant depth (3.2 A lattice, 0.1022
+  atoms/A^3 - real water's own atomic density - in the
+  51.2 x 51.2 x 12.8 A slab, keep-apart construction seeding
+  1024/1024 intact; the pond-based gates re-ran in the same
+  commit), but the re-densified sweep STILL measured phase
+  separation at every shell-building depth: D=0.5 built the
+  first shell (peak g 2.12) with the medium collapsing into
+  dense blobs over vapor by 12k; D=1.0 jammed pairs against
+  the walls (peak 6.15). The structural cause is measured:
+  the model's atoms are ~2x smaller than real atoms'
+  effective sizes, so its liquids live at ~2-3x real
+  density - and the water lattice cannot seed below ~3.2 A,
+  so the pond can never sit at its own liquid's equilibrium.
+  The ACTIVATION sitting owns the choice (phase-separated
+  pond with every gate re-derived on it, or a depth weak
+  enough to hold the seed) and the full re-validation list
+  either way (memo).
   Ladder, rules, and pass history:
   docs/plans/phase-1-kernel.md; port decisions and evidence:
   docs/plans/phase-2-3d-port.md.

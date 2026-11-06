@@ -153,9 +153,15 @@ measured baseline to beat. The channel now exists - a
 like-dissolves-like cohesion well over the elements'
 electronegativities, shipped dormant: the measurement that
 preceded turning it on found the pond (seeded at 0.63x liquid
-density) condenses into a droplet under any useful cohesion,
-so activation waits on the pond re-density decision that
-evidence forced.
+density) condensing into a droplet under any useful cohesion,
+so the pond was re-densified to real water's own 0.10
+atoms/A^3 - and the re-densified sweep STILL measured phase
+separation (the model's atoms are smaller than real atoms,
+so its liquids live denser than a water lattice can seed),
+leaving the activation decision - a self-cohering phase-
+separated pond with every gate re-derived on it, or a depth
+weak enough to hold the seed - as the next sitting's own
+gate, with the sweep evidence recorded.
 
 ## Documentation
 

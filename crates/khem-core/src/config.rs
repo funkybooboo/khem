@@ -122,21 +122,29 @@ pub struct PhysicsConfig {
     /// chi_ref 3.0: the hydrophobic gap from element properties
     /// alone).
     ///
-    /// DEFAULT 0.0 - DORMANT, BY MEASUREMENT (2026-11-04, the
-    /// k2_3_cohesion_sweep evidence): every useful depth condenses
-    /// the seeded pond into a droplet (D=0.25: local density 2.4x
-    /// the box average; D=1.0: ~10x) - a cohesive liquid seeded at
-    /// the pond's 0.0636 atoms/A^3 (0.63x real water's atomic
-    /// density) contracts toward liquid density, exactly as real
-    /// water would. Turning the well on is coupled to the POND
-    /// RE-DENSITY the port plan pre-authorized on evidence
-    /// (phase-2: "Re-derivation, if any, belongs to the re-climb
-    /// evidence") - the substrate-on commit owns that decision,
-    /// the activation, and the full re-validation contract it
-    /// triggers. At 0.0 the well is skipped entirely (and the
-    /// non-bonded query radius stays at the excluded-volume
-    /// cutoff): the trajectory is byte-identical to the
-    /// pre-channel substrate, pinned by the golden hash.
+    /// DEFAULT 0.0 - STILL DORMANT, BY TWO ROUNDS OF MEASUREMENT
+    /// (the k2_3_cohesion_sweep evidence). Round one (2026-11-04,
+    /// the 0.0636 atoms/A^3 pond): every depth >= 0.25 condenses
+    /// the seeded pond into a droplet. Round two (2026-11-06, the
+    /// RE-DENSIFIED 0.1022 atoms/A^3 pond at real water's own
+    /// atomic density): STILL phase-separated - D=0.5 built a
+    /// first shell (peak g 2.12) with the medium collapsing into
+    /// dense blobs over thin vapor by 12k ticks, and D=1.0
+    /// jammed pairs against the walls (peak 6.15). The structural
+    /// cause is now measured: the model's atoms are ~2x smaller
+    /// than real atoms' effective sizes (excluded-volume cutoffs
+    /// 1.5-2 A vs real vdW contacts ~2.8-3.2), so the model's
+    /// liquids live at ~2-3x real liquid density - and the water
+    /// lattice cannot seed below ~3.2 A spacing (adjacent
+    /// waters' hydrogens clash), so the pond can never sit at its
+    /// own liquid's equilibrium. At any shell-building depth the
+    /// pond condenses; that is the physics, not a bug. The
+    /// ACTIVATION sitting owns the choice - phase-separated pond
+    /// with every gate re-derived on it, or a depth weak enough
+    /// to hold the seed - and the full re-validation contract
+    /// either way (the memo's list). At 0.0 the well is skipped
+    /// entirely (and the non-bonded query radius stays at the
+    /// excluded-volume cutoff).
     pub cohesion_scale: f32,
     /// Electronegativity discrimination scale for the well depth
     /// (spec 6.6): strength multiplier max(0, 1 - |chi_a - chi_b|

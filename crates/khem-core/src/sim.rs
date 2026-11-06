@@ -178,13 +178,12 @@ mod tests {
     /// 0xDD4E_87CD_A7FD_94CE (the K1.1 substrate, 2026-09-05).
     /// Pre-fix values live in git history.
     /// Update ONLY with a justification in the commit message.
-    // The K2.1 retune value (non_bonded_repulsion 1.0 -> 8.0). The
-    // K2.3 cohesion well landed 2026-11-04 DORMANT (cohesion_scale
-    // 0.0, by measurement) and this hash proves it: the trajectory
-    // is byte-identical to the pre-channel substrate. The
-    // substrate-on commit (the pond re-density + activation) re-cuts
-    // this hash with its justification.
-    const GOLDEN_HASH: u64 = 0xDE40_651D_ADFF_6361;
+    // Re-cut 2026-11-06 with the pond RE-DENSITY (3.2 A lattice,
+    // 51.2 x 51.2 x 12.8 A box, keep-apart construction with
+    // best-of-N placement; cohesion still dormant - the re-density
+    // is a WORLD change, not a physics change). The K2.1 retune
+    // value for the physics: 0xDE40_651D_ADFF_6361.
+    const GOLDEN_HASH: u64 = 0xF761_ADD4_6DA9_BC26;
 
     fn observer(interval: u64) -> Observer {
         Observer::new(ObserverConfig {

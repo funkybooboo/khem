@@ -178,6 +178,36 @@ forced:
   provably free: at depth 0 the golden hash returns the
   pre-channel value byte-for-byte.
 
+- THE POND RE-DENSITY (2026-11-06) did NOT dissolve the tension:
+  the re-densified pond (3.2 A lattice, 0.1022 atoms/A^3 - real
+  water's own atomic density, 51.2 x 51.2 x 12.8 A slab, keep-
+  apart construction, seeded at 1024/1024 intact) still phase-
+  separated under the well: D=0.5 built a real first shell
+  (peak g 2.12 - but NO trough between shells: the compressed
+  fluid's shells merge) with the medium collapsing into dense
+  blobs over thin vapor by 12k ticks (the occupancy grid shows
+  four sub-blobs mid-coalescence, cores pressed against the
+  walls); D=1.0 jammed pairs against the walls (peak g 6.15).
+  THE STRUCTURAL CAUSE, now measured: the model's atoms are
+  ~2x smaller than real atoms' effective sizes (excluded-volume
+  cutoffs 1.5-2 A against real vdW contacts ~2.8-3.2), so the
+  model's liquids live at ~2-3x real liquid density - and the
+  water lattice cannot seed below ~3.2 A spacing (adjacent
+  waters' hydrogens clash; a random keep-apart water seed at
+  the equilibrium density is a packing problem random draws
+  cannot solve). The pond can never sit at its own liquid's
+  equilibrium: at any shell-building depth it condenses. That
+  is the physics, not a bug. THE ACTIVATION DECISION (its own
+  sitting): accept the phase-separated pond - a self-cohering
+  liquid blob plus vapor, arguably the honest Wrap-world
+  primordial pond, with every pond gate re-derived on it - or
+  pick a depth weak enough to hold the seed and let K2.3's
+  beakers (free-atom worlds, seedable at any density) carry
+  the assembly. The sweep lives in
+  tests/k2_self_assembly.rs (k2_3_cohesion_sweep); the
+  re-densified pond's own gates re-ran at dormant depth in the
+  re-density commit.
+
 ## What the substrate commit owes (the re-validation contract)
 
 The attraction moves every operating point, like the K2.1
