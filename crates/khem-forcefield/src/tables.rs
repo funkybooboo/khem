@@ -65,6 +65,23 @@ pub const SINGLE_REFERENCE: [f32; 10] = [
 ];
 
 /// Bond energy, kJ/mol (spec 7.3 with the fallback rules above).
+/// # Example
+///
+/// ```
+/// use khem_forcefield::{bond_energy, element_id};
+///
+/// let h = element_id("H").unwrap();
+/// let o = element_id("O").unwrap();
+/// let cl = element_id("Cl").unwrap();
+///
+/// // Water's O-H straight from the table (spec 7.3).
+/// assert_eq!(bond_energy(o, h, 1), 463.0);
+/// // Unknown (pair, order) resolves by reference scaling: order 2
+/// // doubles the single-bond reference.
+/// assert_eq!(bond_energy(cl, cl, 1) * 2.0, bond_energy(cl, cl, 2));
+/// // Order is symmetric in the pair.
+/// assert_eq!(bond_energy(h, o, 1), bond_energy(o, h, 1));
+/// ```
 pub fn bond_energy(a: ElementId, b: ElementId, order: u8) -> f32 {
     let (lo, hi) = if a.0 <= b.0 { (a.0, b.0) } else { (b.0, a.0) };
     for (x, y, o, e) in BOND_ENERGY_TABLE {

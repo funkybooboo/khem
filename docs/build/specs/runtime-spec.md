@@ -573,7 +573,7 @@ not because lipids need it. Two honest scope lines:
 conservative everywhere, attractive outside, repulsive inside.
 
 DORMANT BY MEASUREMENT: cohesion_scale ships at 0.0. The
-activation sweep (tests/k2_self_assembly.rs, k2_3_cohesion_sweep)
+activation sweep (khem-engine tests, cohesion_sweep.rs)
 measured every useful depth condensing the seeded pond into a
 droplet (depth 0.25: local density 2.4x the box average; 1.0:
 ~10x) - a cohesive liquid seeded at the pond's 0.0636
@@ -782,7 +782,7 @@ uv_sensitivity defaults per bond order: single 0.0001, double
 ### 8.3 Energy tracking
 
 Total kinetic, bond potential, and field energy are computed as
-diagnostics by the K1 harness (tests/k1_stability.rs) for
+diagnostics by the K1 harness (khem-engine tests) for
 stability-gate measurement. They are NOT fields in the v:1 NDJSON
 schema (3.3 has none); adding them would be an additive schema
 change, made when a consumer needs them.

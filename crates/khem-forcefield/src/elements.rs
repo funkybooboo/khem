@@ -99,6 +99,18 @@ pub const O: ElementId = ElementId(3);
 ///
 /// # Panics
 /// Panics if the id is out of range.
+/// # Example
+///
+/// ```
+/// use khem_forcefield::{element, element_id};
+///
+/// let o = element_id("O").unwrap();
+/// assert_eq!(element(o).symbol, "O");
+/// assert_eq!(element(o).valence, 2);
+/// // The symbols the whole workspace agrees on (the table is
+/// // the canonical element order).
+/// assert_eq!(element(element_id("Cl").unwrap()).atomic_number, 17);
+/// ```
 pub fn element(id: ElementId) -> &'static ElementProperties {
     &ELEMENTS[id.0 as usize]
 }

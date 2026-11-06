@@ -1,110 +1,19 @@
-//! The K2 self-assembly harness (plans/gates/self-assembly.md
-//! gate ladder, milestone K2).
+//! Excluded volume holds: unbonded pairs do not pass through each
+//! other. The always-on scatter smoke, the scattering census gate
+//! (min approach ratio per speed/impact class, honest bounce
+//! energy), and the strength sweep that picked the default
+//! (the F22 record: the strength-1 core failed at the thermal
+//! tail; 8.0 holds every bin with 20% margin, the symplectic
+//! bound the ceiling; 32.0 rejected for minting pair KE).
 //!
-//! Levels:
-//!
-//! - `k2_scatter_smoke` (always on, part of `mise run check`): a
-//!   head-on scattering pass at the shipped defaults stays
-//!   finite, never coincides, never passes through, and never
-//!   mints a large velocity. Cheap regression at the tuned
-//!   constants - the 0.8 * (r_a + r_b) bar is the GATE's
-//!   business; constants are the gate's lever.
-//! - `k2_1_excluded_volume` (gate K2.1; the F4 fix's own
-//!   measurement): free atoms no longer pass through each
-//!   other. Two phases:
-//!   - PHASE A, controlled scattering: pairs launched head-on
-//!     and grazing at closing speeds c x sigma_rel(T = 35 C),
-//!     c in {1, 2, 3} - a common collision, a fast one, and the
-//!     p99 tail a 10k-tick beaker samples routinely - across
-//!     four element classes (H-H the worst tunneling case:
-//!     lightest pair, narrowest cutoff; H-O, O-O, Na-Cl the
-//!     heavy span). Physics-only worlds (Sim's exact sub-step
-//!     structure: index rebuilt after the first sub-step,
-//!     boundary per tick - but no bath, no chemistry, so the
-//!     kinematics are exactly what the integrator produces and
-//!     nothing else), minimum approach measured at EVERY
-//!     sub-step boundary. BARS: min approach >= 0.8 * (r_a +
-//!     r_b) for every pair (the gate's letter); no pass-through
-//!     (the launch-axis projection never flips); no energy mint
-//!     (pair kinetic energy at encounter exit <= 1.10 x launch -
-//!     the F9/F13 law: a crossing resolved by sub-stepping
-//!     samples the wall symmetrically and cannot mint. The pair
-//!     TOTAL is the invariant: unequal-mass bounces legitimately
-//!     trade speed between the atoms).
-//!   - PHASE B, the operating soak: the K1.5 beaker mix (760
-//!     free atoms) at the pond's 35 C operating point and the
-//!     pond's RE-DENSIFIED 0.1022 atoms/A^3 (2026-11-06: a 19.5^3
-//!     Wrap box - the soak must be what the pond feels), FULL
-//!     Sim (bath and chemistry live - bonds form and the census
-//!     excludes them: a bonded pair is the spring's business,
-//!     K1.2's band), 10k ticks, best-of-N placement under the
-//!     pond's own keep-apart law. BAR: no unbonded pair ever
-//!     samples below 0.8 * (r_a + r_b); the closest approach and
-//!     the near-miss census are the reported margin. Phase B is
-//!     what the pond actually feels - the substrate K2.2
-//!     (condensed medium) and K2.3 (amphiphile sorting) run on.
-//!     Run: `mise exec -- cargo test --release -p khem-core
-//!     --test k2_self_assembly -- --ignored --nocapture`
-//! - `k2_2_condensed_medium` (gate K2.2): the pond behaves as
-//!   matter, not free flight. Two bars from the letter, measured
-//!   over the 25k-tick pond's steady tail (the K1.1 windows,
-//!   21k-25k, every 100 ticks):
-//!   - THE CENSUS: most atoms hold a non-bonded INTERMOLECULAR
-//!     neighbor within 3 A (different molecule by the bond
-//!     graph's union-find - a gas of free-flying molecules
-//!     passes a naive census on intramolecular 1,3 pairs, which
-//!     is exactly the free-flight failure this gate exists to
-//!     catch; different-molecule also implies not-bonded, so the
-//!     census needs no is_bonded check).
-//!   - THE STRUCTURE: intermolecular pair distances deviate from
-//!     the uniform reference - the excluded-volume hole. The
-//!     hole is the structure a REPULSION-ONLY substrate can hold
-//!     (spec 6.6 says so; a first-shell peak needs the
-//!     attraction channel, the registered K2.3 design debt), so
-//!     the gate bars the hole and PREREGISTERS the no-peak
-//!     baseline: the measured g(r) has no shell above uniform,
-//!     and the attraction channel's substrate commit re-runs
-//!     this gate and must replace the baseline bar with a peak
-//!     bar - the number the K2.3 memo's design has to beat.
-//!     PASSED 2026-11-04: census 0.978 (bar 0.5; min over samples
-//!     0.973), hole core g <= 0.025 below 1.25 A (bar 0.05), hole
-//!     extent g <= 0.944 below 3.0 A (bar < 1.0), baseline max g
-//!     1.002 beyond 3.0 A (bar 1.05) - the first measured picture
-//!     of the medium: contact-dense, excluded volume held, no
-//!     cohesion (as designed, as documented).
-//!     Run: `mise exec -- cargo test --release -p khem-core
-//!     --test k2_self_assembly k2_2 -- --ignored --nocapture`
-//! - `k2_1_strength_sweep` (the lever probe, not a gate): the
-//!   same phase A across non_bonded_repulsion in {1, 4, 8, 16,
-//!   32} - the curve that picked the default (8.0; PASS record
-//!   above) plus the symplectic bound column (dt_sub * sqrt(S /
-//!   mu) < 2; the pond's spring bound sits at 1.375 for
-//!   comparison). The K1 re-runs the retune forced (the
-//!   re-validation contract: a force change moves every operating
-//!   point) are summarized in the gate's PASS record.
-//!
-//! Design notes:
-//! - The wall's honest failure mode is a HEAD-ON pair with all
-//!   its relative kinetic energy on the line of centers: the
-//!   turning point must sit above 0.8 * (r_a + r_b). Grazing
-//!   bins (impact parameter 0.4 * cutoff) deflect early and
-//!   stress the mint law instead.
-//! - One pair per world: exact attribution, no cross-pair
-//!   interference, and the 40 A box plus the per-bin tick
-//!   budget keeps total relative displacement under the box
-//!   width, so no Wrap image is ever met twice.
-//! - sigma_rel is the per-component relative thermal scale the
-//!   bath's stationary distribution implies for the pair:
-//!   sqrt(thermal_kick_scale * T / mu) - the same law
-//!   thermal_bath drives (physics.rs), evaluated at the pair's
-//!   reduced mass, so the bins are the pond's own speeds by
-//!   construction, not hand-picked numbers.
-//! - The field's temperature units are the pond's own (the 35 C
-//!   setpoint), matching how thermal_bath reads the field.
+//! Gate K2.1 of the self-assembly ladder (PASS records:
+//! plans/gates/self-assembly.md). Run (release):
+//!   cargo test --release -p khem-engine
+//!     --test excluded_volume -- --ignored --nocapture
 
 use khem_engine::{Observer, ObserverConfig, Sim};
+use khem_forcefield::ExcludedVolumeParams;
 use khem_forcefield::ForceField;
-use khem_forcefield::{CohesionParams, ExcludedVolumeParams};
 use khem_physics::{Physics, PhysicsSystem};
 use khem_world::{BoundaryType, ElementId, WorldState};
 
@@ -389,7 +298,7 @@ fn all_state_finite(world: &WorldState) -> bool {
 // ---- Always-on smoke ---------------------------------------------------
 
 #[test]
-fn k2_scatter_smoke() {
+fn scatter_law_smoke() {
     // A head-on H-H pass at twice the thermal scale, at the
     // shipped defaults: finite, no coincidence, no pass-through,
     // no large mint. Cheap regression; the 0.8 bar is the gate's.
@@ -404,8 +313,6 @@ fn k2_scatter_smoke() {
     assert!(!s.crossed, "K2 smoke: the pair passed through");
     assert!(s.mint <= 1.5, "K2 smoke: mint {} too large", s.mint);
 }
-
-// ---- Gate K2.1: excluded volume ---------------------------------------
 
 /// K2.1 EXCLUDED VOLUME (gate ladder; finding F4's fix, spec
 /// 6.6): free atoms no longer pass through each other - the
@@ -431,7 +338,7 @@ fn k2_scatter_smoke() {
 /// `k2_1_strength_sweep` below.
 #[test]
 #[ignore] // explicit: cargo test --release -- --ignored --nocapture
-fn k2_1_excluded_volume() {
+fn nothing_passes_through() {
     let config = ForceField::default();
 
     // ---- Phase A: controlled scattering -----------------------------
@@ -643,323 +550,6 @@ fn k2_1_excluded_volume() {
     );
 }
 
-// ---- Gate K2.2: condensed medium ------------------------------------
-
-/// The intermolecular shell grid for the g(r) measurement: bins
-/// of 0.25 A from 0 to 4.5 A (the first shell of the pond's fluid
-/// sits inside 4.5; the sphere fits the slab's 7.5 A half-depth,
-/// so no minimum-image shell distortion).
-const GR_BIN: f32 = 0.25;
-const GR_MAX: f32 = 4.5;
-
-/// K2.2 CONDENSED MEDIUM (gate ladder): the pond behaves as
-/// matter, not free flight. Measured over the 25k-tick pond's
-/// steady tail (the K1.1 windows, 21k-25k, sampled every 100
-/// ticks), on INTERMOLECULAR pairs only (different molecule by
-/// the bond graph's union-find - intramolecular 1,3 pairs like a
-/// water's own H-H at 1.88 A are real structure but they are
-/// MOLECULAR structure; a gas of free-flying waters would pass a
-/// naive census on them alone, which is the failure this gate
-/// catches):
-///
-/// - CENSUS BAR: the mean (over samples) fraction of atoms
-///   holding a non-bonded intermolecular neighbor within 3.0 A
-///   is >= 0.5 (the letter's "most").
-/// - STRUCTURE BARS: against the uniform reference (rho =
-///   N / V of the Wrap world), the intermolecular g(r) shows
-///   the excluded-volume hole - g <= 0.05 for every shell below
-///   1.25 A (the wall's hard core; the thermal tail can press
-///   small pairs to ~1.0 * r_sum, so the hole's floor is
-///   pair-dependent and the core bar sits below the smallest
-///   pair's standoff) and g < 1.0 for every shell below 3.0 A
-///   (the hole's extent: pair distances deviate from uniform
-///   across the whole contact range - free flight reads g = 1
-///   everywhere).
-/// - BASELINE BAR (preregistered): max g over the 3.0-4.5 A
-///   shells <= 1.05 - the repulsion-only substrate has NO
-///   first-shell peak, by design (spec 6.6 is repulsion-only
-///   and says so; the peak needs the attraction channel, the
-///   registered K2.3 design debt). This bar exists so the
-///   attraction channel's effect is measurable against the
-///   K2.2 baseline: its substrate commit re-runs this gate and
-///   REPLACES this bar with a peak bar. The number is the
-///   target the K2.3 memo's design has to beat.
-///
-/// The pond is the gate's world (not a beaker): 1024 waters on
-/// the port's 3.75 A cubic lattice plus the 360-atom free
-/// sprinkle, the vent, the 35 C setpoint. By the tail the
-/// Langevin diffusion has melted the lattice (O RMS ~ 100+ A
-/// over 20k ticks) - what is measured is the FLUID the substrate
-/// actually holds, the medium K2.3's amphiphiles will swim in.
-fn pond_structure(
-    config: ForceField,
-    t_end: u64,
-    t_sample_start: u64,
-    sample_every: u64,
-    seed: u64,
-) -> (f64, f64, Vec<f64>, u64, u64) {
-    // Runs the pond to t_end, samples the steady structure over
-    // [t_sample_start, t_end] every sample_every ticks, and returns
-    // (census mean, census min, the g(r) table, samples, alive
-    // atoms). The K2.2 gate and the K2.3 cohesion sweep share it.
-    let mut world = khem_worlds::pond::primordial_pond(seed, config);
-    let observer = Observer::new(ObserverConfig {
-        khem_version: "0.1.0",
-        run_name: "k2_harness".to_string(),
-        world_name: "primordial_pond".to_string(),
-        seed,
-        tick_interval: 10_000,
-    });
-    let mut sim = Sim::new(config, observer);
-    let _ = sim.start(&world);
-
-    // Union-find over the alive bonds, per sample: the molecule
-    // identity the census and the g(r) split on. Atom ids are
-    // indexes (spawn order; no compaction in a Wrap world).
-    let n = world.atoms.len();
-    let mut parent = vec![0u32; n];
-    let find = |parent: &mut Vec<u32>, mut x: u32| -> u32 {
-        while parent[x as usize] != x {
-            let grandparent = parent[parent[x as usize] as usize];
-            parent[x as usize] = grandparent;
-            x = grandparent;
-        }
-        x
-    };
-
-    let n_bins = (GR_MAX / GR_BIN) as usize;
-    let mut bin_counts = vec![0u64; n_bins];
-    let mut census_sum = 0.0f64;
-    let mut census_min = f64::INFINITY;
-    let mut samples = 0u64;
-    let mut alive_atoms = 0u64;
-    for t in 1..=t_end {
-        sim.tick(&mut world);
-        if t < t_sample_start || !t.is_multiple_of(sample_every) {
-            continue;
-        }
-        for (i, slot) in parent.iter_mut().enumerate() {
-            *slot = i as u32;
-        }
-        for bond in &world.bonds {
-            if bond.alive {
-                let ra = find(&mut parent, bond.atom_a.0);
-                let rb = find(&mut parent, bond.atom_b.0);
-                if ra != rb {
-                    parent[ra as usize] = rb;
-                }
-            }
-        }
-        let alive = world.atoms.iter().filter(|a| a.alive).count();
-        alive_atoms = alive as u64;
-        let mut within = 0u64;
-        for atom in &world.atoms {
-            if !atom.alive {
-                continue;
-            }
-            let near = world.spatial_index.neighbors(atom.x, atom.y, atom.z, 3.0);
-            let root = find(&mut parent, atom.id.0);
-            let mut nearest = f32::INFINITY;
-            for b_id in near {
-                let b = world.atom(b_id);
-                if !b.alive || b_id == atom.id {
-                    continue;
-                }
-                if find(&mut parent, b_id.0) == root {
-                    continue; // same molecule: intramolecular
-                }
-                let (dx, dy, dz) = world.delta(atom.x, atom.y, atom.z, b.x, b.y, b.z);
-                let r = (dx * dx + dy * dy + dz * dz).sqrt();
-                if r < nearest {
-                    nearest = r;
-                }
-            }
-            if nearest <= 3.0 {
-                within += 1;
-            }
-        }
-        let fraction = within as f64 / alive as f64;
-        census_sum += fraction;
-        census_min = census_min.min(fraction);
-
-        for atom in &world.atoms {
-            if !atom.alive {
-                continue;
-            }
-            let near = world
-                .spatial_index
-                .neighbors(atom.x, atom.y, atom.z, GR_MAX);
-            let root = find(&mut parent, atom.id.0);
-            for b_id in near {
-                if b_id.0 <= atom.id.0 {
-                    continue;
-                }
-                let b = world.atom(b_id);
-                if !b.alive {
-                    continue;
-                }
-                if find(&mut parent, b_id.0) == root {
-                    continue;
-                }
-                let (dx, dy, dz) = world.delta(atom.x, atom.y, atom.z, b.x, b.y, b.z);
-                let r = (dx * dx + dy * dy + dz * dz).sqrt();
-                if r < GR_MAX {
-                    bin_counts[(r / GR_BIN) as usize] += 1;
-                }
-            }
-        }
-        samples += 1;
-    }
-    let census_mean = census_sum / samples.max(1) as f64;
-    let volume = world.width * world.height * world.depth;
-    let rho = alive_atoms as f64 / volume as f64;
-    let mut gr = vec![0.0f64; n_bins];
-    for (b, count) in bin_counts.iter().enumerate() {
-        let r0 = b as f64 * GR_BIN as f64;
-        let r1 = r0 + GR_BIN as f64;
-        let v_bin = 4.0 * std::f64::consts::PI / 3.0 * (r1.powi(3) - r0.powi(3));
-        let expected = 0.5 * alive_atoms as f64 * rho * v_bin * samples as f64;
-        gr[b] = *count as f64 / expected.max(1.0);
-    }
-    (census_mean, census_min, gr, samples, alive_atoms)
-}
-
-/// K2.2 CONDENSED MEDIUM (gate ladder): the pond behaves as
-/// matter, not free flight. Measured over the 25k-tick pond's
-/// steady tail (the K1.1 windows, 21k-25k, sampled every 100
-/// ticks), on INTERMOLECULAR pairs only (different molecule by
-/// the bond graph's union-find - intramolecular 1,3 pairs like
-/// a water's own H-H at 1.88 A are real structure but they are
-/// MOLECULAR structure; a gas of free-flying waters would pass
-/// a naive census on them alone, which is the failure this gate
-/// catches).
-#[test]
-#[ignore] // explicit: cargo test --release -- --ignored --nocapture
-fn k2_2_condensed_medium() {
-    let config = ForceField::default();
-    eprintln!(
-        "K2.2: the pond, 25k ticks, sampling the steady tail \
-         (21k-25k every 100 ticks)"
-    );
-    let (census_mean, census_min, gr, samples, alive) =
-        pond_structure(config, 25_000, 21_000, 100, 42);
-    eprintln!(
-        "K2.2 census: mean {census_mean:.3} (bar >= 0.5), min {census_min:.3}, \
-         over {samples} samples ({alive} atoms)"
-    );
-    eprintln!("K2.2 g(r) vs uniform:");
-    for (b, g) in gr.iter().enumerate() {
-        let r0 = b as f64 * GR_BIN as f64;
-        let r1 = r0 + GR_BIN as f64;
-        eprintln!("  r [{r0:.2},{r1:.2}): g {g:.3}");
-    }
-
-    // ---- The bars ----------------------------------------------------
-    assert!(
-        census_mean >= 0.5,
-        "K2.2 FAIL: census mean {census_mean:.3} < 0.5 - the pond \
-         is not holding most atoms in intermolecular contact"
-    );
-    let hole_core_max = gr
-        .iter()
-        .take((1.25f32 / GR_BIN) as usize)
-        .cloned()
-        .fold(0.0f64, f64::max);
-    assert!(
-        hole_core_max <= 0.05,
-        "K2.2 FAIL: the excluded-volume core is not clean - g \
-         {hole_core_max:.3} below 1.25 A (bar 0.05)"
-    );
-    let hole_extent_max = gr
-        .iter()
-        .take((3.0f32 / GR_BIN) as usize)
-        .cloned()
-        .fold(0.0f64, f64::max);
-    assert!(
-        hole_extent_max < 1.0,
-        "K2.2 FAIL: the hole does not extend - g {hole_extent_max:.3} \
-         at or above uniform below 3.0 A"
-    );
-    // The preregistered baseline: repulsion-only cannot build a
-    // first shell (spec 6.6); the attraction channel's commit
-    // re-runs this gate and replaces this bar with a peak bar.
-    let baseline_max = gr
-        .iter()
-        .skip((3.0f32 / GR_BIN) as usize)
-        .cloned()
-        .fold(0.0f64, f64::max);
-    assert!(
-        baseline_max <= 1.05,
-        "K2.2: the repulsion-only baseline moved - g {baseline_max:.3} \
-         beyond 3.0 A (baseline bar 1.05); if the attraction \
-         channel landed, replace this bar with a peak bar and \
-         re-run per the contract"
-    );
-    eprintln!(
-        "K2.2 PASS: census {census_mean:.3} (bar 0.5), hole core \
-         {hole_core_max:.3} (<= 0.05), hole extent max \
-         {hole_extent_max:.3} (< 1.0 below 3 A), baseline \
-         {baseline_max:.3} (<= 1.05 - no shell, as designed)"
-    );
-}
-
-/// The K2.3 cohesion lever curve: the pond's structure across
-/// cohesion_scale values (12k-tick runs, sampling 10k-12k every
-/// 50 ticks - the pre-settle window is fine for a SHAPE
-/// comparison across values; the official K2.2 re-run at 25k
-/// carries the chosen value). Not a gate: the evidence tool
-/// whose value, and the re-validation it owes, live in the K2.3
-/// records.
-///
-/// THE MEASURED FINDING (2026-11-04, why the channel ships
-/// DORMANT): every useful depth condenses the seeded pond into
-/// a droplet - depth 0.25: first shell 3.5 with the g(r)
-/// plateauing at ~2.4-3.0x the box average (local density ~2.4x;
-/// the first shell reads 1.18 RELATIVE TO THE LOCAL density);
-/// depth 0.5: similar; depth 1.0: g ~ 8.8-11.4 everywhere (a
-/// ~10x clump). A cohesive liquid seeded at the pond's 0.0636
-/// atoms/A^3 (0.63x real water's atomic density) contracts
-/// toward liquid density, exactly as real water would - the
-/// pond RE-DENSITY the port plan pre-authorized on evidence is
-/// the named blocker for activation; see the memo's revision
-/// log.
-#[test]
-#[ignore] // explicit: cargo test --release -- --ignored --nocapture
-fn k2_3_cohesion_sweep() {
-    for cohesion in [0.5f32, 1.0] {
-        let config = ForceField {
-            cohesion: CohesionParams {
-                cohesion_scale: cohesion,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        eprintln!("K2.3 cohesion sweep: cohesion_scale {cohesion}");
-        let (census_mean, census_min, gr, samples, alive) =
-            pond_structure(config, 12_000, 10_000, 50, 42);
-        let peak = gr.iter().cloned().fold(0.0f64, f64::max);
-        let peak_bin = gr
-            .iter()
-            .enumerate()
-            .max_by(|a, b| a.1.total_cmp(b.1))
-            .map(|(i, _)| i)
-            .unwrap_or(0);
-        eprintln!(
-            "  census {census_mean:.3} (min {census_min:.3}), peak g \
-             {peak:.3} at [{:.2},{:.2}), {samples} samples, {alive} atoms",
-            peak_bin as f64 * GR_BIN as f64,
-            peak_bin as f64 * GR_BIN as f64 + GR_BIN as f64
-        );
-        eprintln!(
-            "  g(r): {}",
-            gr.iter()
-                .map(|g| format!("{g:.2}"))
-                .collect::<Vec<_>>()
-                .join(" ")
-        );
-    }
-}
-
 /// The strength sweep that picks non_bonded_repulsion's default:
 /// phase A's head-on bins (the binding case) across
 /// {1, 4, 8, 16, 32}, with the symplectic bound column
@@ -970,7 +560,7 @@ fn k2_3_cohesion_sweep() {
 /// they deflect early and never bind the decision.
 #[test]
 #[ignore] // explicit: cargo test --release -- --ignored --nocapture
-fn k2_1_strength_sweep() {
+fn wall_strength_sweep() {
     for strength in [1.0f32, 4.0, 8.0, 16.0, 32.0] {
         let config = ForceField {
             excluded_volume: ExcludedVolumeParams {

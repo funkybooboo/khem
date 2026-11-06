@@ -163,7 +163,7 @@ forced:
 - The intermolecular scope line (the 1,3 exemption) landed as
   a measurement-forced rule, documented above.
 - THE POND RE-DENSITY is the named blocker for activation:
-  the sweep (tests/k2_self_assembly.rs, k2_3_cohesion_sweep)
+  the sweep (khem-engine tests, cohesion_sweep.rs)
   measured every useful depth condensing the seeded pond
   (0.0636 atoms/A^3, 0.63x real water) into a droplet - depth
   0.25: local density 2.4x the box average with a real first
@@ -204,7 +204,7 @@ forced:
   pick a depth weak enough to hold the seed and let K2.3's
   beakers (free-atom worlds, seedable at any density) carry
   the assembly. The sweep lives in
-  tests/k2_self_assembly.rs (k2_3_cohesion_sweep); the
+  khem-engine tests (cohesion_sweep.rs); the
   re-densified pond's own gates re-ran at dormant depth in the
   re-density commit.
 

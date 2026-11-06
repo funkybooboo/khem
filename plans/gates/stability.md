@@ -3,7 +3,10 @@
 K1 is CLOSED: passed in 2D 2026-09-05/07, re-climbed in 3D
 2026-09-08 (the port's exit criterion), re-validated 2026-11-04
 at the K2.1 core retune (the re-validation contract). The
-harness is crates/khem-core/tests/k1_stability.rs; the
+harness is the behavior-named gate files in
+crates/khem-engine/tests/ (one per gate: thermostat_holds_setpoint,
+force_sanity, water_molecules_persist, reactive_balance,
+seam_symmetry; the
 methodology and the contract live in [README.md](../README.md).
 Findings cited as Fn live in
 docs/build/research/abstraction-notes.md.
@@ -25,8 +28,7 @@ F20.
 
 Langevin damping toward the local field temperature. PASSED
 2026-09-05: KE/atom window drift -5.7%, mean bond length +0.5%
-over the 10k-tick vented run (tests/k1_stability.rs, release
---ignored). The pass required the substrate corrections F8-F16
+over the 10k-tick vented run (the khem-engine gate tests, release --ignored). The pass required the substrate corrections F8-F16
 (findings log in docs/build/research/abstraction-notes.md) and the
 setpoint reservoir + vent (spec 6.1/6.2/11 synced).
 
@@ -81,7 +83,7 @@ per atom against the analytic single-tick Hooke bound
 k * r_eq / m = 0.048; the mean per-bond stretch ratio holds
 1.000-1.002 (p95 <= 1.013, worst sample 13/1496 bonds outside
 the band) at every sample of the same 10k-tick vented run
-(tests/k1_stability.rs, release --ignored).
+(crates/khem-engine/tests/force_sanity.rs, release --ignored).
 
 RE-VALIDATED 2026-09-07 in K1.3's integrator commit (stiffer
 springs move the operating point): PASS - probe under the
@@ -162,7 +164,7 @@ A beaker of free atoms settles to a STATIONARY molecule-size
 distribution - weak bonds break (O-O on a ~10k-tick scale), strong
 ones persist; no runaway crosslinking, no frozen inertness;
 formation refrigeration (F6) stays bounded and recovers. PASSED
-2026-09-07 over a 20k-tick vented run (tests/k1_stability.rs,
+2026-09-07 over a 20k-tick vented run (khem-engine tests,
 release --ignored), every bar measured:
 
 - the field dips to avg 12.2 C during the construction burst (each

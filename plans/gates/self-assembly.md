@@ -17,7 +17,9 @@ density ~0.033 molecules/A^3 held uniform (no blobs), O-O
 first shell ~2.8 A, coordination ~4, measurable tetrahedral
 order, the gates still passing, tick cost within +10-20%.
 
-The harness is crates/khem-core/tests/k2_self_assembly.rs; the
+The harness is the behavior-named gate files in
+crates/khem-engine/tests/ (excluded_volume.rs, liquid_structure.rs,
+cohesion_sweep.rs); the
 methodology lives in [README.md](../README.md).
 
 ---
@@ -36,7 +38,7 @@ minimum approach distance >= 0.8 * (r_a + r_b) in a scattering
 test. (Implemented with the K1.1 substrate work, spec 6.6; the
 scattering-test PASS run is the gate's own commit.)
 
-PASSED 2026-11-04 (tests/k2_self_assembly.rs: the gate, the
+PASSED 2026-11-04 (khem-engine tests: the gate, the
 strength-sweep probe, and an always-on smoke) - and the gate
 EARNED ITS KEEP BEFORE IT PASSED. The harness, two phases:
 
@@ -123,7 +125,7 @@ The pond behaves as matter, not free flight - most atoms hold a
 non-bonded neighbor within 3 A, and pair distances show
 structure.
 
-PASSED 2026-11-04 (tests/k2_self_assembly.rs: the 25k-tick pond,
+PASSED 2026-11-04 (khem-engine tests: the 25k-tick pond,
 steady tail sampled every 100 ticks over 21k-25k; INTERMOLECULAR
 pairs only - different molecule by the bond graph's union-find:
 intramolecular 1,3 pairs are molecular structure, and a gas of
