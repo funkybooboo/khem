@@ -572,16 +572,58 @@ not because lipids need it. Two honest scope lines:
   at the force level). The quartic is the step-free shape:
 conservative everywhere, attractive outside, repulsive inside.
 
+DIRECTIONAL HYDROGEN BOND (implemented 2026-11-06, dormant on
+implementation; ADR-0014's approved cheap addition - the
+mW / Stillinger-Weber / Mercedes-Benz lineage: tetrahedral
+liquids from a cheap directional term, no charges, no quantum
+core). A donor (an H bonded to O, N, or S) attracts an acceptor
+(O, N, or S) through the SAME double-sided quartic well shape
+as the cohesion channel, weighted by the ALIGNMENT of the
+donor->H bond vector with the H->acceptor direction:
+
+    weight(a, b) = max(0, cos(angle(D->H, H->acc)))^2
+    w            = hbond_range - hbond_contact
+    x            = r - hbond_contact
+    U(x)         = -hbond_scale * weight * 16 x^2 (w - x)^2 / w^4
+    F            = -dU/dr (restoring toward the bracket midpoint,
+                  zero at both ends; one dot product per pair,
+                  zero RAM)
+
+The well spans [hbond_contact, hbond_range] (defaults 1.5, 2.6
+angstroms; the midpoint 2.05 A is real water's H...O contact
+neighborhood) and SUPERPOSES with the excluded-volume wall: the
+real hydrogen bond's minimum sits INSIDE the nominal van der
+Waals standoff (1.9 A against 2.7 - the Pauli exception), so a
+net attractive well inside the wall is the law, not a bug; where
+the NET minimum lands is the activation's own measured bar.
+Exemptions mirror the cohesion well: bonded pairs never reach
+the channel (the caller skips them), and same-molecule 1,3 pairs
+are exempt - a molecule's own atoms must not bond through the
+back door. Also smuggled PHYSICS, documented as such: the
+substrate has directional hydrogen bonds because water's
+structure is directional, and the alignment is the cheap
+essence of the real orbital mechanism.
+
 DORMANT BY MEASUREMENT: cohesion_scale ships at 0.0. The
 activation sweep (khem-engine tests, cohesion_sweep.rs)
 measured every useful depth condensing the seeded pond into a
 droplet (depth 0.25: local density 2.4x the box average; 1.0:
 ~10x) - a cohesive liquid seeded at the pond's 0.0636
 atoms/A^3 contracts toward liquid density, exactly as real
-water would. Activation is coupled to the POND RE-DENSITY the
-port plan pre-authorized on evidence; at 0.0 the well is
-skipped and the trajectory is byte-identical to the
-pre-channel substrate (pinned by the golden hash).
+water would. The POND RE-DENSITY landed 2026-11-06 (0.1022
+atoms/A^3, real water's own atomic density) and the re-densified
+sweep STILL measured phase separation at every shell-building
+depth (0.5: first shell peak g 2.12 with dense blobs over vapor
+by 12k; 1.0: jammed, 6.15) - the structural cause is the atom
+scale itself: the model's atoms are ~2x smaller than real
+effective sizes, so its liquids live at 2-3x real density and
+the water lattice cannot seed below 3.2 A. Activation is now
+owned by the REAL-WATER SUBSTRATE SITTING (ADR-0014): the wall
+rescale (margin toward real first-shell geometry), this
+hydrogen-bond scale, and the cohesion depth re-derived at the
+new geometry - one sitting, one re-validation. At 0.0 both
+channels are skipped and the trajectory is byte-identical to
+the pre-channel substrate (pinned by the golden hash).
 
 ### 6.7 Boundaries
 
@@ -937,6 +979,18 @@ measurements that changed them:
     chi_ref               3.0      // electronegativity
                                      // discrimination (6.6)
     attraction_range      4.0      // flat well range, A (6.6)
+    hbond_scale           0.0      // directional hydrogen-bond
+                                     // depth (6.6); dormant on
+                                     // implementation - the
+                                     // real-water substrate
+                                     // sitting owns activation
+    hbond_contact         1.5      // H-bond well inner bracket,
+                                     // A (6.6); the wall owns the
+                                     // hard overlap below this
+    hbond_range           2.6      // H-bond well outer bracket,
+                                     // A (6.6); midpoint 2.05 A
+                                     // = real water's H...O
+                                     // contact neighborhood
     non_bonded_margin      1.5      // cutoff = (r_a + r_b) *
                                      // margin (6.6)
 

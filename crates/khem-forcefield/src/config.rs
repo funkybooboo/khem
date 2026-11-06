@@ -116,6 +116,62 @@ pub struct ExcludedVolumeParams {
     pub non_bonded_margin: f32,
 }
 
+/// The directional hydrogen bond (spec 6.6's third channel):
+/// donor-H...acceptor attraction weighted by alignment - the
+/// cheap essence of the real thing (the mW / Stillinger-Weber /
+/// Mercedes-Benz lineage: tetrahedral liquids from a cheap
+/// directional term; ADR-0014).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HbondParams {
+    /// Directional hydrogen-bond strength scale. A donor (an H
+    /// bonded to O/N/S) attracts an acceptor (O/N/S) through the
+    /// SAME double-sided quartic well shape as the cohesion
+    /// channel (the F18 lesson at the force level: a pure
+    /// attraction ramp collapses pairs through the wall once its
+    /// slope beats the wall's), weighted by the ALIGNMENT of the
+    /// donor->H bond vector with the H->acceptor direction -
+    /// `alignment^2`, floored at 0, one dot product in the
+    /// already-visited pair loop, zero RAM.
+    ///
+    /// The well spans [hbond_contact, hbond_range] with its
+    /// minimum at the bracket's midpoint; the wall superposes
+    /// (the real H...O contact at ~1.9 A sits INSIDE the nominal
+    /// van der Waals standoff - the Pauli exception), so the NET
+    /// minimum's position is this scale's own bar to hold,
+    /// measured by the sitting.
+    ///
+    /// DEFAULT 0.0 - DORMANT ON IMPLEMENTATION: the channel lands
+    /// with the real-water substrate sitting (ADR-0014), which
+    /// owns the margin rescale, this scale, and the cohesion
+    /// re-derivation as ONE sitting with ONE re-validation. At
+    /// 0.0 the channel is skipped entirely and the query radius
+    /// is unchanged (the golden hash pins the byte-identical
+    /// trajectory, the dormant-channel precedent).
+    pub hbond_scale: f32,
+    /// The hydrogen-bond well's inner bracket, angstroms: below
+    /// this contact there is no hydrogen-bond force (the wall
+    /// owns the hard overlap - real Pauli repulsion takes over
+    /// below ~1.5 A). With `hbond_range` 2.6 the well's own
+    /// minimum sits at (1.5 + 2.6) / 2 = 2.05 A, the real
+    /// H...O contact's neighborhood.
+    pub hbond_contact: f32,
+    /// Maximum H...acceptor distance, angstroms. Real hydrogen
+    /// bonds run ~1.5-2.6 A with the well minimum at ~1.9; 2.6
+    /// covers the tail without touching the O...O first shell's
+    /// far side.
+    pub hbond_range: f32,
+}
+
+impl Default for HbondParams {
+    fn default() -> Self {
+        Self {
+            hbond_scale: 0.0,
+            hbond_contact: 1.5,
+            hbond_range: 2.6,
+        }
+    }
+}
+
 /// The like-dissolves-like cohesion well (spec 6.6's attraction;
 /// the polarity-attraction memo's law).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -356,6 +412,8 @@ pub struct ForceField {
     pub excluded_volume: ExcludedVolumeParams,
     /// Like-dissolves-like cohesion well (spec 6.6, dormant).
     pub cohesion: CohesionParams,
+    /// Directional hydrogen bond (spec 6.6, dormant).
+    pub hbond: HbondParams,
     /// The mechanical bond spring and its breaking limit
     /// (spec 6.3, 7.1).
     pub bonds: BondParams,
@@ -482,6 +540,9 @@ mod tests {
         assert_eq!(c.cohesion.cohesion_scale, 0.0);
         assert_eq!(c.cohesion.chi_ref, 3.0);
         assert_eq!(c.cohesion.attraction_range, 4.0);
+        assert_eq!(c.hbond.hbond_scale, 0.0);
+        assert_eq!(c.hbond.hbond_contact, 1.5);
+        assert_eq!(c.hbond.hbond_range, 2.6);
         assert_eq!(c.bonds.spring_energy_scale, 0.032);
         assert_eq!(c.integrator.integration_substeps, 4);
         assert_eq!(

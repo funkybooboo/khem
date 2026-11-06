@@ -384,6 +384,9 @@ impl Physics {
         let cohesion = self.config.cohesion.cohesion_scale;
         let chi_ref = self.config.cohesion.chi_ref;
         let attract_range = self.config.cohesion.attraction_range;
+        let hbond_scale = self.config.hbond.hbond_scale;
+        let hbond_contact = self.config.hbond.hbond_contact;
+        let hbond_range = self.config.hbond.hbond_range;
         let max_radius = world
             .element_table
             .iter()
@@ -407,16 +410,19 @@ impl Physics {
             let r_a = world.element(a_el).radius;
             // The query must cover the widest pair interaction:
             // the wall reaches margin * (r_a + r_b), the well the
-            // flat attraction_range (a MAX, not a multiplier).
-            // At cohesion_scale 0 the well is skipped entirely, so
-            // the query stays at the excluded-volume cutoff - the
-            // dormant channel costs nothing (the golden hash
-            // pins the byte-identical trajectory).
-            let query = if cohesion > 0.0 {
-                ((r_a + max_radius) * margin).max(attract_range)
-            } else {
-                (r_a + max_radius) * margin
-            };
+            // flat attraction_range (a MAX, not a multiplier),
+            // the hydrogen bond its own flat range. Dormant
+            // channels are skipped entirely, so the query stays
+            // at the excluded-volume cutoff - the dormant
+            // channels cost nothing (the golden hash pins the
+            // byte-identical trajectory).
+            let mut query = (r_a + max_radius) * margin;
+            if cohesion > 0.0 {
+                query = query.max(attract_range);
+            }
+            if hbond_scale > 0.0 {
+                query = query.max(hbond_range);
+            }
             let candidates = world.spatial_index.neighbors(ax, ay, az, query);
             for b_id in candidates {
                 if b_id.0 <= a_id.0 {
@@ -440,20 +446,53 @@ impl Physics {
                 // The radial force along the a-to-b axis: positive
                 // pushes the pair apart, negative pulls them
                 // together (the application below is shared).
-                let f = if r < cutoff {
+                // Channels superpose; the pair falls through to
+                // the application only if some channel acted.
+                let mut f = 0.0f32;
+                let mut acted = false;
+                if r < cutoff {
                     // Excluded volume: the soft linear core.
-                    -strength * (cutoff - r)
-                } else if r >= attract_range || cohesion <= 0.0 {
+                    f -= strength * (cutoff - r);
+                    acted = true;
+                }
+                if hbond_scale > 0.0 && r >= hbond_contact && r < hbond_range {
+                    // The directional hydrogen bond (spec 6.6's
+                    // third channel): donor-H...acceptor, weighted
+                    // by alignment. Superposes with the wall - the
+                    // real H-bond minimum sits INSIDE the nominal
+                    // contact (the Pauli exception), so a net
+                    // attractive well at ~1.9 A is the law, not a
+                    // bug.
+                    let hb = hydrogen_bond_force(
+                        world,
+                        &PairGeometry {
+                            a_id,
+                            b_id,
+                            dx,
+                            dy,
+                            dz,
+                            r,
+                            a_el,
+                            b_el,
+                        },
+                        hbond_scale,
+                        hbond_contact,
+                        hbond_range,
+                    );
+                    if hb != 0.0 {
+                        f += hb;
+                        acted = true;
+                    }
+                }
+                if r >= attract_range || cohesion <= 0.0 {
                     // Outside the well, or the channel dormant
                     // (spec 6.6: the 0.0 default skips everything
                     // and the query stays at the cutoff).
-                    continue;
                 } else if world.shares_bonded_neighbor(a_id, b_id) {
                     // The cohesion well is INTERMOLECULAR (spec
                     // 6.6): same-molecule 1,3 pairs are exempt - a
                     // water's own H-H must not pull its angle open;
                     // the repulsion above still owns real sterics.
-                    continue;
                 } else {
                     // The cohesion well: the zero-net-force quartic
                     // bump over x in (0, w), w = the flat range
@@ -469,13 +508,17 @@ impl Physics {
                         - world.element(b_el).electronegativity)
                         .abs();
                     let depth = cohesion * (1.0 - chi_gap / chi_ref);
-                    if depth <= 0.0 {
-                        continue;
+                    if depth > 0.0 {
+                        let w = attract_range - cutoff;
+                        let x = r - cutoff;
+                        f -= depth * 32.0 * x * (w - x) * (w - 2.0 * x) / (w * w * w * w);
+                        acted = true;
                     }
-                    let w = attract_range - cutoff;
-                    let x = r - cutoff;
-                    -depth * 32.0 * x * (w - x) * (w - 2.0 * x) / (w * w * w * w)
-                };
+                }
+                if !acted {
+                    continue;
+                }
+                let f = f;
                 let (ux, uy, uz) = (dx / r, dy / r, dz / r);
                 self.fx[i] += f * ux;
                 self.fy[i] += f * uy;
@@ -486,6 +529,186 @@ impl Physics {
             }
         }
     }
+}
+
+/// One unbonded pair's geometry as the hydrogen-bond channel
+/// reads it - the pair loop's locals, bundled (the loop owns one
+/// per visited pair; the channel reads it by value).
+pub struct PairGeometry {
+    pub a_id: khem_world::AtomId,
+    pub b_id: khem_world::AtomId,
+    /// Minimum-image delta a->b, angstroems.
+    pub dx: f32,
+    pub dy: f32,
+    pub dz: f32,
+    /// True pair distance, angstroems.
+    pub r: f32,
+    pub a_el: khem_world::ElementId,
+    pub b_el: khem_world::ElementId,
+}
+
+/// The directional hydrogen-bond force for one unbonded pair,
+/// or 0.0 if this pair is not a donor-H...acceptor contact.
+///
+/// A donor is an H bonded to O, N, or S; an acceptor is any O, N,
+/// or S. The well is the SAME double-sided quartic shape as the
+/// cohesion channel - zero force at both bracket ends, restoring
+/// toward the midpoint - over `[contact, range]`, scaled by
+/// `scale` and weighted by the ALIGNMENT of the donor->H bond
+/// vector with the H->acceptor direction: the squared cosine,
+/// floored at zero (one dot product). Sign convention (the pair
+/// loop's): positive pulls the pair together.
+///
+/// Why a bounded well and not an attraction ramp: a ramp whose
+/// slope beats the wall's keeps pulling INSIDE the wall and
+/// collapses the pair through the overlap - the measured failure
+/// mode the cohesion channel's shape was chosen against (F18 at
+/// the force level).
+///
+/// Exemptions: pairs bonded to each other never reach this code
+/// (the caller skips them); intramolecular pairs (sharing a
+/// bonded neighbor) are exempt, exactly like the cohesion well -
+/// a water's own H must not bond its own O through the back door.
+///
+/// # Example
+///
+/// ```
+/// # use khem_forcefield::{element_id, ForceField};
+/// # use khem_world::{BoundaryType, WorldState};
+/// // An O-H donor pointing at a free O acceptor: inside the
+/// // well's OUTER slope the contact attracts (the Pauli
+/// // exception - inside the wall's nominal standoff).
+/// let config = ForceField {
+///     hbond: khem_forcefield::HbondParams {
+///         hbond_scale: 1.0,
+///         ..ForceField::default().hbond
+///     },
+///     ..ForceField::default()
+/// };
+/// let mut w = WorldState::new(40.0, 40.0, 40.0, BoundaryType::Wrap, 1, config);
+/// let o = element_id("O").unwrap();
+/// let h = element_id("H").unwrap();
+/// let d = w.spawn_atom(o, 10.0, 10.0, 10.0); // donor heavy atom
+/// let hy = w.spawn_atom(h, 11.19, 10.0, 10.0); // its H along +x
+/// let acc = w.spawn_atom(o, 12.89, 10.0, 10.0); // H...O = 1.7 A, outside the wall
+/// w.form_bond(d, hy, 1, 463.0);
+/// // The H sits at +x from its donor; the acceptor further +x:
+/// // perfectly aligned.
+/// let f = khem_physics::hydrogen_bond_force(
+///     &w,
+///     &khem_physics::PairGeometry {
+///         a_id: hy, b_id: acc,
+///         dx: 12.89 - 11.19, dy: 0.0, dz: 0.0,
+///         r: 1.7, a_el: h, b_el: o,
+///     },
+///     1.0, 1.5, 2.6);
+/// // 1.7 A is inside the well's midpoint (2.05): the restoring
+/// // force pushes the pair APART, toward the minimum - the
+/// // well's own letter.
+/// assert!(f < 0.0, "inside the minimum the well restores outward, got {f}");
+/// // Outside the midpoint the well attracts: at 2.3 A the pair
+/// // pulls together, toward the minimum.
+/// let f2 = khem_physics::hydrogen_bond_force(
+///     &w,
+///     &khem_physics::PairGeometry {
+///         a_id: hy, b_id: acc,
+///         dx: 13.49 - 11.19, dy: 0.0, dz: 0.0,
+///         r: 2.3, a_el: h, b_el: o,
+///     },
+///     1.0, 1.5, 2.6);
+/// assert!(f2 > 0.0, "outside the minimum the well attracts, got {f2}");
+/// // Misaligned (the bond vector orthogonal to H->acceptor):
+/// // silence - the direction IS the bond.
+/// let f3 = khem_physics::hydrogen_bond_force(
+///     &w,
+///     &khem_physics::PairGeometry {
+///         a_id: hy, b_id: acc,
+///         dx: 0.0, dy: 2.3, dz: 0.0,
+///         r: 2.3, a_el: h, b_el: o,
+///     },
+///     1.0, 1.5, 2.6);
+/// assert_eq!(f3, 0.0, "an orthogonal donor is silent");
+/// ```
+pub fn hydrogen_bond_force(
+    world: &WorldState,
+    pair: &PairGeometry,
+    scale: f32,
+    contact: f32,
+    range: f32,
+) -> f32 {
+    let PairGeometry {
+        a_id,
+        b_id,
+        dx,
+        dy,
+        dz,
+        r,
+        a_el,
+        b_el,
+    } = *pair;
+    if scale <= 0.0 || r < contact || r >= range {
+        return 0.0;
+    }
+    let is_en = |el: khem_world::ElementId| {
+        matches!(world.element(el).atomic_number, 7 | 8 | 16) // N, O, S
+    };
+    let is_h = |el: khem_world::ElementId| world.element(el).atomic_number == 1;
+    // Identify the donor-H side of the pair.
+    let (h_id, h_to_acc) = if is_h(a_el) && is_en(b_el) {
+        (a_id, (dx, dy, dz))
+    } else if is_h(b_el) && is_en(a_el) {
+        (b_id, (-dx, -dy, -dz))
+    } else {
+        return 0.0;
+    };
+    // Intramolecular pairs are exempt (the cohesion well's rule).
+    if world.shares_bonded_neighbor(a_id, b_id) {
+        return 0.0;
+    }
+    // The donor heavy atom: the O/N/S bonded to this H.
+    let h_atom = world.atom(h_id);
+    let mut donor = None;
+    for bond_id in h_atom.bond_ids() {
+        let bond = world.bond(bond_id);
+        let other = if bond.atom_a == h_id {
+            bond.atom_b
+        } else {
+            bond.atom_a
+        };
+        if is_en(world.atom(other).element) {
+            donor = Some(other);
+            break;
+        }
+    }
+    let Some(d_id) = donor else {
+        return 0.0; // an H bonded to carbon is not a donor
+    };
+    let d_atom = world.atom(d_id);
+    let (bhx, bhy, bhz) = (
+        h_atom.x - d_atom.x,
+        h_atom.y - d_atom.y,
+        h_atom.z - d_atom.z,
+    );
+    let bh_len = (bhx * bhx + bhy * bhy + bhz * bhz).sqrt();
+    if bh_len < f32::EPSILON {
+        return 0.0;
+    }
+    // Alignment: the donor->H bond direction against the
+    // H->acceptor direction. Squared cosine, floored at zero -
+    // pointing away is silence, not repulsion.
+    let cos = (bhx * h_to_acc.0 + bhy * h_to_acc.1 + bhz * h_to_acc.2) / (bh_len * r);
+    if cos <= 0.0 {
+        return 0.0;
+    }
+    let weight = cos * cos;
+    // The quartic well over the bracket [contact, range]: zero
+    // force at both ends, restoring toward the midpoint, with
+    // the sign flipped from the cohesion formula's (that well
+    // also restores toward its midpoint - identical law, written
+    // from the same convention).
+    let w = range - contact;
+    let x = r - contact;
+    -scale * weight * 32.0 * x * (w - x) * (w - 2.0 * x) / (w * w * w * w)
 }
 
 impl Physics {
@@ -668,7 +891,7 @@ impl PhysicsSystem for Physics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use khem_forcefield::{CohesionParams, ExcludedVolumeParams, IntegratorParams};
+    use khem_forcefield::{CohesionParams, ExcludedVolumeParams, HbondParams, IntegratorParams};
     use khem_world::{BondId, ElementId};
 
     fn world(seed: u64, boundary: BoundaryType) -> WorldState {
@@ -835,6 +1058,225 @@ mod tests {
             (w.atom(e).bond_count, w.atom(g).bond_count),
             (0, 0),
             "distant pair: no forces, no bonds"
+        );
+    }
+
+    /// The H-bond channel's system: hbond_scale 1.0 (the
+    /// channel's shipped default is 0.0 - dormant on
+    /// implementation; the unit tests pin the LAW, so they turn
+    /// it on explicitly).
+    fn physics_with_hbond() -> Physics {
+        Physics::new(ForceField {
+            hbond: HbondParams {
+                hbond_scale: 1.0,
+                ..ForceField::default().hbond
+            },
+            ..ForceField::default()
+        })
+    }
+
+    #[test]
+    fn hbond_well_restores_toward_its_minimum() {
+        // The directional hydrogen-bond law: an ALIGNED donor-H
+        // ... acceptor pair feels the bounded quartic well - zero
+        // at the contact bracket, restoring toward the midpoint
+        // (contact 1.5 + range 2.6 -> minimum 2.05 A). Inside
+        // the midpoint the pair is pushed apart; outside it is
+        // pulled together.
+        let o = ElementId(3);
+        let h = ElementId(0);
+        // A donor water's H at the origin pointing +x at a free
+        // acceptor O.
+        let mut w = world(1, BoundaryType::Wrap);
+        let d = w.spawn_atom(o, 50.0, 50.0, 50.0);
+        let hy = w.spawn_atom(h, 51.19, 50.0, 50.0);
+        let acc = w.spawn_atom(o, 52.89, 50.0, 50.0); // H...O = 1.7 A
+        w.form_bond(d, hy, 1, 463.0);
+        w.spatial_index.rebuild(&w.atoms);
+        physics_with_hbond().update_velocities(&mut w);
+        // 1.7 A is INSIDE the well minimum (2.05): restore
+        // outward - the acceptor moves +x, away from the H.
+        assert!(
+            w.atom(acc).vx > 0.0,
+            "inside the minimum the well restores outward, got {}",
+            w.atom(acc).vx
+        );
+        // On the OUTER slope (H...O = 2.3 A): attraction - the
+        // acceptor moves -x, toward the H.
+        let mut w = world(1, BoundaryType::Wrap);
+        let d = w.spawn_atom(o, 50.0, 50.0, 50.0);
+        let hy = w.spawn_atom(h, 51.19, 50.0, 50.0);
+        let acc = w.spawn_atom(o, 53.49, 50.0, 50.0);
+        w.form_bond(d, hy, 1, 463.0);
+        w.spatial_index.rebuild(&w.atoms);
+        physics_with_hbond().update_velocities(&mut w);
+        assert!(
+            w.atom(acc).vx < 0.0,
+            "the outer slope pulls the acceptor in, got {}",
+            w.atom(acc).vx
+        );
+        // At the well's own minimum (2.05 A) the channel is
+        // neutral (whatever the wall adds at the default margin
+        // is the sitting's business, not the channel's law).
+        let f_mid = hydrogen_bond_force(
+            &w,
+            &PairGeometry {
+                a_id: hy,
+                b_id: acc,
+                dx: 2.35,
+                dy: 0.0,
+                dz: 0.0,
+                r: 2.05,
+                a_el: h,
+                b_el: o,
+            },
+            1.0,
+            1.5,
+            2.6,
+        );
+        assert!(f_mid.abs() < 1e-4, "well minimum is neutral, got {f_mid}");
+    }
+
+    #[test]
+    fn hbond_is_silent_when_misaligned() {
+        // The direction IS the bond: a donor whose O-H vector is
+        // ORTHOGONAL to the H->acceptor direction feels nothing
+        // (the squared cosine floors at zero); pointing away is
+        // silence too, never repulsion.
+        let o = ElementId(3);
+        let h = ElementId(0);
+        let mut w = world(1, BoundaryType::Wrap);
+        let d = w.spawn_atom(o, 50.0, 50.0, 50.0);
+        let hy = w.spawn_atom(h, 51.19, 50.0, 50.0); // bond along +x
+        let acc = w.spawn_atom(o, 51.19, 53.49, 50.0); // acceptor at +y: orthogonal
+        w.form_bond(d, hy, 1, 463.0);
+        let f = hydrogen_bond_force(
+            &w,
+            &PairGeometry {
+                a_id: hy,
+                b_id: acc,
+                dx: 0.0,
+                dy: 2.3,
+                dz: 0.0,
+                r: 2.3,
+                a_el: h,
+                b_el: o,
+            },
+            1.0,
+            1.5,
+            2.6,
+        );
+        assert_eq!(f, 0.0, "an orthogonal donor is silent");
+        // Pointing away (the acceptor BEHIND the donor): negative
+        // cosine - still silence.
+        let mut w = world(1, BoundaryType::Wrap);
+        let d = w.spawn_atom(o, 50.0, 50.0, 50.0);
+        let hy = w.spawn_atom(h, 51.19, 50.0, 50.0);
+        let acc = w.spawn_atom(o, 48.89, 50.0, 50.0); // behind the H
+        w.form_bond(d, hy, 1, 463.0);
+        let f = hydrogen_bond_force(
+            &w,
+            &PairGeometry {
+                a_id: hy,
+                b_id: acc,
+                dx: 48.89 - 51.19,
+                dy: 0.0,
+                dz: 0.0,
+                r: 2.3,
+                a_el: h,
+                b_el: o,
+            },
+            1.0,
+            1.5,
+            2.6,
+        );
+        assert_eq!(f, 0.0, "a donor pointing away is silent");
+    }
+
+    #[test]
+    fn hbond_is_exempt_intramolecular() {
+        // The cohesion well's rule carried over: pairs sharing a
+        // bonded neighbor never hydrogen-bond - a molecule's own
+        // atoms must not bond through the back door.
+        let o = ElementId(3);
+        let h = ElementId(0);
+        let mut w = world(1, BoundaryType::Wrap);
+        let d = w.spawn_atom(o, 50.0, 50.0, 50.0);
+        let hy = w.spawn_atom(h, 51.19, 50.0, 50.0);
+        let acc = w.spawn_atom(o, 52.09, 50.0, 50.0); // hy...acc = 0.9 A
+        w.form_bond(d, hy, 1, 463.0);
+        w.form_bond(d, acc, 1, 138.0); // BOTH bonded to d: a 1,3 pair
+        let f = hydrogen_bond_force(
+            &w,
+            &PairGeometry {
+                a_id: hy,
+                b_id: acc,
+                dx: 0.9,
+                dy: 0.0,
+                dz: 0.0,
+                r: 0.9,
+                a_el: h,
+                b_el: o,
+            },
+            1.0,
+            1.5,
+            2.6,
+        );
+        // Not bonded to each other, but sharing the neighbor d -
+        // the exemption silences the channel (the wall still owns
+        // their real sterics in the pair loop).
+        assert_eq!(f, 0.0, "intramolecular pairs are exempt");
+    }
+
+    #[test]
+    fn hbond_net_minimum_beats_the_wall() {
+        // THE PAULI EXCEPTION: at the real-geometry margin (2.2
+        // puts the H...O wall standoff at 2.62 A), a strong
+        // aligned hydrogen bond holds a NET attractive well
+        // INSIDE the nominal wall standoff - real water's own
+        // H...O contact at ~1.9 A exists only because the bond
+        // direction beats the overlap. This is the channel's
+        // whole reason to exist (ADR-0014).
+        let o = ElementId(3);
+        let h = ElementId(0);
+        let config = ForceField {
+            excluded_volume: ExcludedVolumeParams {
+                non_bonded_margin: 2.2,
+                ..ForceField::default().excluded_volume
+            },
+            hbond: HbondParams {
+                hbond_scale: 2.0,
+                ..ForceField::default().hbond
+            },
+            ..ForceField::default()
+        };
+        let mut w = world(1, BoundaryType::Wrap);
+        let d = w.spawn_atom(o, 50.0, 50.0, 50.0);
+        let hy = w.spawn_atom(h, 51.19, 50.0, 50.0);
+        let acc = w.spawn_atom(o, 53.49, 50.0, 50.0); // H...O = 2.3 A < wall 2.62
+        w.form_bond(d, hy, 1, 463.0);
+        w.spatial_index.rebuild(&w.atoms);
+        Physics::new(config).update_velocities(&mut w);
+        // The wall alone would push them apart; with the aligned
+        // bond the NET force pulls the pair together.
+        assert!(
+            w.atom(acc).vx < 0.0,
+            "the aligned bond beats the wall, got {}",
+            w.atom(acc).vx
+        );
+        // The same pair MISALIGNED feels only the wall: pushed
+        // apart. The direction is what carries the exception.
+        let mut w = world(1, BoundaryType::Wrap);
+        let d = w.spawn_atom(o, 50.0, 50.0, 50.0);
+        let hy = w.spawn_atom(h, 51.19, 50.0, 50.0);
+        let acc = w.spawn_atom(o, 51.19, 52.3, 50.0); // orthogonal: H...O = 2.3 A
+        w.form_bond(d, hy, 1, 463.0);
+        w.spatial_index.rebuild(&w.atoms);
+        Physics::new(config).update_velocities(&mut w);
+        assert!(
+            w.atom(acc).vy > 0.0,
+            "misaligned, the wall owns the pair, got {}",
+            w.atom(acc).vy
         );
     }
 

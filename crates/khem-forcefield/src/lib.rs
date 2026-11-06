@@ -22,7 +22,7 @@ pub mod tables;
 
 pub use config::{
     BondParams, ChemistryParams, CohesionParams, ExcludedVolumeParams, FieldParams, ForceField,
-    IntegratorParams, LayoutParams, ThermostatParams, UvSensitivity,
+    HbondParams, IntegratorParams, LayoutParams, ThermostatParams, UvSensitivity,
 };
 pub use elements::{ELEMENTS, ElementId, ElementProperties, H, O, element, element_id};
 pub use tables::{SINGLE_REFERENCE, bond_energy};

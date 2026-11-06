@@ -15,4 +15,4 @@ pub mod physics;
 
 pub use energy::{Energy, EnergySystem};
 pub use khem_world::{EnergySource, SourceKind};
-pub use physics::{Physics, PhysicsSystem};
+pub use physics::{PairGeometry, Physics, PhysicsSystem, hydrogen_bond_force};
