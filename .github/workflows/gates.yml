@@ -1,0 +1,52 @@
+# The gate matrix: each long-running gate test runs as its own CI
+# job (a matrix entry), so the ladder's wall clock is one gate,
+# not the sum - and the laptop stays free for interactive work.
+# Every gate is an #[ignore]d release-mode test in khem-engine
+# (the test files are named for the behavior they certify).
+#
+# The fast gate (fmt + clippy + unit + scenario tests) is ci.yml
+# and runs on the same events; this workflow is the slow tier.
+
+name: gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # One gate per job. `file` names the test FILE (behavior-named;
+  # the gate ID is the doc comment's lineage). Release mode: the
+  # gates measure the shipped engine, and debug is ~20x slower.
+  gate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - gate: thermostat holds its setpoint
+            file: thermostat_holds_setpoint
+          - gate: forces stay sane
+            file: force_sanity
+          - gate: water molecules persist
+            file: water_molecules_persist
+          - gate: reactive balance settles
+            file: reactive_balance
+          - gate: the wrap seam is symmetric
+            file: seam_symmetry
+          - gate: excluded volume holds
+            file: excluded_volume
+          - gate: the condensed medium
+            file: liquid_structure
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@v4
+      - name: ensure rustup components
+        run: mise exec -- rustup component add rustfmt clippy
+      - name: "gate: ${{ matrix.gate }}"
+        run: >
+          mise exec -- cargo test --release -p khem-engine
+          --test ${{ matrix.file }} -- --ignored --nocapture

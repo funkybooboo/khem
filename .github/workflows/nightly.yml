@@ -1,0 +1,65 @@
+# Nightly: the full ladder re-validation plus the perf watchdog.
+# The matrix on pushes/PRs runs each gate once; nightly re-runs
+# ALL of them together (the re-validation contract's standing
+# record - nothing rots unobserved between sittings) and records
+# the tick rate as an artifact (a cheap perf-regression canary).
+
+name: nightly
+
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  ladder:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        file:
+          - thermostat_holds_setpoint
+          - force_sanity
+          - water_molecules_persist
+          - reactive_balance
+          - seam_symmetry
+          - excluded_volume
+          - liquid_structure
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@v4
+      - name: ensure rustup components
+        run: mise exec -- rustup component add rustfmt clippy
+      - name: "gate: ${{ matrix.file }}"
+        run: >
+          mise exec -- cargo test --release -p khem-engine
+          --test ${{ matrix.file }} -- --ignored --nocapture
+
+  perf:
+    needs: ladder
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@v4
+      - name: ensure rustup components
+        run: mise exec -- rustup component add rustfmt clippy
+      # A fixed-duration release run (the bin runs until killed;
+      # timeout ends it); the TICK events carry ticks_per_sec.
+      # Extract the last one into the artifact.
+      - name: perf run (release, fixed duration)
+        run: >
+          timeout 120 mise exec -- cargo run --release -p khem -- --seed 7
+          | tee perf-run.ndjson || test ${PIPESTATUS[0]} -eq 124
+      - name: extract tick rate
+        run: |
+          mkdir -p artifact
+          grep '"type":"tick"' perf-run.ndjson \
+            | tail -1 > artifact/ticks-per-sec.json
+          cat artifact/ticks-per-sec.json
+      - uses: actions/upload-artifact@v5
+        with:
+          name: perf-${{ github.run_id }}
+          path: artifact/
