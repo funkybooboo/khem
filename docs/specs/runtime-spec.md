@@ -534,6 +534,55 @@ wrap-aware spatial index (4.9). This is smuggled PHYSICS,
 documented as such: the substrate has excluded volume because
 matter does, not because any biology needs it.
 
+POLARITY COHESION (implemented 2026-11-04, the K2.3 design debt;
+the design memo is docs/research/polarity-attraction-memo.md).
+Outside the cutoff, inside the flat attraction_range, an
+unbonded pair sits in a zero-net-force well:
+
+    depth(a, b) = cohesion_scale * (1 - |chi_a - chi_b| / chi_ref)
+    w            = attraction_range - cutoff
+    U(x)         = -depth * 16 x^2 (w - x)^2 / w^4,  x = r - cutoff
+    F            = -dU/dr (repulsive inner slope, attractive
+                  outer, zero at both ends and at the minimum)
+
+Like-dissolves-like over the table's Pauling electronegativities:
+water coheres to water (O-O 1.00), hydrocarbon to hydrocarbon
+(C-C 1.00, C-H 0.88), and the mixed contacts sit 30-40% weaker
+(C-O 0.70, H-O 0.59 at chi_ref 3.0) - the hydrophobic gap from
+element properties alone. Also smuggled PHYSICS, documented as
+such: the substrate has cohesion because matter does; the
+electronegativity shape is there because polarity sorts matter,
+not because lipids need it. Two honest scope lines:
+
+- The well is INTERMOLECULAR: same-molecule 1,3 pairs (two
+  bonds, one shared atom - the same local-graph locality as the
+  bonded-pair exemption, path 2 instead of path 1; no molecule
+  identity anywhere) are exempt. The alternative - shaping the
+  range so water's own H-H sits at the well minimum - couples
+  the liquid's first-shell position to one molecule's seeded
+  angle (both scale from the cutoff) and was measured to pull
+  the H-O-H angle open to ~150 deg at depth 0.5. Longer paths
+  (1,4+) are NOT exempt: a chain's distant contacts feeling the
+  well is real intramolecular collapse, owned by whichever gate
+  owns the chain.
+- The well shape is a double-sided quartic, not the memo's first
+  pure-attractive ramp: a single-signed force profile integrates
+  to a potential step at the range boundary, and pairs crossing
+  the edge would mint exactly that (F18's phantom-capture lesson
+  at the force level). The quartic is the step-free shape:
+conservative everywhere, attractive outside, repulsive inside.
+
+DORMANT BY MEASUREMENT: cohesion_scale ships at 0.0. The
+activation sweep (tests/k2_self_assembly.rs, k2_3_cohesion_sweep)
+measured every useful depth condensing the seeded pond into a
+droplet (depth 0.25: local density 2.4x the box average; 1.0:
+~10x) - a cohesive liquid seeded at the pond's 0.0636
+atoms/A^3 contracts toward liquid density, exactly as real
+water would. Activation is coupled to the POND RE-DENSITY the
+port plan pre-authorized on evidence; at 0.0 the well is
+skipped and the trajectory is byte-identical to the
+pre-channel substrate (pinned by the golden hash).
+
 ### 6.7 Boundaries
 
     Wrap   x = x mod width; y = y mod height; z = z mod depth
@@ -881,6 +930,13 @@ measurements that changed them:
     non_bonded_repulsion    8.0      // excluded volume strength
                                      // (6.6; K2.1 retune
                                      // 2026-11-04, from 1.0)
+    cohesion_scale         0.0      // polarity well depth (6.6);
+                                     // DORMANT - activation
+                                     // gated on the pond
+                                     // re-density (6.6)
+    chi_ref               3.0      // electronegativity
+                                     // discrimination (6.6)
+    attraction_range      4.0      // flat well range, A (6.6)
     non_bonded_margin      1.5      // cutoff = (r_a + r_b) *
                                      // margin (6.6)
 

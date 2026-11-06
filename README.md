@@ -147,9 +147,15 @@ K2.2 (condensed medium) passed the same day, pure measurement:
 the pond's steady tail is contact-dense matter (97.8% of atoms
 hold an intermolecular neighbor within 3 A) with the
 excluded-volume hole in its pair distances - and honestly no
-cohesion, because the substrate is repulsion-only by design
-and the attraction channel (the next design step) has that
-measured baseline to beat.
+cohesion, because the substrate is repulsion-only by design;
+the attraction channel (the next design step) has that
+measured baseline to beat. The channel now exists - a
+like-dissolves-like cohesion well over the elements'
+electronegativities, shipped dormant: the measurement that
+preceded turning it on found the pond (seeded at 0.63x liquid
+density) condenses into a droplet under any useful cohesion,
+so activation waits on the pond re-density decision that
+evidence forced.
 
 ## Documentation
 

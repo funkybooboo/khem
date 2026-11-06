@@ -33,18 +33,26 @@ element-derived, no molecule-awareness anywhere.
 ## The design: like-dissolves-like over electronegativity
 
 One law, one channel, applied to every UNBONDED pair outside
-its excluded-volume cutoff (the same population spec 6.6 rules;
-bonded pairs stay exempt - springs own them):
+its excluded-volume cutoff (the same population spec 6.6 rules):
 
     S(a, b) = cohesion_scale * max(0, 1 - |chi_a - chi_b| / chi_ref)
-    F_attr  = S(a, b) * ramp(r),  cutoff < r < r_attract
-    ramp(r) = (r - cutoff) * (r_attract - r), zero at both ends
+    well shell: cutoff < r < attraction_range (FLAT, ~4 A)
+    U(x)       = -S(a, b) * 16 x^2 (w - x)^2 / w^4,  x = r - cutoff
+    F         = -dU/dr
 
-A linear-ramp well outside the repulsive core - the house
-style (the repulsion is linear too), smooth at both
-boundaries, conservative, and soft enough that the
-symplectic bound is never in question (the well's curvature
-is cohesion_scale-shaped, tuned far below the spring scale).
+A double-sided quartic well: attractive on the outer slope,
+repulsive on the inner, zero at both ends and at the minimum -
+conservative everywhere. The first draft was a pure-attractive
+ramp; the revision log below carries why it cannot ship. The
+flat range (not r_sum-scaled) puts every pair's well minimum at
+~3 A: real water's O...O first shell is ~2.8 A and dispersion
+contacts cluster at 3.4-3.7 A - cohesion ranges do not scale
+with covalent radii. The flat range also keeps the lightest
+pair's slopes gentle (stiffness ~ depth/w^2; the H-H well is
+2.41 A wide) and pairs whose excluded volume swallows the whole
+shell (Na-Cl, cutoff 4.02) simply have no well - big atoms
+cohere by chemistry alone, a documented size discrimination off
+the K2-K3 path.
 
 Why like-dissolves-like and not a mean-polarity law: sorting
 REQUIRES the mixed contact to be weaker than BOTH
@@ -65,6 +73,27 @@ sorts matter, not because lipids need it. No element pair is
 special-cased, no molecule is named, the law reads the same
 element table every other rule reads.
 
+## The intermolecular scope line
+
+The well models INTERMOLECULAR cohesion. Same-molecule 1,3
+pairs (two bonds, one shared atom) are EXEMPT - the same
+local-graph locality as the bonded-pair exemption (path 2
+instead of path 1; no molecule identity, no transitive
+structure anywhere in the force). The measurement that forced
+the line: without it, the well's inner slope pushes a water's
+own H-H (1.88 A, inside the H-H well shell) open, and no
+r_sum-scaled or shaped range can put BOTH water's 1,3
+neutrality and the O-O first shell where the physics wants
+them - water's H-H distance is 1.774 of its r_sum (fixed by the
+seeded 104.5-degree angle) while the liquid's first shell
+wants ~2.1-2.3 of r_sum. Depth 0.5 without the exemption
+measured the H-O-H angle wandering to ~150 degrees with O-H
+bonds at 1.12-1.25 A; with it, a settle probe holds the geometry
+frozen to four decimals. Longer paths (1,4+) are NOT exempt: a
+chain's distant contacts feeling the well is real
+intramolecular collapse, owned by whichever gate owns the
+chain (K2.3's lipids).
+
 ## Known simplifications, recorded before any tuning
 
 - No hydrogen-bond channel. Like-dissolves-like scores the
@@ -75,19 +104,16 @@ element table every other rule reads.
   demands donor/acceptor specificity, a separate H-bond term
   is its own memo - never a "lipid" special case.
 - No electrostatics. Na-Cl score each other at 0.26
-  (|chi| difference 2.23) - real ions attract. Salt
-  chemistry is not on the K2-K3 critical path; the law models
-  polarity sorting, not ionic bonding. Recorded as a v0
+  (|chi| difference 2.23) - and with the flat range their
+  excluded volume (cutoff 4.02) swallows the well entirely.
+  Salt chemistry is not on the K2-K3 critical path; the law
+  models polarity sorting, not ionic bonding. Recorded as a v0
   simplification with a named trigger: the first gate whose
   world needs ions to behave like ions.
-- Same-molecule 1,3 pairs feel the attraction (not exempt,
-  like the repulsion). Water's own H-H sits at 1.88 A, inside
-  the H-H attractive shell - the well will pull water's angle
-  slightly closed where the repulsive core never touched it.
-  The K1.3 re-run and the settle probe measure this; if the
-  geometry shift is material, the honest fix is range shaping
-  (keep the well outside 1,3 distances), never an exemption
-  rule that smells like molecular awareness.
+- Same-molecule 1,3 pairs feel the REPULSION (not exempt,
+  like the repulsion's own sterics rule) but not the well -
+  the intermolecular scope line above. The settle probe holds
+  water frozen at exactly 104.5 degrees with the exemption.
 
 ## Preregistered tuning lines (the ADR-0003 honesty rule)
 
@@ -110,26 +136,70 @@ constants - weeks, not days - STOP and redesign the substrate
 per the ladder's exit criterion. No rule above the atom/bond
 level (G01) rescues a dead channel.
 
+## Revision log (2026-11-04, the implementation sitting)
+
+The channel is IMPLEMENTED and DORMANT (cohesion_scale ships
+at 0.0; spec 6.6). Three measured revisions to this memo's
+first draft, and one decision the implementation's evidence
+forced:
+
+- The pure-attractive ramp cannot ship: a single-signed force
+  profile integrates to a potential step at the range boundary
+  (S*w^3/6), and pairs crossing the edge would mint exactly
+  that - F18's phantom-capture lesson at the force level. The
+  implemented shape is the double-sided quartic: conservative
+  everywhere, zero net force across the shell.
+- The r_sum-scaled range cannot ship either: it put the well
+  minimum at 0.5 * (margin + range) * r_sum, which for H-H
+  (w 1.06 at range 2.5) gave edge stiffness 32D/w^2 - at
+  depth 1 the coupled water molecule EXPLODED (energy ledger:
+  conserved to t=1200, then +373 by t=1400) and depth 0.5
+  wandered the H-O-H angle to ~150 degrees. The FLAT 4 A range
+  fixes both: the O-O minimum at 2.99 A (real water's own
+  first shell), gentle slopes for every pair, and the perf hit
+  bounded (the query radius grows from 3.3 to 4.0 A, not to
+  8.8 A - the first draft multiplied where it should have
+  taken a max).
+- The intermolecular scope line (the 1,3 exemption) landed as
+  a measurement-forced rule, documented above.
+- THE POND RE-DENSITY is the named blocker for activation:
+  the sweep (tests/k2_self_assembly.rs, k2_3_cohesion_sweep)
+  measured every useful depth condensing the seeded pond
+  (0.0636 atoms/A^3, 0.63x real water) into a droplet - depth
+  0.25: local density 2.4x the box average with a real first
+  shell (1.18 relative to local); depth 1.0: a ~10x clump.
+  The port plan pre-authorized exactly this re-derivation
+  ("Re-derivation, if any, belongs to the re-climb").  The
+  substrate-ON commit owns: the pond re-density (spacing 3.2 A
+  puts 1024 waters at real water's 0.10 atoms/A^3 in a
+  51.2 x 51.2 x 12.8 A slab - the field geometry needs the
+  matching look), the activation depth, and the FULL
+  re-validation contract this memo already lists. Dormancy is
+  provably free: at depth 0 the golden hash returns the
+  pre-channel value byte-for-byte.
+
 ## What the substrate commit owes (the re-validation contract)
 
 The attraction moves every operating point, like the K2.1
-retune did. Its commit re-runs, in the same commit: K1.1 (a
-potential well changes the KE/field balance), K1.2 (cohering
-neighbors bombard bonds), K1.3 (the 1,3 geometry shift above),
-K1.4 (the free-atom beaker now coheres - expect the size
-distribution to shift toward larger clusters; the no-runaway
-and stationarity bars re-measure it), K1.5 (the attraction is
-a minimum-image law over the wrap-aware index - symmetry must
-hold), K2.1 (the wall's standoff - the well sits outside the
-cutoff, the excluded-volume bar must hold unchanged), and
-K2.2 - whose BASELINE BAR (max g <= 1.05 beyond 3.0 A: no
-shell) is REPLACED by a peak bar (max g over the first shells
-> 1.0 by a measured margin). The K2.2 numbers to beat: census
-0.978, hole to uniform by 3.5 A, g_max 1.002.
+retune did. Its ACTIVATION commit re-runs, in the same
+commit: K1.1 (a potential well changes the KE/field balance),
+K1.2 (cohering neighbors bombard bonds), K1.3 (the 1,3
+exemption must hold water's geometry; the settle probe is the
+fast check), K1.4 (the free-atom beaker now coheres - expect
+the size distribution to shift toward larger clusters; the
+no-runaway and stationarity bars re-measure it), K1.5 (the
+attraction is a minimum-image law over the wrap-aware index -
+symmetry must hold), K2.1 (the wall's standoff - the well
+sits outside the cutoff, the excluded-volume bar must hold
+unchanged), and K2.2 - whose BASELINE BAR (max g <= 1.05
+beyond 3.0 A: no shell) is REPLACED by a peak bar (max g
+over the first shells > 1.0 by a measured margin). The K2.2
+numbers to beat: census 0.978, hole to uniform by 3.5 A,
+g_max 1.002.
 
-The golden hash re-cuts consciously; spec 6.6 grows the
-attraction term and section 11 the constants, in the same
-commit.
+The golden hash re-cuts consciously; spec 6.6 carries the
+well term and section 11 the constants (both landed with the
+dormant channel).
 
 ## The K2.3 gate bar sketch (the letter, the harness's numbers)
 

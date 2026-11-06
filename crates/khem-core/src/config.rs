@@ -111,6 +111,53 @@ pub struct PhysicsConfig {
     /// Non-bonded cutoff multiplier: cutoff = (radius_a + radius_b)
     /// * margin.
     pub non_bonded_margin: f32,
+    /// Polarity-cohesion well depth scale (spec 6.6's attraction,
+    /// the K2.3 design debt; docs/research/polarity-attraction-memo.md).
+    /// Each unbonded pair outside its excluded-volume cutoff and
+    /// inside the flat `attraction_range` sits in a zero-net-force
+    /// well of depth `cohesion_scale * (1 - |chi_a - chi_b| /
+    /// chi_ref)` (like-dissolves-like over the table's Pauling
+    /// electronegativities - water coheres to water, hydrocarbon to
+    /// hydrocarbon, and mixed contacts sit 30-40% weaker at
+    /// chi_ref 3.0: the hydrophobic gap from element properties
+    /// alone).
+    ///
+    /// DEFAULT 0.0 - DORMANT, BY MEASUREMENT (2026-11-04, the
+    /// k2_3_cohesion_sweep evidence): every useful depth condenses
+    /// the seeded pond into a droplet (D=0.25: local density 2.4x
+    /// the box average; D=1.0: ~10x) - a cohesive liquid seeded at
+    /// the pond's 0.0636 atoms/A^3 (0.63x real water's atomic
+    /// density) contracts toward liquid density, exactly as real
+    /// water would. Turning the well on is coupled to the POND
+    /// RE-DENSITY the port plan pre-authorized on evidence
+    /// (phase-2: "Re-derivation, if any, belongs to the re-climb
+    /// evidence") - the substrate-on commit owns that decision,
+    /// the activation, and the full re-validation contract it
+    /// triggers. At 0.0 the well is skipped entirely (and the
+    /// non-bonded query radius stays at the excluded-volume
+    /// cutoff): the trajectory is byte-identical to the
+    /// pre-channel substrate, pinned by the golden hash.
+    pub cohesion_scale: f32,
+    /// Electronegativity discrimination scale for the well depth
+    /// (spec 6.6): strength multiplier max(0, 1 - |chi_a - chi_b|
+    /// / chi_ref). 3.0 puts water-water at 1.00, hydrocarbon pairs
+    /// 0.88-1.00, and the mixed tail-water contacts at 0.59-0.70.
+    pub chi_ref: f32,
+    /// Well range, angstroms - FLAT, not r_sum-scaled: a
+    /// molecular liquid's cohesion range is ~3-4 A regardless of
+    /// atom size (real water's O...O first shell sits at ~2.8 A;
+    /// dispersion contacts cluster at 3.4-3.7), so every
+    /// unbonded pair outside its cutoff and inside this range
+    /// sits in the well. The O-O well then spans 1.98-4.0 A with
+    /// its minimum at 2.99 - real water's own first shell. The
+    /// flat range also keeps the well's slopes gentle for the
+    /// lightest pairs (stiffness ~ depth/w^2; the H-H well is
+    /// 2.41 A wide, so the sub-step bound holds at depths the
+    /// r_sum-scaled draft could not), and pairs whose excluded
+    /// volume swallows the whole shell (Na-Cl: cutoff 4.02)
+    /// simply have no well - big atoms cohere by chemistry alone,
+    /// a documented size discrimination off the K2-K3 path.
+    pub attraction_range: f32,
     pub convection_rate: f32,
     /// Vent heat injection per tick (spec 8.1). Phase-1 addition:
     /// the spec's formula uses this constant but section 11 omits
@@ -238,6 +285,9 @@ impl Default for PhysicsConfig {
             integration_substeps: 4,
             non_bonded_repulsion: 8.0,
             non_bonded_margin: 1.5,
+            cohesion_scale: 0.0,
+            chi_ref: 3.0,
+            attraction_range: 4.0,
             convection_rate: 0.001,
             vent_heat_rate: 0.1,
             bond_search_radius: 4.0,
@@ -279,6 +329,9 @@ mod tests {
         assert_eq!(c.ke_field_scale, 0.01);
         assert_eq!(c.non_bonded_repulsion, 8.0);
         assert_eq!(c.non_bonded_margin, 1.5);
+        assert_eq!(c.cohesion_scale, 0.0);
+        assert_eq!(c.chi_ref, 3.0);
+        assert_eq!(c.attraction_range, 4.0);
         assert_eq!(c.spring_energy_scale, 0.032);
         assert_eq!(c.integration_substeps, 4);
         assert_eq!(

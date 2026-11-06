@@ -399,6 +399,31 @@ impl WorldState {
         })
     }
 
+    /// Whether two atoms share a live bonded neighbor (a bond-graph
+    /// 1,3 pair: two bonds, one common atom). The cohesion well's
+    /// exemption (spec 6.6): the well models INTERMOLECULAR
+    /// cohesion, and 1,3 pairs are intramolecular - like bonded
+    /// pairs themselves. One step up the same locality ladder as
+    /// [`is_bonded`] (path 2 vs path 1): no molecule identity, no
+    /// transitive structure, just the local bond graph. Longer
+    /// paths (1,4+) are NOT exempt - a chain's distant contacts
+    /// feeling the well is real intramolecular collapse, measured
+    /// by whatever gate owns the chain (K2.3's lipids).
+    pub fn shares_bonded_neighbor(&self, a: AtomId, b: AtomId) -> bool {
+        self.atom(a).bond_ids().any(|ia| {
+            let bond = self.bond(ia);
+            if !bond.alive {
+                return false;
+            }
+            let mid = if bond.atom_a == a {
+                bond.atom_b
+            } else {
+                bond.atom_a
+            };
+            mid != b && self.is_bonded(mid, b)
+        })
+    }
+
     /// Number of live atoms.
     pub fn live_atom_count(&self) -> usize {
         self.atoms.iter().filter(|a| a.alive).count()

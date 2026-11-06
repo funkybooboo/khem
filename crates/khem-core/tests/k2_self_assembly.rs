@@ -614,11 +614,17 @@ const GR_MAX: f32 = 4.5;
 /// Langevin diffusion has melted the lattice (O RMS ~ 100+ A
 /// over 20k ticks) - what is measured is the FLUID the substrate
 /// actually holds, the medium K2.3's amphiphiles will swim in.
-#[test]
-#[ignore] // explicit: cargo test --release -- --ignored --nocapture
-fn k2_2_condensed_medium() {
-    let config = PhysicsConfig::default();
-    let seed = 42u64;
+fn pond_structure(
+    config: PhysicsConfig,
+    t_end: u64,
+    t_sample_start: u64,
+    sample_every: u64,
+    seed: u64,
+) -> (f64, f64, Vec<f64>, u64, u64) {
+    // Runs the pond to t_end, samples the steady structure over
+    // [t_sample_start, t_end] every sample_every ticks, and returns
+    // (census mean, census min, the g(r) table, samples, alive
+    // atoms). The K2.2 gate and the K2.3 cohesion sweep share it.
     let mut world = khem_core::pond::primordial_pond(seed, config);
     let observer = Observer::new(ObserverConfig {
         khem_version: "0.1.0",
@@ -629,10 +635,6 @@ fn k2_2_condensed_medium() {
     });
     let mut sim = Sim::new(config, observer);
     let _ = sim.start(&world);
-    eprintln!(
-        "K2.2: the pond, 25k ticks, sampling the steady tail \
-         (21k-25k every 100 ticks)"
-    );
 
     // Union-find over the alive bonds, per sample: the molecule
     // identity the census and the g(r) split on. Atom ids are
@@ -641,8 +643,6 @@ fn k2_2_condensed_medium() {
     let mut parent = vec![0u32; n];
     let find = |parent: &mut Vec<u32>, mut x: u32| -> u32 {
         while parent[x as usize] != x {
-            // Path halving: the census runs 41 samples over ~2k
-            // bonds; flat is fine, halving is free.
             let grandparent = parent[parent[x as usize] as usize];
             parent[x as usize] = grandparent;
             x = grandparent;
@@ -654,15 +654,13 @@ fn k2_2_condensed_medium() {
     let mut bin_counts = vec![0u64; n_bins];
     let mut census_sum = 0.0f64;
     let mut census_min = f64::INFINITY;
-    let mut census_max = 0.0f64;
     let mut samples = 0u64;
     let mut alive_atoms = 0u64;
-    for t in 1..=25_000u64 {
+    for t in 1..=t_end {
         sim.tick(&mut world);
-        if t < 21_000 || !t.is_multiple_of(100) {
+        if t < t_sample_start || !t.is_multiple_of(sample_every) {
             continue;
         }
-        // Rebuild the molecule partition for this sample.
         for (i, slot) in parent.iter_mut().enumerate() {
             *slot = i as u32;
         }
@@ -677,9 +675,6 @@ fn k2_2_condensed_medium() {
         }
         let alive = world.atoms.iter().filter(|a| a.alive).count();
         alive_atoms = alive as u64;
-        // Census: nearest INTERmolecular neighbor within 3 A,
-        // plus the g(r) shells (intermolecular pairs, counted
-        // once by id order).
         let mut within = 0u64;
         for atom in &world.atoms {
             if !atom.alive {
@@ -690,10 +685,7 @@ fn k2_2_condensed_medium() {
             let mut nearest = f32::INFINITY;
             for b_id in near {
                 let b = world.atom(b_id);
-                if !b.alive {
-                    continue;
-                }
-                if b_id == atom.id {
+                if !b.alive || b_id == atom.id {
                     continue;
                 }
                 if find(&mut parent, b_id.0) == root {
@@ -712,9 +704,7 @@ fn k2_2_condensed_medium() {
         let fraction = within as f64 / alive as f64;
         census_sum += fraction;
         census_min = census_min.min(fraction);
-        census_max = census_max.max(fraction);
 
-        // g(r): every intermolecular pair within 4.5 A, once.
         for atom in &world.atoms {
             if !atom.alive {
                 continue;
@@ -742,34 +732,49 @@ fn k2_2_condensed_medium() {
             }
         }
         samples += 1;
-        if samples.is_multiple_of(10) {
-            eprintln!(
-                "  t={t}: census {fraction:.3} (nearest intermolecular \
-                 neighbor <= 3 A)"
-            );
-        }
     }
-    let census_mean = census_sum / samples as f64;
-
-    // g(r) per shell against the uniform reference: expected
-    // pair count per bin = 0.5 * N * rho * V_bin (pairs counted
-    // once), averaged per sample.
+    let census_mean = census_sum / samples.max(1) as f64;
     let volume = world.width * world.height * world.depth;
     let rho = alive_atoms as f64 / volume as f64;
-    eprintln!(
-        "K2.2 census: mean {census_mean:.3} (bar >= 0.5), \
-         min {census_min:.3}, max {census_max:.3}, over {samples} samples"
-    );
-    eprintln!("K2.2 g(r) vs uniform (rho {rho:.4} atoms/A^3):");
     let mut gr = vec![0.0f64; n_bins];
     for (b, count) in bin_counts.iter().enumerate() {
         let r0 = b as f64 * GR_BIN as f64;
         let r1 = r0 + GR_BIN as f64;
         let v_bin = 4.0 * std::f64::consts::PI / 3.0 * (r1.powi(3) - r0.powi(3));
         let expected = 0.5 * alive_atoms as f64 * rho * v_bin * samples as f64;
-        gr[b] = *count as f64 / expected;
-        let g_val = gr[b];
-        eprintln!("  r [{r0:.2},{r1:.2}): pairs {count:>9} expected {expected:>9.0} g {g_val:.3}");
+        gr[b] = *count as f64 / expected.max(1.0);
+    }
+    (census_mean, census_min, gr, samples, alive_atoms)
+}
+
+/// K2.2 CONDENSED MEDIUM (gate ladder): the pond behaves as
+/// matter, not free flight. Measured over the 25k-tick pond's
+/// steady tail (the K1.1 windows, 21k-25k, sampled every 100
+/// ticks), on INTERMOLECULAR pairs only (different molecule by
+/// the bond graph's union-find - intramolecular 1,3 pairs like
+/// a water's own H-H at 1.88 A are real structure but they are
+/// MOLECULAR structure; a gas of free-flying waters would pass
+/// a naive census on them alone, which is the failure this gate
+/// catches).
+#[test]
+#[ignore] // explicit: cargo test --release -- --ignored --nocapture
+fn k2_2_condensed_medium() {
+    let config = PhysicsConfig::default();
+    eprintln!(
+        "K2.2: the pond, 25k ticks, sampling the steady tail \
+         (21k-25k every 100 ticks)"
+    );
+    let (census_mean, census_min, gr, samples, alive) =
+        pond_structure(config, 25_000, 21_000, 100, 42);
+    eprintln!(
+        "K2.2 census: mean {census_mean:.3} (bar >= 0.5), min {census_min:.3}, \
+         over {samples} samples ({alive} atoms)"
+    );
+    eprintln!("K2.2 g(r) vs uniform:");
+    for (b, g) in gr.iter().enumerate() {
+        let r0 = b as f64 * GR_BIN as f64;
+        let r1 = r0 + GR_BIN as f64;
+        eprintln!("  r [{r0:.2},{r1:.2}): g {g:.3}");
     }
 
     // ---- The bars ----------------------------------------------------
@@ -778,10 +783,6 @@ fn k2_2_condensed_medium() {
         "K2.2 FAIL: census mean {census_mean:.3} < 0.5 - the pond \
          is not holding most atoms in intermolecular contact"
     );
-    // The hole's core: below 1.25 A (under the smallest pair's
-    // thermal-tail standoff; K2.1 measured fast pairs pressing
-    // to ~1.0 * r_sum, so 1.0-1.25 A can carry rare tail counts
-    // and the core bar sits below that).
     let hole_core_max = gr
         .iter()
         .take((1.25f32 / GR_BIN) as usize)
@@ -792,9 +793,6 @@ fn k2_2_condensed_medium() {
         "K2.2 FAIL: the excluded-volume core is not clean - g \
          {hole_core_max:.3} below 1.25 A (bar 0.05)"
     );
-    // The hole's extent: every shell below 3.0 A sits below
-    // uniform - pair distances deviate from the free-flight
-    // reference across the whole contact range.
     let hole_extent_max = gr
         .iter()
         .take((3.0f32 / GR_BIN) as usize)
@@ -826,6 +824,60 @@ fn k2_2_condensed_medium() {
          {hole_extent_max:.3} (< 1.0 below 3 A), baseline \
          {baseline_max:.3} (<= 1.05 - no shell, as designed)"
     );
+}
+
+/// The K2.3 cohesion lever curve: the pond's structure across
+/// cohesion_scale values (12k-tick runs, sampling 10k-12k every
+/// 50 ticks - the pre-settle window is fine for a SHAPE
+/// comparison across values; the official K2.2 re-run at 25k
+/// carries the chosen value). Not a gate: the evidence tool
+/// whose value, and the re-validation it owes, live in the K2.3
+/// records.
+///
+/// THE MEASURED FINDING (2026-11-04, why the channel ships
+/// DORMANT): every useful depth condenses the seeded pond into
+/// a droplet - depth 0.25: first shell 3.5 with the g(r)
+/// plateauing at ~2.4-3.0x the box average (local density ~2.4x;
+/// the first shell reads 1.18 RELATIVE TO THE LOCAL density);
+/// depth 0.5: similar; depth 1.0: g ~ 8.8-11.4 everywhere (a
+/// ~10x clump). A cohesive liquid seeded at the pond's 0.0636
+/// atoms/A^3 (0.63x real water's atomic density) contracts
+/// toward liquid density, exactly as real water would - the
+/// pond RE-DENSITY the port plan pre-authorized on evidence is
+/// the named blocker for activation; see the memo's revision
+/// log.
+#[test]
+#[ignore] // explicit: cargo test --release -- --ignored --nocapture
+fn k2_3_cohesion_sweep() {
+    for cohesion in [0.25f32, 0.5, 1.0] {
+        let config = PhysicsConfig {
+            cohesion_scale: cohesion,
+            ..PhysicsConfig::default()
+        };
+        eprintln!("K2.3 cohesion sweep: cohesion_scale {cohesion}");
+        let (census_mean, census_min, gr, samples, alive) =
+            pond_structure(config, 12_000, 10_000, 50, 42);
+        let peak = gr.iter().cloned().fold(0.0f64, f64::max);
+        let peak_bin = gr
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.total_cmp(b.1))
+            .map(|(i, _)| i)
+            .unwrap_or(0);
+        eprintln!(
+            "  census {census_mean:.3} (min {census_min:.3}), peak g \
+             {peak:.3} at [{:.2},{:.2}), {samples} samples, {alive} atoms",
+            peak_bin as f64 * GR_BIN as f64,
+            peak_bin as f64 * GR_BIN as f64 + GR_BIN as f64
+        );
+        eprintln!(
+            "  g(r): {}",
+            gr.iter()
+                .map(|g| format!("{g:.2}"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+    }
 }
 
 /// The strength sweep that picks non_bonded_repulsion's default:

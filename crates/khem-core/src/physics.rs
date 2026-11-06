@@ -352,11 +352,23 @@ impl Physics {
         }
     }
 
-    /// Non-bonded excluded volume (finding F4's fix, spec 6.6):
-    /// every UNBONDED live pair closer than its cutoff
+    /// Non-bonded interactions (spec 6.6): excluded volume (finding
+    /// F4's fix) plus the polarity-cohesion well (the K2.3 design
+    /// debt; docs/research/polarity-attraction-memo.md). Every
+    /// UNBONDED live pair closer than its cutoff
     /// `(radius_a + radius_b) * non_bonded_margin` is pushed apart
-    /// with `F = non_bonded_repulsion * (cutoff - r)` along the
-    /// minimum-image axis, equal and opposite. Bonded pairs are
+    /// with `F = non_bonded_repulsion * (cutoff - r)`; every pair
+    /// in the well shell (cutoff, attraction_range * (r_a + r_b)]
+    /// sits in the double-sided quartic well of depth
+    /// `cohesion_scale * (1 - |chi_a - chi_b| / chi_ref)`
+    /// (like-dissolves-like over the table's Pauling
+    /// electronegativities) - attractive on the outer slope,
+    /// repulsive on the inner, zero at both ends and at the
+    /// minimum: the only step-free single-shell well (a
+    /// pure-attractive ramp integrates to a PE step at the outer
+    /// edge - a crossing mint, F18's lesson at the force level).
+    /// Both along the minimum-image axis, equal and opposite.
+    /// Bonded pairs are
     /// excluded (springs own them); same-molecule unbonded pairs
     /// (1,3 and beyond) are NOT excluded - real sterics, mild by
     /// construction since VSEPR ideals keep most beyond cutoff.
@@ -366,6 +378,9 @@ impl Physics {
     fn non_bonded_forces(&mut self, world: &mut WorldState) {
         let strength = self.config.non_bonded_repulsion;
         let margin = self.config.non_bonded_margin;
+        let cohesion = self.config.cohesion_scale;
+        let chi_ref = self.config.chi_ref;
+        let attract_range = self.config.attraction_range;
         let max_radius = world
             .element_table
             .iter()
@@ -387,7 +402,18 @@ impl Physics {
                 continue;
             }
             let r_a = world.element(a_el).radius;
-            let query = (r_a + max_radius) * margin;
+            // The query must cover the widest pair interaction:
+            // the wall reaches margin * (r_a + r_b), the well the
+            // flat attraction_range (a MAX, not a multiplier).
+            // At cohesion_scale 0 the well is skipped entirely, so
+            // the query stays at the excluded-volume cutoff - the
+            // dormant channel costs nothing (the golden hash
+            // pins the byte-identical trajectory).
+            let query = if cohesion > 0.0 {
+                ((r_a + max_radius) * margin).max(attract_range)
+            } else {
+                (r_a + max_radius) * margin
+            };
             let candidates = world.spatial_index.neighbors(ax, ay, az, query);
             for b_id in candidates {
                 if b_id.0 <= a_id.0 {
@@ -406,11 +432,47 @@ impl Physics {
                     continue;
                 }
                 let r = r2.sqrt();
-                let cutoff = (r_a + world.element(b_el).radius) * margin;
-                if r >= cutoff {
+                let r_sum = r_a + world.element(b_el).radius;
+                let cutoff = r_sum * margin;
+                // The radial force along the a-to-b axis: positive
+                // pushes the pair apart, negative pulls them
+                // together (the application below is shared).
+                let f = if r < cutoff {
+                    // Excluded volume: the soft linear core.
+                    -strength * (cutoff - r)
+                } else if r >= attract_range || cohesion <= 0.0 {
+                    // Outside the well, or the channel dormant
+                    // (spec 6.6: the 0.0 default skips everything
+                    // and the query stays at the cutoff).
                     continue;
-                }
-                let f = -strength * (cutoff - r);
+                } else if world.shares_bonded_neighbor(a_id, b_id) {
+                    // The cohesion well is INTERMOLECULAR (spec
+                    // 6.6): same-molecule 1,3 pairs are exempt - a
+                    // water's own H-H must not pull its angle open;
+                    // the repulsion above still owns real sterics.
+                    continue;
+                } else {
+                    // The cohesion well: the zero-net-force quartic
+                    // bump over x in (0, w), w = the flat range
+                    // minus the pair's cutoff, depth like-
+                    // dissolves-like over Pauling
+                    // electronegativities. Sign convention: f < 0
+                    // pushes the pair apart (the repulsion above),
+                    // f > 0 pulls them together - so the quartic
+                    // takes a minus: the inner slope (x < w/2,
+                    // positive bracket) repels, the outer slope
+                    // (negative bracket) attracts.
+                    let chi_gap = (world.element(a_el).electronegativity
+                        - world.element(b_el).electronegativity)
+                        .abs();
+                    let depth = cohesion * (1.0 - chi_gap / chi_ref);
+                    if depth <= 0.0 {
+                        continue;
+                    }
+                    let w = attract_range - cutoff;
+                    let x = r - cutoff;
+                    -depth * 32.0 * x * (w - x) * (w - 2.0 * x) / (w * w * w * w)
+                };
                 let (ux, uy, uz) = (dx / r, dy / r, dz / r);
                 self.fx[i] += f * ux;
                 self.fy[i] += f * uy;
@@ -620,6 +682,16 @@ mod tests {
         Physics::new(PhysicsConfig::default())
     }
 
+    /// The well tests' system: cohesion_scale 1.0 (the channel's
+    /// shipped default is 0.0 - dormant by measurement; the unit
+    /// tests pin the LAW, so they turn it on explicitly).
+    fn physics_with_well() -> Physics {
+        Physics::new(PhysicsConfig {
+            cohesion_scale: 1.0,
+            ..PhysicsConfig::default()
+        })
+    }
+
     #[test]
     #[should_panic(expected = "at least one sub-step")]
     fn physics_rejects_zero_substeps() {
@@ -713,23 +785,102 @@ mod tests {
             w.atom(b).vx
         );
 
-        // Beyond cutoff: no force. The pair sits 1.7 A apart (cutoff
-        // 1.59 for H-H) with the index REBUILT, so the candidate
-        // query (radius 3.3 A) actually finds the pair and the
-        // distance filter rejects it. The previous probe never
-        // rebuilt the index, so it passed vacuously - verified by
-        // deleting the cutoff filter and watching it stay green.
+        // Beyond cutoff, INSIDE the well: the cohesion law. The
+        // pair sits 1.7 A apart (H-H cutoff 1.59, flat well to
+        // 4.0) with the index REBUILT: x = 0.11, w = 2.41, x <
+        // w/2 - the inner slope REPELS. The sub-step impulse:
+        // F/m * dt_sub with F = -depth * 32 x (w-x) (w-2x) / w^4,
+        // depth = cohesion_scale * (1 - 0/chi_ref) for H-H.
         let mut w = world(1, BoundaryType::Wrap);
-        let c = w.spawn_atom(ElementId(0), 50.0, 50.0, 50.0);
+        w.spawn_atom(ElementId(0), 50.0, 50.0, 50.0);
         let d = w.spawn_atom(ElementId(0), 51.7, 50.0, 50.0);
         w.spatial_index.rebuild(&w.atoms);
-        physics().update_velocities(&mut w);
-        assert_eq!(w.atom(c).vx, 0.0, "beyond-cutoff pair must feel nothing");
-        assert_eq!(w.atom(d).vx, 0.0);
+        physics_with_well().update_velocities(&mut w);
+        let config = PhysicsConfig {
+            cohesion_scale: 1.0,
+            ..PhysicsConfig::default()
+        };
+        let depth = config.cohesion_scale;
+        let w_well = config.attraction_range - 1.59;
+        let x = 1.7f32 - 1.59;
+        let f_inner = -depth * 32.0 * x * (w_well - x) * (w_well - 2.0 * x)
+            / (w_well * w_well * w_well * w_well);
+        assert!(
+            (w.atom(d).vx + f_inner / 1.008 * dt).abs() < 0.05,
+            "well inner-slope sub-step impulse {} (expected {})",
+            w.atom(d).vx,
+            -f_inner / 1.008 * dt
+        );
+
+        // Beyond the well: no force. The pair sits 4.5 A apart
+        // (flat well ends at 4.0) with the index REBUILT, so the
+        // candidate query actually finds the pair and both the
+        // cutoff and the well range reject it. The previous
+        // probe never rebuilt the index, so it passed vacuously -
+        // verified by deleting the filters and watching it stay
+        // green.
+        let mut w = world(1, BoundaryType::Wrap);
+        let e = w.spawn_atom(ElementId(0), 50.0, 50.0, 50.0);
+        let g = w.spawn_atom(ElementId(0), 54.5, 50.0, 50.0);
+        w.spatial_index.rebuild(&w.atoms);
+        physics_with_well().update_velocities(&mut w);
+        assert_eq!(w.atom(e).vx, 0.0, "beyond-well pair must feel nothing");
+        assert_eq!(w.atom(g).vx, 0.0);
         assert_eq!(
-            (w.atom(c).bond_count, w.atom(d).bond_count),
+            (w.atom(e).bond_count, w.atom(g).bond_count),
             (0, 0),
             "distant pair: no forces, no bonds"
+        );
+    }
+
+    #[test]
+    fn cohesion_well_attracts_on_the_outer_slope() {
+        // The K2.3 cohesion law: a pair on the OUTER slope (x >
+        // w/2) is pulled together, the well minimum is neutral,
+        // and the depth follows the like-dissolves-like chi law
+        // (O-O full strength, C-O 0.703 of it at chi_ref 3.0).
+        // H-H pair at the well minimum (cutoff 1.59 + w/2 with
+        // w = 4.0 - 1.59 = 2.41 -> r = 2.795): zero force.
+        let mut w = world(1, BoundaryType::Wrap);
+        w.spawn_atom(ElementId(0), 50.0, 50.0, 50.0);
+        let b = w.spawn_atom(ElementId(0), 52.795, 50.0, 50.0);
+        w.spatial_index.rebuild(&w.atoms);
+        physics_with_well().update_velocities(&mut w);
+        assert!(
+            w.atom(b).vx.abs() < 1e-4,
+            "well minimum is neutral, got {}",
+            w.atom(b).vx
+        );
+        // Outer slope: H-H at 3.2 A (x = 1.61 > w/2) - pulled
+        // together (b moves toward a: negative).
+        let mut w = world(1, BoundaryType::Wrap);
+        w.spawn_atom(ElementId(0), 50.0, 50.0, 50.0);
+        let b = w.spawn_atom(ElementId(0), 53.2, 50.0, 50.0);
+        w.spatial_index.rebuild(&w.atoms);
+        physics_with_well().update_velocities(&mut w);
+        assert!(w.atom(b).vx < 0.0, "outer slope pulls together");
+        // Chi discrimination: same geometry FRACTION of each
+        // pair's own well (u = 0.75, outer slope, attraction) -
+        // the impulse ratio is the depth law times the well-width
+        // normalization the law carries (F ~ depth/w at equal
+        // u): (1 - 0.89/3) * w_OO/w_CO = 0.703 * 2.02/1.855.
+        let mut w = world(1, BoundaryType::Wrap);
+        w.spawn_atom(ElementId(3), 50.0, 50.0, 50.0);
+        let o2 = w.spawn_atom(ElementId(3), 50.0 + 1.98 + 0.75 * 2.02, 50.0, 50.0);
+        w.spatial_index.rebuild(&w.atoms);
+        physics_with_well().update_velocities(&mut w);
+        let impulse_oo = w.atom(o2).vx;
+        let mut w = world(1, BoundaryType::Wrap);
+        w.spawn_atom(ElementId(1), 50.0, 50.0, 50.0);
+        let o = w.spawn_atom(ElementId(3), 50.0 + 2.145 + 0.75 * 1.855, 50.0, 50.0);
+        w.spatial_index.rebuild(&w.atoms);
+        physics_with_well().update_velocities(&mut w);
+        let impulse_co = w.atom(o).vx;
+        let ratio = impulse_co / impulse_oo;
+        let expected = (1.0 - 0.89 / 3.0) * 2.02 / 1.855;
+        assert!(
+            (ratio - expected).abs() < 0.01,
+            "chi discrimination: C-O/O-O impulse ratio {ratio:.3}, expected {expected:.3}"
         );
     }
 

@@ -82,12 +82,19 @@ before specs.
   no-first-shell baseline PREREGISTERED (g_max 1.002 beyond
   3.0 A): repulsion cannot build cohesion; the attraction
   channel (the K2.3 design debt) re-runs this gate and must
-  beat that baseline. The K2.3 attraction memo is WRITTEN
-  (2026-11-04, docs/research/polarity-attraction-memo.md: the
-  like-dissolves-like electronegativity law, honesty-flagged
-  per the F4 pattern, preregistered tuning lines, and the
-  re-validation list its substrate commit owes). Next: the
-  K2.3 substrate commit, then the K2.3 gates.
+  beat that baseline. The K2.3 attraction channel is
+  IMPLEMENTED AND DORMANT (2026-11-04, cohesion_scale 0.0):
+  the like-dissolves-like well is in the code, the spec, and
+  the unit tests (double-sided quartic - the pure-attractive
+  ramp had a PE step at the range boundary, F18's lesson at
+  the force level; flat 4 A range; intermolecular 1,3
+  exemption, measurement-forced); the sweep
+  (k2_3_cohesion_sweep) measured every useful depth
+  condensing the seeded pond into a droplet, so activation is
+  gated on the POND RE-DENSITY the port plan pre-authorized -
+  the substrate-ON commit owns that, the depth, and the full
+  re-validation list (memo). Dormancy is provably free: the
+  golden hash returns the pre-channel value byte-for-byte.
   Ladder, rules, and pass history:
   docs/plans/phase-1-kernel.md; port decisions and evidence:
   docs/plans/phase-2-3d-port.md.
@@ -196,7 +203,7 @@ answer it when we get there, not before.
 
 | Gap / open question | Bites | Answered by | Detail |
 |---|---|---|---|
-| Non-bonded polarity attraction: the substrate's only attraction is the bond spring (spec 6.6 is repulsion-only and says so); K2's amphiphile sorting needs an element-derived attractive potential, designed and honesty-flagged first | K2.3-K2.6 | DESIGNED 2026-11-04: docs/research/polarity-attraction-memo.md (the like-dissolves-like chi law, preregistered tuning lines, the re-validation list the substrate commit owes); tuning may start | phase-1-kernel.md (K2.2's measured baseline: no first shell, g_max 1.002 - the number the design must beat); phase-0 re-open |
+| Non-bonded polarity attraction: the substrate's only attraction was the bond spring (spec 6.6 was repulsion-only and said so); K2's amphiphile sorting needs an element-derived attractive potential | K2.3-K2.6 | IMPLEMENTED 2026-11-04, DORMANT (cohesion_scale 0.0): the like-dissolves-like chi well in code + spec 6.6; activation gated on the pond re-density (the sweep measured every depth condensing the seeded pond into a droplet) | phase-1-kernel.md (K2.2's baseline: no first shell, g_max 1.002 - the number the activation must beat); docs/research/polarity-attraction-memo.md (the law, the revision log, the re-validation list) |
 | K3 mechanism: which bonds pair bases, how the duplex releases (the thermal window), and whether adjacent paired nucleotides reach ligation distance - all undesigned or uncalculated | K3.1-K3.4 | the K3 mechanism memo, before K3 starts (it feeds the port's grammar decisions) | phase-1-kernel.md (K3 note); phase-0 re-open |
 | Turnover mechanisms: decay (UV photolysis is the honest candidate, undeclared) and material feed (no mechanism at all) | K5.2 | the turnover memo, before K5 | phase-1-kernel.md (K5.2 note); phase-0 re-open |
 | Perf target re-derivation: ~60 t/s measured at 3.4k atoms extrapolates to ~20 t/s at 10k vs spec 13's >500 t/s (~25x), the port's ~3x pair cost lands on top, and the named levers look like 5-10x; whether the E-gates need that target at all is unexamined | phase-3 perf pass | re-derive spec 13 from the E-gates' real requirements before the perf pass; the layout-bundle question decides with the port | phase-3-hardening.md; phase-2-3d-port.md |

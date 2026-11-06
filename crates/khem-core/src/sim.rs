@@ -178,8 +178,12 @@ mod tests {
     /// 0xDD4E_87CD_A7FD_94CE (the K1.1 substrate, 2026-09-05).
     /// Pre-fix values live in git history.
     /// Update ONLY with a justification in the commit message.
-    // Re-cut 2026-11-04 with gate K2.1: non_bonded_repulsion 1.0 -> 8.0
-    // (the excluded-volume retune; config.rs carries the measured why).
+    // The K2.1 retune value (non_bonded_repulsion 1.0 -> 8.0). The
+    // K2.3 cohesion well landed 2026-11-04 DORMANT (cohesion_scale
+    // 0.0, by measurement) and this hash proves it: the trajectory
+    // is byte-identical to the pre-channel substrate. The
+    // substrate-on commit (the pond re-density + activation) re-cuts
+    // this hash with its justification.
     const GOLDEN_HASH: u64 = 0xDE40_651D_ADFF_6361;
 
     fn observer(interval: u64) -> Observer {
