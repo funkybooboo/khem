@@ -25,3 +25,4 @@ Index:
 - 0008 Workspace crate layout
 - 0009 Canonical specs; history quarantined
 - 0013 3D destination substrate; the port follows K1.5
+- 0014 The fidelity philosophy - real-world likeness, as cheaply as possible

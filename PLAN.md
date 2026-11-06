@@ -5,6 +5,16 @@ cheap enough to run a billion ticks, seed it with a minimal cell,
 and let the chemistry do everything above the atom/bond level - if
 anything alive appears, it built itself from the rules.
 
+khem is a GENERAL physics/chemistry runner: any world can be set
+up and run. The primordial pond is one world among many, not the
+project (owner, 2026-11-06). The fidelity philosophy is decided
+(ADR-0014, owner session 2026-11-06): real-world likeness as the
+striving direction, expressed through config knobs; gates certify
+the out-of-box defaults; defaults as close to the real world as
+CHEAPLY as possible - the outsider should see a high-end
+simulator, the code should stay cheap calculations and
+shortcuts.
+
 This file is the hub: the hinge question, where the repo
 stands, the phase map, the known gaps, and the project-wide
 rules. The detail lives in docs/plans/, one file per phase.

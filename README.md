@@ -2,8 +2,18 @@
 
 khem simulates 3D worlds of atoms - real elements, real
 chemistry, thermodynamics deciding what forms and what breaks.
-The runtime has no concept of a cell, a genome, or reproduction:
-if anything alive appears, it built itself from the rules.
+khem is a general physics/chemistry runner: any world can be set
+up and run. The runtime has no concept of a cell, a genome, or
+reproduction: if anything alive appears, it built itself from
+the rules.
+
+The fidelity philosophy (ADR-0014): mimic the real world as
+closely and as cheaply as we can. The defaults aim at real-world
+likeness through configuration knobs - from an outsider's
+perspective the simulation should act much like a high-end
+physics simulator; under the hood it is cheap calculations and
+shortcuts, tuned so the systems behave, in essence, like the
+real ones.
 
 A world is space filled with atoms: ten elements (H, C, N, O,
 P, S, Si, Fe, Na, Cl) carrying real valences, masses, and
@@ -19,8 +29,8 @@ whether evolution will take hold. That is the experiment.
 
 ## It runs today
 
-The engine is built - pure Rust, two crates, zero dependencies -
-and one command streams a live world to stdout:
+The engine is built - pure Rust, zero dependencies - and one
+command streams a live world to stdout:
 
     cargo run --release -p khem    # the hardcoded primordial pond
 
