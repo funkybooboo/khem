@@ -9,7 +9,7 @@
 //! are phase-1 tuning knobs; phase 4 moves them into .kem
 //! `elements` declarations loaded at runtime.
 //!
-//! Spec: docs/specs/runtime-spec.md, section 4.6.
+//! Spec: docs/build/specs/runtime-spec.md, section 4.6.
 
 use crate::world::ElementId;
 

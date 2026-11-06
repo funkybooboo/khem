@@ -1,4 +1,4 @@
-//! The K1 stability harness (docs/plans/phase-1-kernel.md gate
+//! The K1 stability harness (plans/gates/stability.md gate
 //! ladder, milestone K1).
 //!
 //! Five levels:
@@ -53,7 +53,7 @@
 //!   (K1.2-K1.5) own the finer criteria.
 //!
 //! Findings and gate history live in
-//! docs/research/abstraction-notes.md.
+//! docs/build/research/abstraction-notes.md.
 //!
 //! THE 3D PORT (phase 2, ADR-0013) mechanically moved this harness
 //! to 3D geometry; the gates' PASS BARS below remain the 2D pass

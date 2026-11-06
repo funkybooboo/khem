@@ -1,6 +1,6 @@
 # Phase-0 notes: what each abstraction stands on
 
-Status: in progress (docs/plans/phase-0-research.md). Companion to
+Status: in progress (plans/history/phase-0-research.md). Companion to
 references.md (the bibliography); this file records, per
 abstraction khem uses, what prior work supports it, what it
 simplifies away, and what the phase-1 kernel has already measured
@@ -193,7 +193,7 @@ run by channel):
 - Substrate cost measured: 10k-tick pond runs went from ~77 s to
   ~189 s in release (~53 t/s) - 4x force passes plus per-sub-step
   index rebuilds. The phase-2 perf pass owns this
-  (docs/plans/phase-2-hardening.md: no optimization before the
+  (plans/stories/phase-3-hardening.md: no optimization before the
   substrate is behaviorally sane; the gates are correctness gates).
   K1.4 note: the 20k-tick gate runs measure ~57 t/s in release
   (~350 s); still phase-2 territory.
@@ -344,7 +344,7 @@ measured:
   world_depth; 3-tuples and fixed-axis degrees-per-axis rotation
   in the language grammar; the 3.75 A cubic lattice kept; the
   provisional slab; harness-side observability) are recorded
-  with their rationale in docs/plans/phase-2-3d-port.md,
+  with their rationale in plans/history/phase-2-3d-port.md,
   "Decisions this phase owns".
 
 ## Resolution log (2026-09-08, the 3D re-climb: K1.1-K1.5)
@@ -650,7 +650,7 @@ membrane GROWTH dynamics, not only "a ring formed".
 The Genesis Engine correction notice (references.md, required
 reading) governs watch-condition design: khem's NOTABLE events must
 be measurable state comparisons, preregistered before runs (the
-thesis track, docs/plans/phase-4-experiments.md), never a detector
+thesis track, plans/stories/phase-5-experiments.md), never a detector
 that cannot report "no".
 
 ## 9. Performance envelope

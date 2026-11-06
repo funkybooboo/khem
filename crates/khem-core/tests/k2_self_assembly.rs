@@ -1,4 +1,4 @@
-//! The K2 self-assembly harness (docs/plans/phase-1-kernel.md
+//! The K2 self-assembly harness (plans/gates/self-assembly.md
 //! gate ladder, milestone K2).
 //!
 //! Levels:
@@ -424,7 +424,7 @@ fn k2_scatter_smoke() {
 ///   near-miss census are reported as evidence.
 ///
 /// The strength lever and the K1 re-runs its retune forces are
-/// recorded in the PASS record (docs/plans/phase-1-kernel.md,
+/// recorded in the PASS record (plans/gates/self-assembly.md,
 /// K2.1); the sweep probe that picked the value is
 /// `k2_1_strength_sweep` below.
 #[test]

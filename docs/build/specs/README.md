@@ -13,7 +13,7 @@ took to get here.
   energy and observer systems, scalability, configuration,
   guarantees, performance targets
 
-The specs are drafts until validated: phase 1 (PLAN.md) tests whether
+The specs are drafts until validated: phase 1 (plans/roadmap.md) tests whether
 the substrate produces living dynamics before the parser is built,
 and both documents are revised against kernel reality at that point
 (ADR-0006).
@@ -32,7 +32,7 @@ The conversation is a chat transcript: its end state can only be
 reconstructed by reading it top to bottom, because names and
 terminology changed mid-conversation. The rename map below
 translates its terminology. The decisions behind everything live in
-docs/adr/, including the naming sweep (ADR-0007).
+docs/build/adr/, including the naming sweep (ADR-0007).
 
 ## Conversation-era to canonical rename map
 

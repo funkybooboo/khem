@@ -34,7 +34,7 @@
 //!   region-parallel implementation needs, and it keeps each pass
 //!   free of tangled borrows (ADR-0005, runtime spec 10.2).
 //! - Constants are the spec 11 tuned set (2026-09-07, findings
-//!   F1-F18 in docs/research/abstraction-notes.md): every retune
+//!   F1-F18 in docs/build/research/abstraction-notes.md): every retune
 //!   is a measured fix, the passed gates are re-validated in the
 //!   commit that moves their operating assumptions, and the
 //!   harness is the judge of every further retune.
@@ -49,7 +49,7 @@
 //! integration sub-steps draw nothing. Every other physics step is
 //! deterministic arithmetic with no RNG access.
 //!
-//! Spec: docs/specs/runtime-spec.md, section 6 (Physics System).
+//! Spec: docs/build/specs/runtime-spec.md, section 6 (Physics System).
 
 use crate::config::PhysicsConfig;
 use crate::observer::Event;
@@ -354,7 +354,7 @@ impl Physics {
 
     /// Non-bonded interactions (spec 6.6): excluded volume (finding
     /// F4's fix) plus the polarity-cohesion well (the K2.3 design
-    /// debt; docs/research/polarity-attraction-memo.md). Every
+    /// debt; docs/build/research/polarity-attraction-memo.md). Every
     /// UNBONDED live pair closer than its cutoff
     /// `(radius_a + radius_b) * non_bonded_margin` is pushed apart
     /// with `F = non_bonded_repulsion * (cutoff - r)`; every pair

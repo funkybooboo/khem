@@ -2,21 +2,21 @@
 
 Date: 2026-09-07 (owner decision)
 Status: Accepted (renumbered 2026-09-07: the port phase is
-phase 2, plan file docs/plans/phase-2-3d-port.md; the body's
+phase 2, plan file plans/history/phase-2-3d-port.md; the body's
 phase numbers predate the renumbering - hardening is now
 phase 3, the language phase 4; the decision is unchanged.
 K1.5 passed 2026-09-07 - K1 closed in 2D, the port is unblocked.
 The port's substrate diff landed 2026-09-08 and the K1 ladder
 re-climbed in 3D the same day - all five gates, harness
 evidence, phase 2's exit criterion met; decisions and evidence
-in docs/plans/phase-2-3d-port.md)
+in plans/history/phase-2-3d-port.md)
 
 ## Context
 
 ADR-0002 chose a 2D world deliberately, named its artifacts
 (membranes are rings; base pairing is planar), and deferred 3D as
 "a port, not a redesign, if ever needed." Research (2026-09-07;
-citations in docs/research/references.md, section
+citations in docs/build/research/references.md, section
 "Dimensionality") sharpened both directions, and the deferral
 turned out to have a price curve.
 
@@ -63,7 +63,7 @@ pays once.
   regression vector: energy-ledger closure, the thermostat
   coupling law, and the bond bands are dimension-agnostic
   invariants the port must reproduce.
-- The port is its own phase (docs/plans/phase-1.5-3d-port.md),
+- The port is its own phase (plans/history/phase-2-3d-port.md),
   gated on K1.5 and landed before K2 tuning. Its exit criterion
   is the K1 ladder re-passed in 3D. K2-K5, phase 2, and phase 3
   then run in 3D; the .kem grammar and stdlib geometry are

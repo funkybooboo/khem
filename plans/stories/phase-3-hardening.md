@@ -46,7 +46,7 @@ Remaining (the spec's [phase 3] markers):
   baseline first - a 4 A query scans up to 27 cells versus 9 at
   the 5 A cell size - so the port records the honest new number
   against the same spec 13 targets.
-- OPEN QUESTION (registered in PLAN.md; phase-0 re-open before
+- OPEN QUESTION (the gap register, plans/issues.md; phase-0 re-open before
   this pass): ~60 t/s measured at 3.4k atoms extrapolates to
   ~20 t/s at 10k atoms - ~25x short of spec 13's >500 t/s, with
   the port's ~3x pair cost on top, while the named levers look

@@ -8,7 +8,7 @@ https://github.com/architecture-decision-record/architecture-decision-record
 Rules:
 
 - one decision per file, numbered by decision order (NNNN-slug.md)
-- the WHAT lives in docs/specs/ and ARCHITECTURE.md; the WHY lives
+- the WHAT lives in docs/build/specs/ and docs/build/architecture.md; the WHY lives
   here
 - ADRs are immutable once accepted; a changed decision gets a new
   ADR and the old one's status becomes "Superseded by ADR-NNNN"

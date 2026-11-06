@@ -4,19 +4,19 @@ Goal: steal every abstraction lesson prior work already paid for,
 before the kernel pays for them again.
 
 Status: the reading list and the abstraction map have landed -
-docs/research/references.md is the bibliography (with the
-prior-work table), and docs/research/abstraction-notes.md records,
+docs/build/research/references.md is the bibliography (with the
+prior-work table), and docs/build/research/abstraction-notes.md records,
 for each abstraction khem uses, what prior work supports it, what
 it simplifies away, and what the phase-1 kernel has measured
 against it (findings F1-F19). Phase 0 re-opens at named trigger points (the gap register in
-PLAN.md is the index) - each re-open is a short memo against
+plans/ is the index) - each re-open is a short memo against
 the literature before the gate that needs the design pays for
 it instead:
 
 - before K2.3 tuning - the non-bonded polarity potential memo
   (phantom-solvent and four-bead amphiphile models;
   abstraction-notes section 4 is the lesson). WRITTEN 2026-11-04:
-  docs/research/polarity-attraction-memo.md - the
+  docs/build/research/polarity-attraction-memo.md - the
   like-dissolves-like electronegativity law, the honesty flag,
   the preregistered tuning lines, and the re-validation list the
   substrate commit owes

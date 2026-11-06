@@ -37,7 +37,7 @@
 //! call form_bonds must rebuild the spatial index first (G07: the
 //! tick loop rebuilds it between position updates and chemistry).
 //!
-//! Spec: docs/specs/runtime-spec.md, section 7 (Chemistry System).
+//! Spec: docs/build/specs/runtime-spec.md, section 7 (Chemistry System).
 
 use crate::config::PhysicsConfig;
 use crate::observer::Event;

@@ -6,7 +6,7 @@ pattern, and the crates split along that line: khem-lang describes,
 khem-core simulates. The Cargo workspace holds any number of
 library and binary crates; a new crate joins by adding a
 directory under crates/ and a line in the root Cargo.toml members
-list. The WHY behind each decision lives in docs/adr/; this file
+list. The WHY behind each decision lives in docs/build/adr/; this file
 describes the shape they produced.
 
 ## Crate map (target)
@@ -87,5 +87,5 @@ describes the shape they produced.
 Placeholder crates are deliberately NOT created ahead of need. The
 workspace accepts a new crate with one directory and one members
 line; empty scaffolds invite premature building, which is the exact
-failure mode this project's plan guards against (PLAN.md, "scope
+failure mode this project's plan guards against (plans/roadmap.md, "scope
 discipline").

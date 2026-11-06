@@ -6,7 +6,7 @@
 //! The NDJSON stream is a public, versioned contract (schema v:1)
 //! consumed by khem-view and any other tool; serialization lives in
 //! [`crate::ndjson`] and tools target the stream, not these types
-//! (ADR-0004, ARCHITECTURE.md).
+//! (ADR-0004, docs/build/architecture.md).
 //!
 //! Phase-1 scope: START, TICK, BOND_FORMED, BOND_BROKEN, END per
 //! runtime spec 3.3. NOTABLE (watch conditions) and SAVE (state
@@ -18,7 +18,7 @@
 //! documented carve-out: a run is byte-identical modulo those two
 //! fields (spec revision note).
 //!
-//! Spec: docs/specs/runtime-spec.md, sections 3 and 9.
+//! Spec: docs/build/specs/runtime-spec.md, sections 3 and 9.
 
 use crate::world::{AtomId, ElementId, WorldState};
 

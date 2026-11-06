@@ -38,6 +38,6 @@ chemistry.
 - Fidelity claims must always be stated as phenomenological. The
   runtime's guarantee G01 (nothing above atom/bond level exists in the
   engine) is the architectural expression of this decision.
-- The K1-K5 validation gates (PLAN.md) test whether this abstraction
+- The K1-K5 validation gates (plans/roadmap.md) test whether this abstraction
   produces living dynamics before anything is built on it. If the
   substrate is dead, it is redesigned, not patched.

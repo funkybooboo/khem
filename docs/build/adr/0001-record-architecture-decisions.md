@@ -14,13 +14,13 @@ durable, citable record of why things are the way they are.
 ## Decision
 
 Record every decision that shapes the language, the runtime, or the
-process as an architecture decision record in docs/adr/: one
+process as an architecture decision record in docs/build/adr/: one
 numbered file per decision, in the Nygard format (Context /
 Decision / Consequences), following
 https://github.com/architecture-decision-record/architecture-decision-record
 
-ADRs record WHY. The WHAT lives in docs/specs/ (language and runtime
-specifications) and ARCHITECTURE.md (crate layout).
+ADRs record WHY. The WHAT lives in docs/build/specs/ (language and runtime
+specifications) and docs/build/architecture.md (crate layout).
 
 ## Consequences
 

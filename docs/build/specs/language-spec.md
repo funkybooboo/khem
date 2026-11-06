@@ -2,7 +2,7 @@
 
 Language version: 0.1 (the version string "0.1" inside .kem files)
 Status: canonical as of 2026-09-04. Drafts until validated: phase 1
-(PLAN.md) tests the substrate before the parser is built, and this
+(plans/roadmap.md) tests the substrate before the parser is built, and this
 document is revised against kernel reality at that point (ADR-0006).
 The coordinate grammar is 3D since the phase-2 port (2026-09-08,
 ADR-0013): positions and placements are 3-tuples, world sizes are

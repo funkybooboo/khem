@@ -5,8 +5,8 @@
 //! Nothing here knows about the .kem language; world definition and
 //! parsing arrive in phase 4 as the khem-lang crate. The crate
 //! boundary enforces runtime guarantee G01: no concept above the
-//! atom/bond level exists in the engine (see ARCHITECTURE.md and
-//! docs/specs/runtime-spec.md).
+//! atom/bond level exists in the engine (see docs/build/architecture.md and
+//! docs/build/specs/runtime-spec.md).
 //!
 //! What exists today (phase 1 kernel, mid-build):
 //!

@@ -27,5 +27,5 @@ plugins, and no CLI flags beyond --seed; everything is hardcoded.
 - If K1-K3 fail after honest parameter sweeps (weeks, not days), the
   substrate is redesigned before anything is built on it. That is
   the plan working, not the plan failing.
-- The specs in docs/specs/ are expected to change after phase 1;
+- The specs in docs/build/specs/ are expected to change after phase 1;
   changes land as versioned edits to the canonical documents.

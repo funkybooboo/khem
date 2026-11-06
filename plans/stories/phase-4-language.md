@@ -17,7 +17,7 @@ builds that front end.
 
 - .kem parser for the declarations: elements / struct / chain /
   body / world / run (grammar from
-  docs/specs/language-spec.md, revised against Kappa lessons
+  docs/build/specs/language-spec.md, revised against Kappa lessons
   and phase-1 reality; specs are drafts until validated, not
   scripture)
 - validation rules (V-STRUCT/V-CHAIN/V-BODY/V-WORLD/V-RUN codes

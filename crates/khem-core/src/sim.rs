@@ -27,7 +27,7 @@
 //! Timing: the only wall-clock consumer, for the TICK/END timing
 //! fields excluded from G02 (observer module doc).
 //!
-//! Spec: docs/specs/runtime-spec.md, section 5 (Tick Execution).
+//! Spec: docs/build/specs/runtime-spec.md, section 5 (Tick Execution).
 
 use std::time::Instant;
 

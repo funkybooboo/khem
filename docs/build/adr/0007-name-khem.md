@@ -44,7 +44,7 @@ alembic, substrate (all taken or generic).
 - The identity system mirrors C/gcc and Rust/rustc: language khem,
   files .kem, runtime khem.
 - All conversation-era names are history; the rename map lives in
-  docs/specs/README.md.
+  docs/build/specs/README.md.
 - If the crates.io name is taken by someone else before first
   publish, this ADR is superseded by a new one; publishing a real
   (non-stub) crate would hold the name.

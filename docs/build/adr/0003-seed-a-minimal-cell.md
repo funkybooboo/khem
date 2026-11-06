@@ -25,7 +25,7 @@ patch in special cases.
 
 - Feasible timescales: the study is emergent evolution of seeded
   minimal cells - NOT abiogenesis, and never framed as such. The
-  thesis framing (PLAN.md) depends on this distinction.
+  thesis framing (plans/roadmap.md) depends on this distinction.
 - Some rules (permeability behavior, base-pair geometry targets)
   smell like smuggled biology. They get flagged honestly in the specs
   rather than hidden behind emergence claims.

@@ -1,12 +1,12 @@
 # The non-bonded polarity attraction - design memo
 
-The phase-0 re-open memo the gap register names (PLAN.md,
+The phase-0 re-open memo the gap register names (plans/roadmap.md,
 "Non-bonded polarity attraction"; the K2.3 precondition). The
 K2.2 gate just made the target concrete: the measured
 steady-tail pond is a uniform-plateau fluid with a 3 A
 correlation hole and NO first shell (g_max 1.002 beyond 3.0 A,
 census 0.978 - see the K2.2 PASS record,
-docs/plans/phase-1-kernel.md). Repulsion cannot build the
+plans/gates/stability.md). Repulsion cannot build the
 missing peak; this memo designs what can, against the
 literature, before K2.3 tuning starts.
 

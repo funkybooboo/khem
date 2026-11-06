@@ -186,7 +186,7 @@ DECIDED PROVISIONALLY, the re-climb evidence owns the final call:
 
 STILL OPEN (unchanged):
 
-- AtomState layout (registered in PLAN.md): the port kept the
+- AtomState layout (the gap register, plans/issues.md): the port kept the
   array-of-structs (the layout question is bundled with the SoA
   conversion, phase 3's likely perf lever, and decided with the
   perf target re-derivation - the phase-0 re-open;

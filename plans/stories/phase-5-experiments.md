@@ -4,7 +4,7 @@ The K-gates prove the substrate; the E-gates prove the
 instrument - that khem can run real evolution experiments. Each
 E-gate is a platform capability, built in the order the
 experiments need them. Same ladder rules as the K-gates
-(docs/plans/phase-1-kernel.md): harness-measured criteria, pass
+(plans/gates/stability.md): harness-measured criteria, pass
 it, commit it, move on; the re-validation contract binds here
 too (a passed gate re-runs when a later gate moves its
 assumptions).
@@ -64,4 +64,4 @@ first (the phase-0 binding): their 100% headline result was a
 detector artifact, and their audit trail is the best available
 example of how that class of mistake happens in exactly this
 kind of simulation. Design so it cannot happen here. The
-literature-review skeleton is docs/research/references.md.
+literature-review skeleton is docs/build/research/references.md.

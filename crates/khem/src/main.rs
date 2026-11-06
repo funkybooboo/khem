@@ -1,12 +1,12 @@
 //! khem - the runtime CLI for the khem artificial-chemistry language.
 //!
 //! Phase 1: the hardcoded primordial pond
-//! (docs/plans/phase-1-kernel.md). A file
+//! (plans/gates/stability.md). A file
 //! argument is accepted but not read - the .kem parser arrives in
 //! phase 4 via the khem-lang crate; until then the only knobs are
 //! --seed and the constants in khem-core's config. The binary stays
 //! thin forever: parse arguments, construct a world, run, stream
-//! (see ARCHITECTURE.md).
+//! (see docs/build/architecture.md).
 //!
 //! Streams (runtime spec 2.4, guarantees G10/G11): stdout carries
 //! only NDJSON events, stderr only human diagnostics. stdout is

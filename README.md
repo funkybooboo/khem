@@ -175,11 +175,11 @@ gate, with the sweep evidence recorded.
 
 ## Documentation
 
-    PLAN.md            where the project stands and where it goes
-    ARCHITECTURE.md    how the crates fit together
-    docs/specs/        the contracts: the .kem language, the runtime
-    docs/plans/        the build order, phase by phase
-    docs/adr/          the why behind the design decisions
-    docs/research/     prior work and the evidence log
+    plans/                the bet, the ladder, the roadmap, the history
+    docs/build/           developer docs, by role:
+      architecture.md    how the crates fit together
+      specs/             the contracts: the .kem language, the runtime
+      adr/               the why behind the design decisions
+      research/          prior work and the evidence log
 
 MIT license.

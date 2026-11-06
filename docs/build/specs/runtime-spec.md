@@ -404,7 +404,7 @@ each oxygen interaction minted ~(0.5*m - 1) * F^2: finding F12).
 No velocity clamp exists: the sub-stepped integrator (6.5) resolves
 the fast-crossing "tunneling mint" the founding substrate needed
 one for (history and measurements: F13, F17 in
-docs/research/abstraction-notes.md).
+docs/build/research/abstraction-notes.md).
 
 ### 6.2 Temperature diffusion
 
@@ -454,7 +454,7 @@ law both directions: stretched is attractive, compressed is
 repulsive through the same F = k * (r - r_eq), bounded at
 k * r_eq near coincidence - no hard core (a force discontinuity
 pumps symplectic integrators; history: F9,
-docs/research/abstraction-notes.md). Coincident atoms (r ~ 0) have
+docs/build/research/abstraction-notes.md). Coincident atoms (r ~ 0) have
 no defined axis; the force is skipped and the next kick separates
 them.
 
@@ -472,7 +472,7 @@ dt_sub * sqrt(k / reduced_mass) < 2, evaluated at the integration
 sub-step (6.5); spring_energy_scale sits inside that bound with
 margin - which at dt_sub = 0.25 holds real-water bond well depths
 (O-H ~80 kT; worst formable pair H-H at 1.32 < 2). History and
-measurements: F2, F17 in docs/research/abstraction-notes.md.
+measurements: F2, F17 in docs/build/research/abstraction-notes.md.
 
 ### 6.4 Pressure force
 
@@ -535,7 +535,7 @@ documented as such: the substrate has excluded volume because
 matter does, not because any biology needs it.
 
 POLARITY COHESION (implemented 2026-11-04, the K2.3 design debt;
-the design memo is docs/research/polarity-attraction-memo.md).
+the design memo is docs/build/research/polarity-attraction-memo.md).
 Outside the cutoff, inside the flat attraction_range, an
 unbonded pair sits in a zero-net-force well:
 
@@ -857,7 +857,7 @@ Values below are the phase-1 tuned set (tuned 2026-09-05;
 integration_substeps and spring_energy_scale retuned 2026-09-07
 with the K1.3 integrator); the founding draft's literals are
 recorded in git history and in
-docs/research/abstraction-notes.md (findings F1, F2, F7) with the
+docs/build/research/abstraction-notes.md (findings F1, F2, F7) with the
 measurements that changed them:
 
     kb_scaled               0.45     // Boltzmann for BREAKING (7.1);

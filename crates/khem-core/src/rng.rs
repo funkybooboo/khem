@@ -6,7 +6,7 @@
 //! avoids transcendentals (sum of twelve uniforms) so reproducibility
 //! never depends on libm differences between machines.
 //!
-//! Spec: docs/specs/runtime-spec.md, section 5.3 (Determinism).
+//! Spec: docs/build/specs/runtime-spec.md, section 5.3 (Determinism).
 
 /// SplitMix64. Not cryptographically secure; it does not need to be.
 #[derive(Debug, Clone)]

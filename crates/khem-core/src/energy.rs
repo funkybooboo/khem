@@ -20,7 +20,7 @@
 //! RNG discipline (ADR-0005): this system consumes no randomness.
 //! The physics system is the tick's first RNG consumer.
 //!
-//! Spec: docs/specs/runtime-spec.md, section 8 (Energy System).
+//! Spec: docs/build/specs/runtime-spec.md, section 8 (Energy System).
 
 use crate::config::PhysicsConfig;
 use crate::world::WorldState;

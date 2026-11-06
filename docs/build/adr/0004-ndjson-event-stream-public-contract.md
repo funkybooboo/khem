@@ -15,7 +15,7 @@ The runtime emits only newline-delimited JSON events to stdout,
 versioned with a v field on every event (schema v:1 in khem v0.1).
 Human-readable diagnostics go to stderr. Viewers and analysis tools
 are separate programs consuming the stream; they target the documented
-event schema (docs/specs/runtime-spec.md section 3), not shared
+event schema (docs/build/specs/runtime-spec.md section 3), not shared
 types.
 
 ## Consequences

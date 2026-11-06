@@ -112,7 +112,7 @@ pub struct PhysicsConfig {
     /// * margin.
     pub non_bonded_margin: f32,
     /// Polarity-cohesion well depth scale (spec 6.6's attraction,
-    /// the K2.3 design debt; docs/research/polarity-attraction-memo.md).
+    /// the K2.3 design debt; docs/build/research/polarity-attraction-memo.md).
     /// Each unbonded pair outside its excluded-volume cutoff and
     /// inside the flat `attraction_range` sits in a zero-net-force
     /// well of depth `cohesion_scale * (1 - |chi_a - chi_b| /
