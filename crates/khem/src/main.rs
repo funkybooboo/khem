@@ -4,7 +4,7 @@
 //! (plans/gates/stability.md). A file
 //! argument is accepted but not read - the .kem parser arrives in
 //! phase 4 via the khem-lang crate; until then the only knobs are
-//! --seed and the constants in khem-core's config. The binary stays
+//! --seed and the constants in the khem-forcefield config. The binary stays
 //! thin forever: parse arguments, construct a world, run, stream
 //! (see docs/build/architecture.md).
 //!
@@ -24,9 +24,11 @@
 use std::io::Write;
 use std::process::ExitCode;
 
-use khem_core::ndjson;
-use khem_core::observer::{Observer, ObserverConfig};
-use khem_core::{PhysicsConfig, Sim, pond};
+use khem_engine::Sim;
+use khem_engine::ndjson;
+use khem_engine::observer::{Observer, ObserverConfig};
+use khem_forcefield::ForceField;
+use khem_worlds::pond;
 
 const USAGE: &str = "\
 usage: khem [OPTIONS] [<file.kem>]
@@ -129,7 +131,7 @@ fn run(path: Option<&str>, seed: Option<u64>) -> ExitCode {
         );
     }
     let seed = seed.unwrap_or(42);
-    let config = PhysicsConfig::default();
+    let config = ForceField::default();
     let mut world = pond::primordial_pond(seed, config);
     let observer = Observer::new(ObserverConfig {
         khem_version: env!("CARGO_PKG_VERSION"),
@@ -166,7 +168,7 @@ fn run(path: Option<&str>, seed: Option<u64>) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn write_event(out: &mut impl Write, event: &khem_core::Event) -> std::io::Result<()> {
+fn write_event(out: &mut impl Write, event: &khem_world::Event) -> std::io::Result<()> {
     writeln!(out, "{}", ndjson::emit(event))
 }
 

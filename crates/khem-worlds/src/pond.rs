@@ -56,11 +56,11 @@
 //! crosslinking onto water is impossible until something breaks a
 //! bond first. The reactive population is the free atoms.
 
-use crate::chemistry::bond_energy;
-use crate::config::PhysicsConfig;
-use crate::elements::{self, element_id};
-use crate::energy::EnergySource;
-use crate::world::{BoundaryType, ElementId, WorldState};
+use khem_forcefield::ForceField;
+use khem_forcefield::bond_energy;
+use khem_forcefield::{self, element_id};
+use khem_world::EnergySource;
+use khem_world::{BoundaryType, ElementId, WorldState};
 /// Water lattice spacing, angstroms. RE-DERIVED 2026-11-04 (the
 /// K2.3 cohesion activation): the port kept the 2D pond's 3.75 A
 /// constant, seeding 0.0636 atoms/A^3 - 0.63x real water's atomic
@@ -136,7 +136,7 @@ fn uniform_direction(w: &mut WorldState) -> (f32, f32, f32) {
 /// well then pulls them to its minimum over the first ticks.
 fn placement_clear(
     w: &WorldState,
-    config: &PhysicsConfig,
+    config: &ForceField,
     el: ElementId,
     x: f32,
     y: f32,
@@ -150,7 +150,7 @@ fn placement_clear(
 /// - the best-of-N placement tracker's objective.
 fn placement_gap(
     w: &WorldState,
-    config: &PhysicsConfig,
+    config: &ForceField,
     el: ElementId,
     x: f32,
     y: f32,
@@ -162,8 +162,8 @@ fn placement_gap(
         if dx * dx + dy * dy + dz * dz < f32::EPSILON {
             return f32::NEG_INFINITY;
         }
-        let cutoff =
-            (w.element(a.element).radius + w.element(el).radius) * config.non_bonded_margin;
+        let cutoff = (w.element(a.element).radius + w.element(el).radius)
+            * config.excluded_volume.non_bonded_margin;
         let gap = dx * dx + dy * dy + dz * dz - cutoff * cutoff;
         min_gap = min_gap.min(gap);
     }
@@ -172,7 +172,7 @@ fn placement_gap(
 
 /// Builds the hardcoded primordial pond. The seed also seeds the
 /// world RNG; the same seed yields the identical pond and run.
-pub fn primordial_pond(seed: u64, config: PhysicsConfig) -> WorldState {
+pub fn primordial_pond(seed: u64, config: ForceField) -> WorldState {
     let mut w = WorldState::new(
         POND_WIDTH,
         POND_HEIGHT,
@@ -199,11 +199,12 @@ pub fn primordial_pond(seed: u64, config: PhysicsConfig) -> WorldState {
     // jittered cubic lattice with a uniformly random 3D
     // orientation per molecule: a bisector direction on the sphere
     // (two draws) plus an in-plane rotation about it (one draw).
-    let (h_el, o_el) = (elements::H, elements::O);
+    let (h_el, o_el) = (khem_forcefield::elements::H, khem_forcefield::elements::O);
     let oh_energy = bond_energy(o_el, h_el, 1);
     // Physics 6.3 equilibrium: the covalent radius sum, from the
     // same table the springs read.
-    let bond_len = elements::element(o_el).radius + elements::element(h_el).radius;
+    let bond_len = khem_forcefield::elements::element(o_el).radius
+        + khem_forcefield::elements::element(h_el).radius;
     let half_angle = (104.5f32 / 2.0).to_radians();
     for gz in 0..WATER_LAYERS {
         for gy in 0..WATER_ROWS {
@@ -338,7 +339,7 @@ pub fn primordial_pond(seed: u64, config: PhysicsConfig) -> WorldState {
 /// persistence signal. Recognized structurally: an alive O holding
 /// exactly two bonds, both to H.
 pub fn water_intact(world: &WorldState) -> usize {
-    let (h_el, o_el) = (elements::H, elements::O);
+    let (h_el, o_el) = (khem_forcefield::elements::H, khem_forcefield::elements::O);
     world
         .atoms
         .iter()
@@ -362,7 +363,7 @@ mod tests {
 
     #[test]
     fn pond_shape_and_content() {
-        let w = primordial_pond(42, PhysicsConfig::default());
+        let w = primordial_pond(42, ForceField::default());
         // 1024 waters (3 atoms each) + 360 free atoms.
         let waters = POND_WATERS;
         let free: u32 = FREE_ATOMS.iter().map(|(_, n)| n).sum();
@@ -392,20 +393,20 @@ mod tests {
 
     #[test]
     fn pond_is_deterministic_per_seed() {
-        let a = primordial_pond(7, PhysicsConfig::default());
-        let b = primordial_pond(7, PhysicsConfig::default());
+        let a = primordial_pond(7, ForceField::default());
+        let b = primordial_pond(7, ForceField::default());
         assert_eq!(a.atoms.len(), b.atoms.len());
         for i in 0..a.atoms.len() {
             assert_eq!(a.atoms[i].x, b.atoms[i].x, "atom {i} x");
             assert_eq!(a.atoms[i].element, b.atoms[i].element, "atom {i} element");
         }
-        let c = primordial_pond(8, PhysicsConfig::default());
+        let c = primordial_pond(8, ForceField::default());
         assert_ne!(a.atoms[0].x, c.atoms[0].x, "different seed, different pond");
     }
 
     #[test]
     fn water_geometry_is_bent() {
-        let w = primordial_pond(42, PhysicsConfig::default());
+        let w = primordial_pond(42, ForceField::default());
         // Check the first water molecule's H-O-H angle in 3D (the
         // angle between the two O->H vectors), walking the O's
         // bonds through the canonical bond_ids() interface.
@@ -432,7 +433,7 @@ mod tests {
         // uniformly distributed over the sphere - no axis is
         // privileged (a broken orientation would pile them into a
         // plane or pole).
-        let w = primordial_pond(42, PhysicsConfig::default());
+        let w = primordial_pond(42, ForceField::default());
         let o_el = element_id("O").unwrap();
         let mut cos_z: Vec<f32> = Vec::new();
         for a in w

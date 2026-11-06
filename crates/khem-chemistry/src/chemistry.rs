@@ -39,9 +39,10 @@
 //!
 //! Spec: docs/build/specs/runtime-spec.md, section 7 (Chemistry System).
 
-use crate::config::PhysicsConfig;
-use crate::observer::Event;
-use crate::world::{AtomId, AtomState, BondId, BondState, ElementId, WorldState};
+use khem_forcefield::ForceField;
+use khem_forcefield::bond_energy;
+use khem_world::Event;
+use khem_world::{AtomId, AtomState, BondId, BondState, WorldState};
 
 /// The chemistry system interface, decomposed per the tick order
 /// (runtime spec 5.1: break_bonds, form_bonds). v0.1 compiles exactly
@@ -53,90 +54,6 @@ pub trait ChemistrySystem {
     fn break_bonds(&mut self, world: &mut WorldState);
     /// Probabilistic bond formation (spec 7.2).
     fn form_bonds(&mut self, world: &mut WorldState);
-}
-
-/// Bond energies, kJ/mol (spec 7.3). Rows are (a, b, order, energy)
-/// with a <= b. Element indices: H=0 C=1 N=2 O=3 P=4 S=5 Si=6 Fe=7
-/// Na=8 Cl=9 (the canonical ELEMENTS order). Fe-O is ~390, variable
-/// in reality (spec notes this).
-const BOND_ENERGY_TABLE: [(u8, u8, u8, f32); 29] = [
-    (0, 0, 1, 436.0), // H-H
-    (0, 1, 1, 413.0), // H-C
-    (0, 2, 1, 391.0), // H-N
-    (0, 3, 1, 463.0), // H-O
-    (0, 5, 1, 363.0), // H-S
-    (1, 1, 1, 346.0), // C-C
-    (1, 1, 2, 614.0), // C=C
-    (1, 1, 3, 839.0), // C#C
-    (1, 2, 1, 305.0), // C-N
-    (1, 2, 2, 615.0), // C=N
-    (1, 2, 3, 891.0), // C#N
-    (1, 3, 1, 358.0), // C-O
-    (1, 3, 2, 799.0), // C=O
-    (1, 4, 1, 264.0), // C-P
-    (1, 5, 1, 272.0), // C-S
-    (2, 2, 1, 163.0), // N-N
-    (2, 2, 2, 418.0), // N=N
-    (2, 2, 3, 945.0), // N#N
-    (2, 3, 1, 201.0), // N-O
-    (2, 3, 2, 607.0), // N=O
-    (3, 3, 1, 146.0), // O-O
-    (3, 3, 2, 498.0), // O=O
-    (3, 4, 1, 335.0), // O-P
-    (3, 5, 1, 265.0), // O-S
-    (3, 6, 1, 452.0), // Si-O
-    (3, 7, 1, 390.0), // Fe-O (approximate)
-    (4, 4, 1, 201.0), // P-P
-    (5, 5, 1, 266.0), // S-S
-    (6, 6, 1, 222.0), // Si-Si
-];
-
-/// Per-element single-bond reference energy, kJ/mol, for the
-/// unknown-pair geometric-mean fallback: the element's own single
-/// bond where the table has one (N-N 163 is genuinely weak; note the
-/// fallback makes unknown N pairs weak too - a documented v0
-/// behavior), standard values for Na and Cl, which have no table
-/// entries.
-const SINGLE_REFERENCE: [f32; 10] = [
-    436.0, // H
-    346.0, // C
-    163.0, // N
-    146.0, // O
-    201.0, // P
-    266.0, // S
-    222.0, // Si
-    390.0, // Fe
-    77.0,  // Na
-    243.0, // Cl
-];
-
-/// Bond energy, kJ/mol (spec 7.3 with the fallback rules above).
-pub fn bond_energy(a: ElementId, b: ElementId, order: u8) -> f32 {
-    let (lo, hi) = if a.0 <= b.0 { (a.0, b.0) } else { (b.0, a.0) };
-    for (x, y, o, e) in BOND_ENERGY_TABLE {
-        if x == lo && y == hi && o == order {
-            return e;
-        }
-    }
-    // Unknown (pair, order): known single scaled by order, else the
-    // geometric mean of the elements' references, scaled by order.
-    let single = if lo == hi {
-        SINGLE_REFERENCE[lo as usize]
-    } else if let Some(e) = table_single(lo, hi) {
-        e
-    } else {
-        (SINGLE_REFERENCE[lo as usize] * SINGLE_REFERENCE[hi as usize]).sqrt()
-    };
-    single * (order.max(1) as f32)
-}
-
-fn table_single(lo: u8, hi: u8) -> Option<f32> {
-    for (x, y, o, e) in BOND_ENERGY_TABLE {
-        if x == lo && y == hi && o == 1 {
-            return Some(e);
-        }
-    }
-    None
 }
 
 /// The ideal angle between an existing bond and a new candidate bond
@@ -214,11 +131,11 @@ pub struct PairOutcome {
 
 /// The v0.1 chemistry implementation (runtime spec 10.4: exactly one).
 pub struct Chemistry {
-    config: PhysicsConfig,
+    config: ForceField,
 }
 
 impl Chemistry {
-    pub fn new(config: PhysicsConfig) -> Self {
+    pub fn new(config: ForceField) -> Self {
         Self { config }
     }
 
@@ -246,7 +163,7 @@ impl Chemistry {
         let r_eq = world.element(world.atom(a).element).radius
             + world.element(world.atom(b).element).radius;
         let r = (dx * dx + dy * dy + dz * dz).sqrt();
-        if r <= self.config.bond_break_factor * r_eq {
+        if r <= self.config.bonds.bond_break_factor * r_eq {
             return false;
         }
         if world.break_bond(BondId(index as u32)) {
@@ -294,9 +211,11 @@ impl Chemistry {
         // Temperature factor: gaussian around the pair's optimal
         // temperature (module doc: v0 fill).
         let t = world.temp_field.get(mx, my, mz).max(0.0);
-        let t_opt = self.config.t_opt_scale * energy;
+        let t_opt = self.config.chemistry.t_opt_scale * energy;
         let dt = t - t_opt;
-        let t_factor = (-dt * dt / (2.0 * self.config.t_width * self.config.t_width)).exp();
+        let t_factor = (-dt * dt
+            / (2.0 * self.config.chemistry.t_width * self.config.chemistry.t_width))
+            .exp();
         let en =
             (world.element(a_el).electronegativity - world.element(b_el).electronegativity).abs();
         // The candidate direction as a unit vector; the geometry
@@ -304,10 +223,10 @@ impl Chemistry {
         // delta here is the minimum-image one, so a seam-crossing
         // candidate scores against its true direction).
         let r = (dx * dx + dy * dy + dz * dz).sqrt();
-        let p = self.config.base_formation_rate
+        let p = self.config.chemistry.base_formation_rate
             * self.geometry_factor(world, a, (dx / r, dy / r, dz / r), order)
             * t_factor
-            * (1.0 + en * self.config.en_bonus);
+            * (1.0 + en * self.config.chemistry.en_bonus);
         PairOutcome {
             order,
             energy,
@@ -347,7 +266,7 @@ impl Chemistry {
             return 1.0;
         };
         let ideal = ideal.to_radians();
-        let sigma = self.config.geometry_sigma.to_radians();
+        let sigma = self.config.chemistry.geometry_sigma.to_radians();
         let atom = world.atom(a);
         let (ax, ay, az) = (atom.x, atom.y, atom.z);
         let mut best = 0.0f32;
@@ -416,12 +335,13 @@ impl ChemistrySystem for Chemistry {
             // (clamped field reads; exp(-inf) guard).
             let t = world.temp_field.get(mx, my, mz).max(0.0);
             let p_break = if t > 0.0 {
-                (-(energy / (self.config.kb_scaled * t))).exp()
+                (-(energy / (self.config.chemistry.kb_scaled * t))).exp()
             } else {
                 0.0
             };
             // Spec 8.2, folded in (module doc).
-            let p_uv = world.uv_field.get(mx, my, mz) * self.config.uv_sensitivity.of_order(order);
+            let p_uv =
+                world.uv_field.get(mx, my, mz) * self.config.fields.uv_sensitivity.of_order(order);
             let p = 1.0 - (1.0 - p_break) * (1.0 - p_uv);
             if world.rng.f01() < p as f64 && world.break_bond(BondId(i as u32)) {
                 // Spec 7.1: the released heat COMMITS to the
@@ -432,7 +352,7 @@ impl ChemistrySystem for Chemistry {
                 // Conservation through the form+break cycle is
                 // unchanged: the full release_fraction * E enters
                 // the field, spread over E/0.3/cap ticks.
-                let released = energy * self.config.release_fraction;
+                let released = energy * self.config.chemistry.release_fraction;
                 world.release_field.add(mx, my, mz, released);
                 world.event_queue.push(Event::BondBroken {
                     tick: world.tick,
@@ -449,7 +369,7 @@ impl ChemistrySystem for Chemistry {
     }
 
     fn form_bonds(&mut self, world: &mut WorldState) {
-        let radius = self.config.bond_search_radius;
+        let radius = self.config.chemistry.bond_search_radius;
         let radius2 = radius * radius;
         let n = world.atoms.len();
         for i in 0..n {
@@ -515,7 +435,7 @@ impl ChemistrySystem for Chemistry {
                 // ticks (measured: 40 more). Ineligible pairs draw
                 // nothing (RNG discipline).
                 let r_eq = world.element(a_el).radius + world.element(b_el).radius;
-                let cap = self.config.bond_form_factor * r_eq;
+                let cap = self.config.chemistry.bond_form_factor * r_eq;
                 if dx * dx + dy * dy + dz * dz > cap * cap {
                     continue;
                 }
@@ -533,7 +453,7 @@ impl ChemistrySystem for Chemistry {
                     world.atom(b_id).vz - world.atom(a_id).vz,
                 );
                 if rvx * rvx + rvy * rvy + rvz * rvz
-                    > self.config.max_form_speed * self.config.max_form_speed
+                    > self.config.chemistry.max_form_speed * self.config.chemistry.max_form_speed
                 {
                     continue;
                 }
@@ -549,7 +469,7 @@ impl ChemistrySystem for Chemistry {
                         outcome.mx,
                         outcome.my,
                         outcome.mz,
-                        -outcome.energy * self.config.formation_fraction,
+                        -outcome.energy * self.config.chemistry.formation_fraction,
                     );
                     world.event_queue.push(Event::BondFormed {
                         tick: world.tick,
@@ -573,10 +493,12 @@ impl ChemistrySystem for Chemistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::elements::element_id;
-    use crate::energy::EnergySystem;
-    use crate::physics::PhysicsSystem;
-    use crate::world::BoundaryType;
+    use khem_forcefield::element_id;
+    use khem_forcefield::{ChemistryParams, FieldParams, ThermostatParams};
+    use khem_physics::EnergySystem;
+    use khem_physics::PhysicsSystem;
+    use khem_world::BoundaryType;
+    use khem_world::ElementId;
 
     fn world(seed: u64) -> WorldState {
         WorldState::new(
@@ -585,11 +507,11 @@ mod tests {
             100.0,
             BoundaryType::Wrap,
             seed,
-            PhysicsConfig::default(),
+            ForceField::default(),
         )
     }
 
-    fn chemistry(config: PhysicsConfig) -> Chemistry {
+    fn chemistry(config: ForceField) -> Chemistry {
         Chemistry::new(config)
     }
 
@@ -628,7 +550,7 @@ mod tests {
         // 1.0, and the direction ideal only against the MIRRORED
         // anchor low. Pre-fix this was inverted: the phantom
         // direction scored 1.0, the true one 0.63.
-        let config = PhysicsConfig::default();
+        let config = ForceField::default();
         let mut w = world(6);
         let o = w.spawn_atom(element_id("O").unwrap(), 0.5, 50.0, 50.0);
         let h = w.spawn_atom(element_id("H").unwrap(), 99.4, 50.0, 50.0);
@@ -691,7 +613,7 @@ mod tests {
         let o = w.spawn_atom(element_id("O").unwrap(), 50.0, 50.0, 50.0);
         let h1 = w.spawn_atom(element_id("H").unwrap(), 51.0, 50.0, 50.0); // bond at 0 deg
         w.form_bond(o, h1, 1, 463.0);
-        let chem = chemistry(PhysicsConfig::default());
+        let chem = chemistry(ForceField::default());
         let ideal = 104.5f32.to_radians();
         let at_ideal = (ideal.cos(), ideal.sin(), 0.0);
         let at_opposite = (-1.0, 0.0, 0.0);
@@ -721,7 +643,7 @@ mod tests {
 
     #[test]
     fn hot_weak_bonds_break_and_release_heat() {
-        let config = PhysicsConfig::default();
+        let config = ForceField::default();
         let mut w = world(7);
         let a = w.spawn_atom(element_id("O").unwrap(), 50.0, 50.0, 50.0);
         let b = w.spawn_atom(element_id("O").unwrap(), 51.0, 50.0, 50.0);
@@ -744,7 +666,7 @@ mod tests {
         // sits in the reservoir awaiting the bath's bounded drain
         // (physics owns the drain; the law tests live there).
         let committed = w.release_field.get(50.5, 50.0, 50.0);
-        let expected = 1.0 * config.release_fraction;
+        let expected = 1.0 * config.chemistry.release_fraction;
         assert!(
             (committed - expected).abs() < 1e-2,
             "committed {committed}, expected {expected}"
@@ -763,12 +685,15 @@ mod tests {
 
     #[test]
     fn uv_breaks_bonds_independent_of_temperature() {
-        let config = PhysicsConfig {
-            uv_sensitivity: crate::config::UvSensitivity {
-                single: 0.5,
-                ..PhysicsConfig::default().uv_sensitivity
+        let config = ForceField {
+            fields: FieldParams {
+                uv_sensitivity: khem_forcefield::UvSensitivity {
+                    single: 0.5,
+                    ..ForceField::default().fields.uv_sensitivity
+                },
+                ..Default::default()
             },
-            ..PhysicsConfig::default()
+            ..Default::default()
         };
         let mut w = world(11);
         // The surface is the TOP LAYER in z (the 3D port moved the
@@ -778,8 +703,8 @@ mod tests {
         let b = w.spawn_atom(element_id("C").unwrap(), 51.0, 50.0, 95.0);
         w.form_bond(a, b, 1, 346.0); // strong bond, frozen at T=0
         w.energy_sources
-            .push(crate::energy::EnergySource::solar_uv(1.0, true));
-        crate::energy::Energy::new(config).update(&mut w); // set uv field
+            .push(khem_physics::EnergySource::solar_uv(1.0, true));
+        khem_physics::Energy::new(config).update(&mut w); // set uv field
         let mut chem = chemistry(config);
         for _ in 0..20 {
             chem.break_bonds(&mut w);
@@ -791,9 +716,12 @@ mod tests {
     fn nearby_free_atoms_form_bonds() {
         // Force formation: rate 1.0, temperature exactly at the
         // pair optimum (t_opt_scale * 436).
-        let config = PhysicsConfig {
-            base_formation_rate: 1.0,
-            ..PhysicsConfig::default()
+        let config = ForceField {
+            chemistry: ChemistryParams {
+                base_formation_rate: 1.0,
+                ..Default::default()
+            },
+            ..Default::default()
         };
         let mut w = world(3);
         let a = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0, 50.0);
@@ -820,9 +748,12 @@ mod tests {
 
     #[test]
     fn formation_respects_capacity_and_distance() {
-        let config = PhysicsConfig {
-            base_formation_rate: 1.0,
-            ..PhysicsConfig::default()
+        let config = ForceField {
+            chemistry: ChemistryParams {
+                base_formation_rate: 1.0,
+                ..Default::default()
+            },
+            ..Default::default()
         };
         // G04: a full H cannot bond a third atom.
         let mut w = world(4);
@@ -852,9 +783,12 @@ mod tests {
 
     #[test]
     fn double_bond_prefers_two_free_slots() {
-        let config = PhysicsConfig {
-            base_formation_rate: 1.0,
-            ..PhysicsConfig::default()
+        let config = ForceField {
+            chemistry: ChemistryParams {
+                base_formation_rate: 1.0,
+                ..Default::default()
+            },
+            ..Default::default()
         };
         let mut w = world(5);
         // Two carbons, both with all slots free: order 2 expected.
@@ -884,9 +818,12 @@ mod tests {
         // With rate 1.0, formation happens only through the
         // geometry gate: an O with one bond pointing +x will not
         // accept a candidate at ~180 degrees (sigma 30).
-        let config = PhysicsConfig {
-            base_formation_rate: 1.0,
-            ..PhysicsConfig::default()
+        let config = ForceField {
+            chemistry: ChemistryParams {
+                base_formation_rate: 1.0,
+                ..Default::default()
+            },
+            ..Default::default()
         };
         let mut w = world(6);
         let o = w.spawn_atom(element_id("O").unwrap(), 50.0, 50.0, 50.0);
@@ -916,19 +853,19 @@ mod tests {
         // (spec 6.5, K1.3). The worst case is the lightest pair
         // with the strongest bond. Pin it for every tabulated pair
         // AND the fallback, at the configured scale.
-        let config = PhysicsConfig::default();
-        let scale = config.spring_energy_scale;
-        let dt = 1.0 / config.integration_substeps as f32;
-        let mass = |id: ElementId| crate::elements::element(id).mass;
+        let config = ForceField::default();
+        let scale = config.bonds.spring_energy_scale;
+        let dt = 1.0 / config.integrator.integration_substeps as f32;
+        let mass = |id: ElementId| khem_forcefield::element(id).mass;
         for a in 0..10u8 {
             for b in a..10u8 {
                 // Only orders the pair can actually hold: G04 caps
                 // bonds at max_bonds, so higher orders are never
                 // formed (the fallback's linear scaling would
                 // otherwise report impossible H=H double bonds).
-                let max_order = crate::elements::element(ElementId(a))
+                let max_order = khem_forcefield::element(ElementId(a))
                     .max_bonds
-                    .min(crate::elements::element(ElementId(b)).max_bonds);
+                    .min(khem_forcefield::element(ElementId(b)).max_bonds);
                 for order in 1..=max_order {
                     let (ea, eb) = (ElementId(a), ElementId(b));
                     let energy = bond_energy(ea, eb, order);
@@ -954,7 +891,7 @@ mod tests {
     fn overstretched_bonds_break_deterministically() {
         // Mechanical dissociation law: a bond past
         // bond_break_factor * r_eq breaks without any RNG roll.
-        let config = PhysicsConfig::default();
+        let config = ForceField::default();
         let mut w = world(6);
         let a = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0, 50.0);
         let b = w.spawn_atom(element_id("H").unwrap(), 60.0, 50.0, 50.0); // r = 10 >> 2.5 * 1.06
@@ -992,9 +929,12 @@ mod tests {
     fn fast_pairs_are_not_captured() {
         // Capture law: atoms flying past each other do not bond,
         // however high the formation probability; slow pairs do.
-        let config = PhysicsConfig {
-            base_formation_rate: 1.0,
-            ..PhysicsConfig::default()
+        let config = ForceField {
+            chemistry: ChemistryParams {
+                base_formation_rate: 1.0,
+                ..Default::default()
+            },
+            ..Default::default()
         };
         let mut w = world(4);
         let a = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0, 50.0);
@@ -1019,9 +959,12 @@ mod tests {
         // Past bond_form_factor * r_eq no formation happens, however
         // high the rate. H-O: r_eq 1.19, contact cap 1.785, break
         // length 2.975, search radius 4.0 - three distinct zones.
-        let config = PhysicsConfig {
-            base_formation_rate: 1.0,
-            ..PhysicsConfig::default()
+        let config = ForceField {
+            chemistry: ChemistryParams {
+                base_formation_rate: 1.0,
+                ..Default::default()
+            },
+            ..Default::default()
         };
         let o = element_id("O").unwrap();
         let h = element_id("H").unwrap();
@@ -1059,7 +1002,7 @@ mod tests {
     #[test]
     fn chemistry_is_deterministic_per_seed() {
         fn run(seed: u64) -> (usize, Vec<bool>) {
-            let config = PhysicsConfig::default();
+            let config = ForceField::default();
             let mut w = world(seed);
             // A handful of atoms in a warm field, chemistry only.
             for i in 0..6 {
@@ -1077,9 +1020,12 @@ mod tests {
 
     #[test]
     fn max_bonds_never_exceeded_through_chemistry() {
-        let config = PhysicsConfig {
-            base_formation_rate: 1.0,
-            ..PhysicsConfig::default()
+        let config = ForceField {
+            chemistry: ChemistryParams {
+                base_formation_rate: 1.0,
+                ..Default::default()
+            },
+            ..Default::default()
         };
         let mut w = world(8);
         // One carbon surrounded by six hydrogens within the contact
@@ -1126,9 +1072,12 @@ mod tests {
         // temperature field to where it started, because
         // release_fraction == formation_fraction (equal-fraction
         // conservation).
-        let config = PhysicsConfig {
-            base_formation_rate: 1.0,
-            ..PhysicsConfig::default()
+        let config = ForceField {
+            chemistry: ChemistryParams {
+                base_formation_rate: 1.0,
+                ..Default::default()
+            },
+            ..Default::default()
         };
         let mut w = world(9);
         let a = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0, 50.0);
@@ -1141,7 +1090,7 @@ mod tests {
         assert_eq!(w.bonds.len(), 1);
         let after_form: f32 = w.temp_field.data.iter().sum();
         let absorbed = before - after_form;
-        let expected = 436.0 * config.formation_fraction;
+        let expected = 436.0 * config.chemistry.formation_fraction;
         assert!((absorbed - expected).abs() < 1e-2, "absorbed {absorbed}");
         // Now break it thermally: T so hot that p ~ 1. The set()
         // changes the field sum too, so measure from after it.
@@ -1155,7 +1104,7 @@ mod tests {
         // formation_fraction) to the release reservoir - the
         // temperature field is unchanged at the break moment.
         let committed: f32 = w.release_field.data.iter().sum();
-        let expected_release = 436.0 * config.release_fraction;
+        let expected_release = 436.0 * config.chemistry.release_fraction;
         assert!(
             (committed - expected_release).abs() < 1e-2,
             "committed {committed}"
@@ -1167,12 +1116,16 @@ mod tests {
         // spread over E/0.3/cap ticks). The thermostat's own exchange
         // stays inside the field+KE invariant (its unit test);
         // here the kick scale is zeroed so the ledger is pure.
-        let quiet = PhysicsConfig {
-            thermal_kick_scale: 1e-9,
+        let quiet = ForceField {
+            thermostat: ThermostatParams {
+                thermal_kick_scale: 1e-9,
+                ..Default::default()
+            },
             ..config
         };
-        let mut sys = crate::physics::Physics::new(quiet);
-        let ticks_needed = (expected_release / quiet.release_rate_cap).ceil() as usize + 5;
+        let mut sys = khem_physics::Physics::new(quiet);
+        let ticks_needed =
+            (expected_release / quiet.chemistry.release_rate_cap).ceil() as usize + 5;
         for _ in 0..ticks_needed {
             sys.apply_bath(&mut w);
         }
@@ -1184,7 +1137,10 @@ mod tests {
             "returned {:.3}, expected {expected_release}",
             drained - after_set
         );
-        assert_eq!(config.release_fraction, config.formation_fraction);
+        assert_eq!(
+            config.chemistry.release_fraction,
+            config.chemistry.formation_fraction
+        );
         assert_eq!(
             (w.atom(a).bond_count, w.atom(b).bond_count),
             (0, 0),
@@ -1215,7 +1171,7 @@ mod tests {
         let mut hot = oo_pair_lattice(21);
         hot.temp_field.data.fill(847.0);
         let expected = (-(146.0f32 / (0.45 * 847.0))).exp();
-        chemistry(PhysicsConfig::default()).break_bonds(&mut hot);
+        chemistry(ForceField::default()).break_bonds(&mut hot);
         let broken = hot.bonds.iter().filter(|b| !b.alive).count();
         let predicted = expected * 200.0;
         assert!(
@@ -1225,7 +1181,7 @@ mod tests {
 
         let mut cold = oo_pair_lattice(21);
         cold.temp_field.data.fill(35.0);
-        chemistry(PhysicsConfig::default()).break_bonds(&mut cold);
+        chemistry(ForceField::default()).break_bonds(&mut cold);
         let cold_broken = cold.bonds.iter().filter(|b| !b.alive).count();
         assert!(
             cold_broken <= 1,
@@ -1237,7 +1193,7 @@ mod tests {
     fn formation_laws_temperature_optimum_and_en_bonus() {
         // Law tests on the extracted probability: no statistics,
         // exact comparisons.
-        let config = PhysicsConfig::default();
+        let config = ForceField::default();
         let mut w = world(13);
         let hh_a = w.spawn_atom(element_id("H").unwrap(), 50.0, 50.0, 50.0);
         let hh_b = w.spawn_atom(element_id("H").unwrap(), 51.0, 50.0, 50.0);

@@ -1,0 +1,17 @@
+[package]
+name = "khem-chemistry"
+description = "khem's chemistry laws: bonds form and break by Boltzmann rates and VSEPR geometry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+khem-forcefield.workspace = true
+khem-world.workspace = true
+
+[dev-dependencies]
+khem-physics.workspace = true

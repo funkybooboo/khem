@@ -10,4 +10,7 @@ publish = false
 workspace = true
 
 [dependencies]
-khem-core.workspace = true
+khem-engine.workspace = true
+khem-forcefield.workspace = true
+khem-world.workspace = true
+khem-worlds.workspace = true

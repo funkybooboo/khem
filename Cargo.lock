@@ -6,9 +6,64 @@ version = 4
 name = "khem"
 version = "0.1.0"
 dependencies = [
- "khem-core",
+ "khem-engine",
+ "khem-forcefield",
+ "khem-world",
+ "khem-worlds",
 ]
 
 [[package]]
-name = "khem-core"
+name = "khem-analysis"
 version = "0.1.0"
+dependencies = [
+ "khem-forcefield",
+ "khem-world",
+]
+
+[[package]]
+name = "khem-chemistry"
+version = "0.1.0"
+dependencies = [
+ "khem-forcefield",
+ "khem-physics",
+ "khem-world",
+]
+
+[[package]]
+name = "khem-engine"
+version = "0.1.0"
+dependencies = [
+ "khem-analysis",
+ "khem-chemistry",
+ "khem-forcefield",
+ "khem-physics",
+ "khem-world",
+ "khem-worlds",
+]
+
+[[package]]
+name = "khem-forcefield"
+version = "0.1.0"
+
+[[package]]
+name = "khem-physics"
+version = "0.1.0"
+dependencies = [
+ "khem-forcefield",
+ "khem-world",
+]
+
+[[package]]
+name = "khem-world"
+version = "0.1.0"
+dependencies = [
+ "khem-forcefield",
+]
+
+[[package]]
+name = "khem-worlds"
+version = "0.1.0"
+dependencies = [
+ "khem-forcefield",
+ "khem-world",
+]

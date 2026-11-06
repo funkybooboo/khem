@@ -11,10 +11,14 @@
 //!
 //! Spec: docs/build/specs/runtime-spec.md, section 4.6.
 
-use crate::world::ElementId;
+/// Identifies an element: an index into the element table
+/// (owned here; khem-world re-exports it - the atom is world
+/// state, the element is force-field data).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ElementId(pub u8);
 
 /// Physical properties of one element. Immutable after load; shared
-/// by reference inside [`crate::world::WorldState`].
+/// by reference inside world state.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ElementProperties {
     /// One- or two-letter symbol, uppercase ASCII.
@@ -91,7 +95,7 @@ pub const O: ElementId = ElementId(3);
 
 /// Properties for an element id, straight from the const table. For
 /// the world's table (phase 4: custom tables), use
-/// [`crate::world::WorldState::element`].
+/// element lookup on the world state.
 ///
 /// # Panics
 /// Panics if the id is out of range.
@@ -102,7 +106,11 @@ pub fn element(id: ElementId) -> &'static ElementProperties {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::world::MAX_BONDS;
+    /// khem-world's slot width (MAX_BONDS) is mirrored here as the
+    /// table's own constraint source: the crate boundary forbids
+    /// the import, and the two constants are pinned together by
+    /// khem-world's own table-constraint test.
+    const MAX_BONDS: usize = 6;
 
     #[test]
     fn table_constraints_hold() {

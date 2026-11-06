@@ -14,12 +14,13 @@
 
 use std::sync::Arc;
 
-use crate::config::PhysicsConfig;
-use crate::elements::{ELEMENTS, ElementProperties};
-use crate::energy::EnergySource;
-use crate::observer::Event;
+pub use crate::energy::EnergySource;
+use crate::event::Event;
 use crate::rng::Rng;
 use crate::spatial::SpatialIndex;
+pub use khem_forcefield::ElementId;
+use khem_forcefield::ForceField;
+use khem_forcefield::{ELEMENTS, ElementProperties};
 
 /// Maximum bonds any element can hold. Covers every element's
 /// `max_bonds` (runtime spec section 4.4) and is the fixed width of
@@ -33,10 +34,6 @@ pub struct AtomId(pub u32);
 /// Identifies a bond: an index into [`WorldState::bonds`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BondId(pub u32);
-
-/// Identifies an element: an index into the element table.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ElementId(pub u8);
 
 /// One atom. Fixed size, no heap allocation (runtime spec 4.4).
 ///
@@ -289,7 +286,7 @@ impl WorldState {
         depth: f32,
         boundary: BoundaryType,
         seed: u64,
-        config: PhysicsConfig,
+        config: ForceField,
     ) -> Self {
         Self {
             tick: 0,
@@ -299,15 +296,15 @@ impl WorldState {
             height,
             depth,
             boundary,
-            temp_field: Grid3D::new(width, height, depth, config.field_cell_size),
-            release_field: Grid3D::new(width, height, depth, config.field_cell_size),
-            setpoint_field: Grid3D::new(width, height, depth, config.field_cell_size),
-            pressure_field: Grid3D::new(width, height, depth, config.field_cell_size),
-            uv_field: Grid3D::new(width, height, depth, config.field_cell_size),
+            temp_field: Grid3D::new(width, height, depth, config.layout.field_cell_size),
+            release_field: Grid3D::new(width, height, depth, config.layout.field_cell_size),
+            setpoint_field: Grid3D::new(width, height, depth, config.layout.field_cell_size),
+            pressure_field: Grid3D::new(width, height, depth, config.layout.field_cell_size),
+            uv_field: Grid3D::new(width, height, depth, config.layout.field_cell_size),
             energy_sources: Vec::new(),
             element_table: Arc::new(ELEMENTS.to_vec()),
             spatial_index: SpatialIndex::new(
-                config.spatial_cell_size,
+                config.layout.spatial_cell_size,
                 width,
                 height,
                 depth,
@@ -567,7 +564,7 @@ mod tests {
             200.0,
             BoundaryType::Wrap,
             1,
-            PhysicsConfig::default(),
+            ForceField::default(),
         );
         let a = w.spawn_atom(ElementId(0), 0.0, 0.0, 0.0);
         let b = w.spawn_atom(ElementId(0), 1.0, 0.0, 0.0);
@@ -582,7 +579,7 @@ mod tests {
             100.0,
             BoundaryType::Wrap,
             42,
-            PhysicsConfig::default(),
+            ForceField::default(),
         );
         assert_eq!(w.tick, 0);
         assert_eq!(w.element_table.len(), 10);
@@ -601,7 +598,7 @@ mod tests {
             200.0,
             BoundaryType::Wrap,
             1,
-            PhysicsConfig::default(),
+            ForceField::default(),
         );
         let a = w.spawn_atom(ElementId(0), 0.0, 0.0, 0.0);
         let b = w.spawn_atom(ElementId(1), 1.0, 0.0, 0.0);
@@ -618,7 +615,7 @@ mod tests {
             200.0,
             BoundaryType::Wrap,
             1,
-            PhysicsConfig::default(),
+            ForceField::default(),
         );
         // Hydrogen: max_bonds 1
         let a = w.spawn_atom(ElementId(0), 0.0, 0.0, 0.0);
@@ -644,7 +641,7 @@ mod tests {
             200.0,
             BoundaryType::Wrap,
             1,
-            PhysicsConfig::default(),
+            ForceField::default(),
         );
         // Carbon: max_bonds 4, so capacity is not the rejector here
         let a = w.spawn_atom(ElementId(1), 0.0, 0.0, 0.0);
@@ -665,7 +662,7 @@ mod tests {
             100.0,
             BoundaryType::Wrap,
             1,
-            PhysicsConfig::default(),
+            ForceField::default(),
         );
         let (dx, dy, dz) = w.delta(0.0, 0.0, 0.0, 99.0, 99.0, 99.0);
         assert_eq!((dx, dy, dz), (-1.0, -1.0, -1.0));
@@ -676,7 +673,7 @@ mod tests {
             100.0,
             BoundaryType::Wall,
             1,
-            PhysicsConfig::default(),
+            ForceField::default(),
         );
         let (dx, dy, dz) = w.delta(0.0, 0.0, 0.0, 99.0, 0.0, 0.0);
         assert_eq!((dx, dy, dz), (99.0, 0.0, 0.0));

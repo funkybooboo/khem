@@ -102,9 +102,11 @@
 //! - The field's temperature units are the pond's own (the 35 C
 //!   setpoint), matching how thermal_bath reads the field.
 
-use khem_core::config::PhysicsConfig;
-use khem_core::observer::{Observer, ObserverConfig};
-use khem_core::{BoundaryType, ElementId, Physics, PhysicsSystem, Sim, WorldState};
+use khem_engine::{Observer, ObserverConfig, Sim};
+use khem_forcefield::ForceField;
+use khem_forcefield::{CohesionParams, ExcludedVolumeParams};
+use khem_physics::{Physics, PhysicsSystem};
+use khem_world::{BoundaryType, ElementId, WorldState};
 
 // ---- Shared helpers ----------------------------------------------------
 
@@ -130,13 +132,13 @@ struct Sample {
 /// The per-component relative thermal speed scale of a pair at
 /// field temperature `t` (see the module doc): the bath's own
 /// stationary law, evaluated at the reduced mass.
-fn sigma_rel(config: &PhysicsConfig, a: ElementId, b: ElementId, t: f32) -> f32 {
+fn sigma_rel(config: &ForceField, a: ElementId, b: ElementId, t: f32) -> f32 {
     let (ma, mb) = (
-        khem_core::ELEMENTS[a.0 as usize].mass,
-        khem_core::ELEMENTS[b.0 as usize].mass,
+        khem_forcefield::ELEMENTS[a.0 as usize].mass,
+        khem_forcefield::ELEMENTS[b.0 as usize].mass,
     );
     let mu = ma * mb / (ma + mb);
-    (config.thermal_kick_scale * t / mu).sqrt()
+    (config.thermostat.thermal_kick_scale * t / mu).sqrt()
 }
 
 /// One scattering pass: two free atoms launched toward each
@@ -146,7 +148,7 @@ fn sigma_rel(config: &PhysicsConfig, a: ElementId, b: ElementId, t: f32) -> f32 
 /// after the first sub-step, boundary per tick); no bath, no
 /// chemistry - the kinematics are exactly the integrator's.
 fn scatter(
-    config: PhysicsConfig,
+    config: ForceField,
     a_el: ElementId,
     b_el: ElementId,
     v_c: f32,
@@ -214,7 +216,7 @@ fn scatter(
         atom.vz = -uz * v;
     }
     let r_sum = world.element(a_el).radius + world.element(b_el).radius;
-    let cutoff = r_sum * config.non_bonded_margin;
+    let cutoff = r_sum * config.excluded_volume.non_bonded_margin;
     // Encounter bookkeeping: the latch zone is wide enough that
     // entry and exit are unambiguous, and the tick budget carries
     // the pair from launch (12 A apart) through the zone and out
@@ -227,8 +229,8 @@ fn scatter(
     let mut sys = Physics::new(config);
     let mut min_r = f32::INFINITY;
     let (ma, mb) = (
-        khem_core::ELEMENTS[a_el.0 as usize].mass,
-        khem_core::ELEMENTS[b_el.0 as usize].mass,
+        khem_forcefield::ELEMENTS[a_el.0 as usize].mass,
+        khem_forcefield::ELEMENTS[b_el.0 as usize].mass,
     );
     let ke_launch = 0.5 * (ma + mb) * v * v;
     let mut in_zone = false;
@@ -236,7 +238,7 @@ fn scatter(
     let mut crossed = false;
     let mut ke_exit = 0.0f32;
     for _ in 0..ticks {
-        for step in 0..config.integration_substeps {
+        for step in 0..config.integrator.integration_substeps {
             if step > 0 {
                 world.spatial_index.rebuild(&world.atoms);
             }
@@ -322,22 +324,22 @@ const T_OPERATING: f32 = 35.0;
 
 /// Runs phase A once for one config: returns (per-bin min ratio,
 /// worst mint, crossed count) plus a printed evidence table.
-fn phase_a(config: PhysicsConfig, label: &str) -> (f32, f32, u32) {
+fn phase_a(config: ForceField, label: &str) -> (f32, f32, u32) {
     eprintln!(
         "K2.1 phase A [{label}]: non_bonded_repulsion {}",
-        config.non_bonded_repulsion
+        config.excluded_volume.non_bonded_repulsion
     );
     let mut worst_ratio = f32::INFINITY;
     let mut worst_mint = 0.0f32;
     let mut crossed_count = 0u32;
     for (class_idx, &(name, a_el, b_el)) in CLASSES.iter().enumerate() {
-        let r_sum = khem_core::ELEMENTS[a_el.0 as usize].radius
-            + khem_core::ELEMENTS[b_el.0 as usize].radius;
+        let r_sum = khem_forcefield::ELEMENTS[a_el.0 as usize].radius
+            + khem_forcefield::ELEMENTS[b_el.0 as usize].radius;
         let sigma = sigma_rel(&config, a_el, b_el, T_OPERATING);
         for (c_idx, &c) in SPEED_BINS.iter().enumerate() {
             let v_c = c * sigma;
             for (imp_idx, &imp_frac) in IMPACT_BINS.iter().enumerate() {
-                let imp = imp_frac * r_sum * config.non_bonded_margin;
+                let imp = imp_frac * r_sum * config.excluded_volume.non_bonded_margin;
                 let mut bin_min = f32::INFINITY;
                 let mut bin_mint = 0.0f32;
                 let mut bin_crossed = 0u32;
@@ -391,7 +393,7 @@ fn k2_scatter_smoke() {
     // A head-on H-H pass at twice the thermal scale, at the
     // shipped defaults: finite, no coincidence, no pass-through,
     // no large mint. Cheap regression; the 0.8 bar is the gate's.
-    let config = PhysicsConfig::default();
+    let config = ForceField::default();
     let sigma = sigma_rel(&config, ElementId(0), ElementId(0), T_OPERATING);
     let s = scatter(config, ElementId(0), ElementId(0), 2.0 * sigma, 0.0, 7);
     assert!(
@@ -430,7 +432,7 @@ fn k2_scatter_smoke() {
 #[test]
 #[ignore] // explicit: cargo test --release -- --ignored --nocapture
 fn k2_1_excluded_volume() {
-    let config = PhysicsConfig::default();
+    let config = ForceField::default();
 
     // ---- Phase A: controlled scattering -----------------------------
     let (worst_ratio, worst_mint, crossed) = phase_a(config, "gate");
@@ -478,7 +480,7 @@ fn k2_1_excluded_volume() {
     // the budget is placed anyway (documented; the wall resolves
     // it; the count is law).
     for (symbol, count) in mix {
-        let el = khem_core::elements::element_id(symbol).expect("element in table");
+        let el = khem_forcefield::element_id(symbol).expect("element in table");
         for _ in 0..count {
             // Best-of-N: track the candidate with the largest
             // min-gap to existing atoms; on budget exhaust place
@@ -499,7 +501,7 @@ fn k2_1_excluded_volume() {
                 let clear = world.atoms.iter().all(|a| {
                     let (dx, dy, dz) = world.delta(a.x, a.y, a.z, x, y, z);
                     let cutoff = (world.element(a.element).radius + world.element(el).radius)
-                        * config.non_bonded_margin;
+                        * config.excluded_volume.non_bonded_margin;
                     let gap2 = dx * dx + dy * dy + dz * dz - cutoff * cutoff;
                     min_gap2 = min_gap2.min(gap2);
                     gap2 >= 0.0
@@ -549,8 +551,8 @@ fn k2_1_excluded_volume() {
         let events = sim.tick(&mut world);
         for event in &events {
             match event {
-                khem_core::observer::Event::BondFormed { .. } => formations += 1,
-                khem_core::observer::Event::BondBroken { .. } => breaks += 1,
+                khem_world::Event::BondFormed { .. } => formations += 1,
+                khem_world::Event::BondBroken { .. } => breaks += 1,
                 _ => {}
             }
         }
@@ -690,7 +692,7 @@ const GR_MAX: f32 = 4.5;
 /// over 20k ticks) - what is measured is the FLUID the substrate
 /// actually holds, the medium K2.3's amphiphiles will swim in.
 fn pond_structure(
-    config: PhysicsConfig,
+    config: ForceField,
     t_end: u64,
     t_sample_start: u64,
     sample_every: u64,
@@ -700,7 +702,7 @@ fn pond_structure(
     // [t_sample_start, t_end] every sample_every ticks, and returns
     // (census mean, census min, the g(r) table, samples, alive
     // atoms). The K2.2 gate and the K2.3 cohesion sweep share it.
-    let mut world = khem_core::pond::primordial_pond(seed, config);
+    let mut world = khem_worlds::pond::primordial_pond(seed, config);
     let observer = Observer::new(ObserverConfig {
         khem_version: "0.1.0",
         run_name: "k2_harness".to_string(),
@@ -834,7 +836,7 @@ fn pond_structure(
 #[test]
 #[ignore] // explicit: cargo test --release -- --ignored --nocapture
 fn k2_2_condensed_medium() {
-    let config = PhysicsConfig::default();
+    let config = ForceField::default();
     eprintln!(
         "K2.2: the pond, 25k ticks, sampling the steady tail \
          (21k-25k every 100 ticks)"
@@ -925,9 +927,12 @@ fn k2_2_condensed_medium() {
 #[ignore] // explicit: cargo test --release -- --ignored --nocapture
 fn k2_3_cohesion_sweep() {
     for cohesion in [0.5f32, 1.0] {
-        let config = PhysicsConfig {
-            cohesion_scale: cohesion,
-            ..PhysicsConfig::default()
+        let config = ForceField {
+            cohesion: CohesionParams {
+                cohesion_scale: cohesion,
+                ..Default::default()
+            },
+            ..Default::default()
         };
         eprintln!("K2.3 cohesion sweep: cohesion_scale {cohesion}");
         let (census_mean, census_min, gr, samples, alive) =
@@ -967,17 +972,20 @@ fn k2_3_cohesion_sweep() {
 #[ignore] // explicit: cargo test --release -- --ignored --nocapture
 fn k2_1_strength_sweep() {
     for strength in [1.0f32, 4.0, 8.0, 16.0, 32.0] {
-        let config = PhysicsConfig {
-            non_bonded_repulsion: strength,
-            ..PhysicsConfig::default()
+        let config = ForceField {
+            excluded_volume: ExcludedVolumeParams {
+                non_bonded_repulsion: strength,
+                ..Default::default()
+            },
+            ..Default::default()
         };
         let bound = |a: ElementId, b: ElementId| -> f32 {
             let (ma, mb) = (
-                khem_core::ELEMENTS[a.0 as usize].mass,
-                khem_core::ELEMENTS[b.0 as usize].mass,
+                khem_forcefield::ELEMENTS[a.0 as usize].mass,
+                khem_forcefield::ELEMENTS[b.0 as usize].mass,
             );
             let mu = ma * mb / (ma + mb);
-            (1.0 / config.integration_substeps as f32) * (strength / mu).sqrt()
+            (1.0 / config.integrator.integration_substeps as f32) * (strength / mu).sqrt()
         };
         eprintln!(
             "K2.1 sweep S={strength}: symplectic bound per class: {}",

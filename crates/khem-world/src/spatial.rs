@@ -22,7 +22,7 @@ use crate::world::{AtomId, AtomState, BoundaryType};
 /// Spatial hash over live atom positions.
 ///
 /// Cell size defaults to 5 angstroms
-/// ([`crate::config::PhysicsConfig::spatial_cell_size`]), roughly
+/// ([`khem_forcefield::ForceField::spatial_cell_size`]), roughly
 /// the bond search radius. Rebuild is O(n); queries are O(1)
 /// average.
 #[derive(Debug, Clone)]

@@ -31,12 +31,13 @@
 
 use std::time::Instant;
 
-use crate::chemistry::{Chemistry, ChemistrySystem};
-use crate::config::PhysicsConfig;
-use crate::energy::{Energy, EnergySystem};
-use crate::observer::{Event, Observer, ObserverSystem, Timing};
-use crate::physics::{Physics, PhysicsSystem};
-use crate::world::WorldState;
+use crate::observer::{Observer, ObserverSystem};
+use khem_chemistry::{Chemistry, ChemistrySystem};
+use khem_forcefield::ForceField;
+use khem_physics::{Energy, EnergySystem};
+use khem_physics::{Physics, PhysicsSystem};
+use khem_world::WorldState;
+use khem_world::{Event, Timing};
 
 /// The tick steps in strict order (runtime spec 5.1).
 ///
@@ -84,8 +85,8 @@ impl Sim {
     /// One sim, one set of systems, all sharing the same immutable
     /// config copy. The observer carries the run metadata
     /// (ObserverConfig) for START/TICK/END composition.
-    pub fn new(config: PhysicsConfig, observer: Observer) -> Self {
-        let substeps = config.integration_substeps;
+    pub fn new(config: ForceField, observer: Observer) -> Self {
+        let substeps = config.integrator.integration_substeps;
         Self {
             energy: Energy::new(config),
             physics: Physics::new(config),
@@ -162,7 +163,8 @@ impl Sim {
 mod tests {
     use super::*;
     use crate::observer::ObserverConfig;
-    use crate::world::{BoundaryType, ElementId};
+    use khem_forcefield::ChemistryParams;
+    use khem_world::{BoundaryType, ElementId};
 
     /// Recorded 2026-09-08, the 3D port commit (phase 2,
     /// ADR-0013): every number changes by design - positions and
@@ -202,7 +204,7 @@ mod tests {
             50.0,
             BoundaryType::Wrap,
             seed,
-            PhysicsConfig::default(),
+            ForceField::default(),
         );
         for i in 0..4 {
             w.spawn_atom(ElementId(3), 10.0 + i as f32, 10.0, 10.0);
@@ -226,13 +228,13 @@ mod tests {
         assert_eq!(TICK_ORDER[10], "EventQueue::flush_to_output");
         // The sub-step block repeats integration_substeps times per
         // tick; the flat list shows one repetition (const docs).
-        assert!(PhysicsConfig::default().integration_substeps >= 1);
+        assert!(ForceField::default().integrator.integration_substeps >= 1);
     }
 
     #[test]
     fn start_is_emitted_once_and_describes_initial_state() {
         let w = small_world(1);
-        let mut sim = Sim::new(PhysicsConfig::default(), observer(100));
+        let mut sim = Sim::new(ForceField::default(), observer(100));
         match sim.start(&w) {
             Event::Start { atom_count, .. } => assert_eq!(atom_count, 8),
             other => panic!("expected Start, got {other:?}"),
@@ -242,7 +244,7 @@ mod tests {
     #[test]
     fn ticks_advance_and_tick_events_respect_interval() {
         let mut w = small_world(1);
-        let mut sim = Sim::new(PhysicsConfig::default(), observer(10));
+        let mut sim = Sim::new(ForceField::default(), observer(10));
         let _ = sim.start(&w);
         let mut tick_events = 0;
         for expected in 1..=25 {
@@ -266,7 +268,7 @@ mod tests {
     #[test]
     fn end_event_closes_the_run() {
         let mut w = small_world(1);
-        let mut sim = Sim::new(PhysicsConfig::default(), observer(10));
+        let mut sim = Sim::new(ForceField::default(), observer(10));
         let _ = sim.start(&w);
         for _ in 0..5 {
             sim.tick(&mut w);
@@ -284,7 +286,7 @@ mod tests {
     fn full_loop_is_deterministic_per_seed() {
         fn run(seed: u64) -> Vec<(f32, f32, f32)> {
             let mut w = small_world(seed);
-            let mut sim = Sim::new(PhysicsConfig::default(), observer(1000));
+            let mut sim = Sim::new(ForceField::default(), observer(1000));
             let _ = sim.start(&w);
             for _ in 0..50 {
                 sim.tick(&mut w);
@@ -350,8 +352,8 @@ mod tests {
             }
             h
         }
-        let config = PhysicsConfig::default();
-        let mut world = crate::pond::primordial_pond(99, config);
+        let config = ForceField::default();
+        let mut world = khem_worlds::primordial_pond(99, config);
         // A warm pond: chemistry is active, not frozen.
         world.temp_field.data.fill(55.0);
         let mut sim = Sim::new(config, observer(1000));
@@ -392,8 +394,8 @@ mod tests {
             }
         }
         fn run() -> Vec<String> {
-            let config = PhysicsConfig::default();
-            let mut world = crate::pond::primordial_pond(5, config);
+            let config = ForceField::default();
+            let mut world = khem_worlds::primordial_pond(5, config);
             world.temp_field.data.fill(55.0);
             let mut sim = Sim::new(config, observer(3));
             let mut lines = vec![crate::ndjson::emit(&sim.start(&world))];
@@ -417,9 +419,12 @@ mod tests {
         // A moved atom must be findable at its new position: with
         // rate 1.0 and a warm field, two atoms placed far apart but
         // moved adjacent by physics must bond.
-        let config = PhysicsConfig {
-            base_formation_rate: 1.0,
-            ..PhysicsConfig::default()
+        let config = ForceField {
+            chemistry: ChemistryParams {
+                base_formation_rate: 1.0,
+                ..Default::default()
+            },
+            ..Default::default()
         };
         let mut w = WorldState::new(50.0, 50.0, 50.0, BoundaryType::Wrap, 3, config);
         let a = w.spawn_atom(ElementId(0), 10.0, 10.0, 10.0);

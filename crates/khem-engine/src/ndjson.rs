@@ -32,8 +32,8 @@
 
 use std::fmt::Write as _;
 
-use crate::elements::element;
-use crate::observer::{Event, WorldStats};
+use khem_forcefield::element;
+use khem_world::{Event, WorldStats};
 
 /// Serializes one event to one NDJSON line (no trailing newline;
 /// the writer adds it).
@@ -223,7 +223,7 @@ fn push_free_atoms(out: &mut String, stats: &WorldStats) {
             out.push(',');
         }
         first = false;
-        let _ = write!(out, "\"{}\":{count}", crate::elements::ELEMENTS[i].symbol);
+        let _ = write!(out, "\"{}\":{count}", khem_forcefield::ELEMENTS[i].symbol);
     }
     out.push('}');
 }
@@ -243,8 +243,8 @@ fn push_mol_dist(out: &mut String, stats: &WorldStats) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::observer::{Timing, WorldStats};
-    use crate::world::{AtomId, ElementId};
+    use khem_world::{AtomId, ElementId};
+    use khem_world::{Timing, WorldStats};
 
     fn stats_fixture() -> WorldStats {
         WorldStats {

@@ -13,7 +13,7 @@
 //!   heat committed by chemistry enters the temperature field at
 //!   `release_rate_cap` per cell per tick instead of as a delta
 //!   function (the instantaneous dump was a bomb - see
-//!   [`crate::world::WorldState::release_field`]).
+//!   [`khem_world::WorldState::release_field`]).
 //! - Temperature diffusion (spec 6.2) runs at the top of
 //!   [`PhysicsSystem::apply_bath`], before the kicks sample the
 //!   field; spec 5.1 names no slot for it.
@@ -51,9 +51,9 @@
 //!
 //! Spec: docs/build/specs/runtime-spec.md, section 6 (Physics System).
 
-use crate::config::PhysicsConfig;
-use crate::observer::Event;
-use crate::world::{AtomId, AtomState, BoundaryType, WorldState};
+use khem_forcefield::ForceField;
+use khem_world::Event;
+use khem_world::{AtomId, AtomState, BoundaryType, WorldState};
 
 /// The physics system interface, decomposed per the tick order
 /// (runtime spec 5.1: apply_bath once per tick, then the
@@ -89,7 +89,7 @@ pub trait PhysicsSystem {
 /// keeps no state between ticks, so the same instance is safe for
 /// every tick of a run.
 pub struct Physics {
-    config: PhysicsConfig,
+    config: ForceField,
     /// Integration time per sub-step: 1 / integration_substeps.
     /// The tick as a whole stays dt = 1 (spec 6.5).
     dt: f32,
@@ -103,10 +103,13 @@ pub struct Physics {
 }
 
 impl Physics {
-    pub fn new(config: PhysicsConfig) -> Self {
-        assert!(config.integration_substeps >= 1, "at least one sub-step");
+    pub fn new(config: ForceField) -> Self {
+        assert!(
+            config.integrator.integration_substeps >= 1,
+            "at least one sub-step"
+        );
         Self {
-            dt: 1.0 / config.integration_substeps as f32,
+            dt: 1.0 / config.integrator.integration_substeps as f32,
             config,
             fx: Vec::new(),
             fy: Vec::new(),
@@ -123,7 +126,7 @@ impl Physics {
     /// p_break runaway (see WorldState::release_field). Runs before
     /// diffusion so the drained heat spreads the same tick.
     fn drain_release_reservoir(&self, world: &mut WorldState) {
-        let cap = self.config.release_rate_cap;
+        let cap = self.config.chemistry.release_rate_cap;
         for i in 0..world.release_field.data.len() {
             // Chemistry commits only positive releases; the reservoir
             // holds no other state.
@@ -142,7 +145,7 @@ impl Physics {
     /// over exactly the six neighbors keeps the field sum conserved
     /// - the K1.4 ledger closure must keep closing in 3D.
     fn diffuse_temperature(&mut self, world: &mut WorldState) {
-        let rate = self.config.diffusion_rate;
+        let rate = self.config.fields.diffusion_rate;
         debug_assert!((0.0..=1.0).contains(&rate), "diffusion_rate out of range");
         let field = &world.temp_field;
         let cols = field.cols as usize;
@@ -181,7 +184,7 @@ impl Physics {
     /// it - the pond's heat sink; a vented Wrap world with no sink
     /// only heats.
     fn relax_toward_setpoints(&self, world: &mut WorldState) {
-        let rate = self.config.field_relax_rate;
+        let rate = self.config.thermostat.field_relax_rate;
         if rate <= 0.0 {
             return;
         }
@@ -216,10 +219,10 @@ impl Physics {
     /// field <-> atoms both ways. Draws: exactly three normals per
     /// LIVE atom per tick, one per component.
     fn thermal_bath(&mut self, world: &mut WorldState) {
-        let kb = self.config.thermal_kick_scale;
-        let gamma = self.config.thermostat_damping;
+        let kb = self.config.thermostat.thermal_kick_scale;
+        let gamma = self.config.thermostat.thermostat_damping;
         let noise = (gamma * (2.0 - gamma)).sqrt();
-        let ke_scale = self.config.ke_field_scale;
+        let ke_scale = self.config.thermostat.ke_field_scale;
         for i in 0..world.atoms.len() {
             // Index-based loop: the write below borrows atoms[i]
             // mutably while rng and temp_field are borrowed through
@@ -275,7 +278,7 @@ impl Physics {
     /// atoms (r ~ 0) have no defined axis; skipped, and the next
     /// kick separates them.
     fn spring_forces(&mut self, world: &mut WorldState) {
-        let scale = self.config.spring_energy_scale;
+        let scale = self.config.bonds.spring_energy_scale;
         for bond in &world.bonds {
             if !bond.alive {
                 continue;
@@ -311,7 +314,7 @@ impl Physics {
     /// force toward lower pressure, scaled by
     /// `pressure_sensitivity`, on every axis.
     fn pressure_forces(&mut self, world: &mut WorldState) {
-        let sensitivity = self.config.pressure_sensitivity;
+        let sensitivity = self.config.fields.pressure_sensitivity;
         let field = &mut world.pressure_field;
         field.data.fill(0.0);
         for atom in &world.atoms {
@@ -376,11 +379,11 @@ impl Physics {
     /// kicks separate them). Pairs are visited once (lower AtomId
     /// iterates), candidates via the wrap-aware index (F11).
     fn non_bonded_forces(&mut self, world: &mut WorldState) {
-        let strength = self.config.non_bonded_repulsion;
-        let margin = self.config.non_bonded_margin;
-        let cohesion = self.config.cohesion_scale;
-        let chi_ref = self.config.chi_ref;
-        let attract_range = self.config.attraction_range;
+        let strength = self.config.excluded_volume.non_bonded_repulsion;
+        let margin = self.config.excluded_volume.non_bonded_margin;
+        let cohesion = self.config.cohesion.cohesion_scale;
+        let chi_ref = self.config.cohesion.chi_ref;
+        let attract_range = self.config.cohesion.attraction_range;
         let max_radius = world
             .element_table
             .iter()
@@ -665,39 +668,38 @@ impl PhysicsSystem for Physics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::world::{BondId, ElementId};
+    use khem_forcefield::{CohesionParams, ExcludedVolumeParams, IntegratorParams};
+    use khem_world::{BondId, ElementId};
 
     fn world(seed: u64, boundary: BoundaryType) -> WorldState {
-        WorldState::new(
-            100.0,
-            100.0,
-            100.0,
-            boundary,
-            seed,
-            PhysicsConfig::default(),
-        )
+        WorldState::new(100.0, 100.0, 100.0, boundary, seed, ForceField::default())
     }
 
     fn physics() -> Physics {
-        Physics::new(PhysicsConfig::default())
+        Physics::new(ForceField::default())
     }
 
     /// The well tests' system: cohesion_scale 1.0 (the channel's
     /// shipped default is 0.0 - dormant by measurement; the unit
     /// tests pin the LAW, so they turn it on explicitly).
     fn physics_with_well() -> Physics {
-        Physics::new(PhysicsConfig {
-            cohesion_scale: 1.0,
-            ..PhysicsConfig::default()
+        Physics::new(ForceField {
+            cohesion: CohesionParams {
+                cohesion_scale: 1.0,
+                ..Default::default()
+            },
+            ..Default::default()
         })
     }
 
     #[test]
     #[should_panic(expected = "at least one sub-step")]
     fn physics_rejects_zero_substeps() {
-        let config = PhysicsConfig {
-            integration_substeps: 0,
-            ..PhysicsConfig::default()
+        let config = ForceField {
+            integrator: IntegratorParams {
+                integration_substeps: 0,
+            },
+            ..Default::default()
         };
         let _ = Physics::new(config);
     }
@@ -706,7 +708,7 @@ mod tests {
     /// from the configured constants (the same value Physics::new
     /// derives into its private `dt` field).
     fn dt_sub() -> f32 {
-        1.0 / PhysicsConfig::default().integration_substeps as f32
+        1.0 / ForceField::default().integrator.integration_substeps as f32
     }
 
     #[test]
@@ -751,7 +753,7 @@ mod tests {
         // One full tick of integration sub-steps (bath skipped:
         // zero field, no kicks; positions move only under forces).
         let mut sys = physics();
-        for _ in 0..PhysicsConfig::default().integration_substeps {
+        for _ in 0..ForceField::default().integrator.integration_substeps {
             sys.update_velocities(&mut w);
             sys.update_positions(&mut w);
         }
@@ -796,12 +798,15 @@ mod tests {
         let d = w.spawn_atom(ElementId(0), 51.7, 50.0, 50.0);
         w.spatial_index.rebuild(&w.atoms);
         physics_with_well().update_velocities(&mut w);
-        let config = PhysicsConfig {
-            cohesion_scale: 1.0,
-            ..PhysicsConfig::default()
+        let config = ForceField {
+            cohesion: CohesionParams {
+                cohesion_scale: 1.0,
+                ..Default::default()
+            },
+            ..Default::default()
         };
-        let depth = config.cohesion_scale;
-        let w_well = config.attraction_range - 1.59;
+        let depth = config.cohesion.cohesion_scale;
+        let w_well = config.cohesion.attraction_range - 1.59;
         let x = 1.7f32 - 1.59;
         let f_inner = -depth * 32.0 * x * (w_well - x) * (w_well - 2.0 * x)
             / (w_well * w_well * w_well * w_well);
@@ -962,7 +967,7 @@ mod tests {
         // sources): the bath's other steps conserve the field sum
         // (diffusion) or touch nothing (no atoms, no setpoints), so
         // the drain is the only mover.
-        let config = PhysicsConfig::default();
+        let config = ForceField::default();
         let mut w = world(1, BoundaryType::Wrap);
         let committed = 139.0; // one O-H release at fraction 0.3
         w.release_field.set(50.0, 50.0, 50.0, committed);
@@ -972,7 +977,7 @@ mod tests {
         // the installment - the field SUM is what the drain moved);
         // the rest waits in the reservoir.
         let moved: f32 = w.temp_field.data.iter().sum();
-        assert!((moved - config.release_rate_cap).abs() < 1e-4);
+        assert!((moved - config.chemistry.release_rate_cap).abs() < 1e-4);
         // The installment bounds the cell's excursion: no cell rose
         // more than the cap in one tick (a delta-function dump would
         // have put all 139 in at once). Sustained accumulation in
@@ -980,17 +985,17 @@ mod tests {
         // the pond's boundedness regression is the harness's.
         let max_cell = w.temp_field.data.iter().copied().fold(0.0f32, f32::max);
         assert!(
-            max_cell <= config.release_rate_cap + 1e-4,
+            max_cell <= config.chemistry.release_rate_cap + 1e-4,
             "cell rose to {max_cell} in one tick"
         );
         assert_eq!(
             w.release_field.get(50.0, 50.0, 50.0),
-            committed - config.release_rate_cap
+            committed - config.chemistry.release_rate_cap
         );
         // The full amount lands after committed/cap ticks; no cell
         // ever spiked - each 2-degree installment diffuses away
         // before the next arrives.
-        let ticks = (committed / config.release_rate_cap).ceil() as usize;
+        let ticks = (committed / config.chemistry.release_rate_cap).ceil() as usize;
         for _ in 1..ticks {
             sys.apply_bath(&mut w);
         }
@@ -1047,9 +1052,12 @@ mod tests {
         // forces off, so KE is the only other reservoir). The
         // previous tolerance-based drift test masked the
         // double-count bleed; this form cannot.
-        let config = PhysicsConfig {
-            non_bonded_repulsion: 0.0,
-            ..PhysicsConfig::default()
+        let config = ForceField {
+            excluded_volume: ExcludedVolumeParams {
+                non_bonded_repulsion: 0.0,
+                ..Default::default()
+            },
+            ..Default::default()
         };
         let mut w = world(2, BoundaryType::Wrap);
         w.temp_field.data.fill(35.0);
@@ -1065,7 +1073,7 @@ mod tests {
             // in 3D, 7x the 2D grid) - the f64 sum measures the
             // physics, not the summation.
             let field: f64 = w.temp_field.data.iter().map(|v| *v as f64).sum();
-            field + w.kinetic_energy() * config.ke_field_scale as f64
+            field + w.kinetic_energy() * config.thermostat.ke_field_scale as f64
         };
         let before = total(&w);
         let mut sys = Physics::new(config);
@@ -1108,7 +1116,7 @@ mod tests {
         physics().update_velocities(&mut w);
         assert!(w.atom(a).vx < 0.0, "compressed bond pushes a away");
         assert!(w.atom(b).vx > 0.0, "compressed bond pushes b away");
-        let bound = 436.0 * PhysicsConfig::default().spring_energy_scale * 1.06 * dt_sub(); // k*r_eq*dt
+        let bound = 436.0 * ForceField::default().bonds.spring_energy_scale * 1.06 * dt_sub(); // k*r_eq*dt
         assert!(
             w.atom(b).vx <= bound,
             "compression impulse {} exceeds k*r_eq*dt_sub {}",
@@ -1208,7 +1216,7 @@ mod tests {
             (w.atom(a).x, w.atom(a).y, w.atom(a).z),
             (50.0 + 1.5 * dt, 50.0 - 0.5 * dt, 50.0 + 0.25 * dt)
         );
-        let substeps = PhysicsConfig::default().integration_substeps;
+        let substeps = ForceField::default().integrator.integration_substeps;
         for _ in 1..substeps {
             sys.update_positions(&mut w);
         }
@@ -1298,7 +1306,7 @@ mod tests {
             for _ in 0..25 {
                 // The tick shape: bath once, sub-steps after.
                 sys.apply_bath(&mut w);
-                for _ in 0..PhysicsConfig::default().integration_substeps {
+                for _ in 0..ForceField::default().integrator.integration_substeps {
                     sys.update_velocities(&mut w);
                     sys.update_positions(&mut w);
                 }

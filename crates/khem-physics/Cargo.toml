@@ -1,0 +1,14 @@
+[package]
+name = "khem-physics"
+description = "khem's force laws: springs, excluded volume, cohesion, the integrator, the thermostat, the energy sources"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+khem-forcefield.workspace = true
+khem-world.workspace = true

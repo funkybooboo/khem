@@ -1,0 +1,20 @@
+[package]
+name = "khem-engine"
+description = "khem's engine: the tick loop, the observer, the NDJSON stream"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+khem-analysis.workspace = true
+khem-chemistry.workspace = true
+khem-forcefield.workspace = true
+khem-physics.workspace = true
+khem-world.workspace = true
+
+[dev-dependencies]
+khem-worlds.workspace = true

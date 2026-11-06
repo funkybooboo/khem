@@ -13,98 +13,16 @@
 //! persistence) arrive with phase 3; the enum grows additively when
 //! they do.
 //!
-//! Timing fields (elapsed_ms, ticks_per_sec) are wall-clock and
-//! therefore excluded from G02's byte-identical guarantee by the
-//! documented carve-out: a run is byte-identical modulo those two
-//! fields (spec revision note).
-//!
 //! Spec: docs/build/specs/runtime-spec.md, sections 3 and 9.
+//!
+//! The event model ([`Event`], [`Timing`], [`WorldStats`]) lives
+//! in khem-world (the systems that mutate the world produce the
+//! events); the molecule census lives in khem-analysis (this
+//! observer's buckets are its summary). This module is the
+//! observer BEHAVIOR: read-only sampling and run-event
+//! composition.
 
-use crate::world::{AtomId, ElementId, WorldState};
-
-/// Wall-clock timing for TICK and END events, measured by the tick
-/// loop (the only wall-clock consumer). Excluded from G02.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct Timing {
-    pub elapsed_ms: u64,
-    pub ticks_per_sec: f64,
-}
-
-/// Per-tick world statistics for TICK events (runtime spec 3.3).
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct WorldStats {
-    pub atom_count: u32,
-    pub bond_count: u32,
-    pub temp_min: f32,
-    pub temp_max: f32,
-    pub temp_avg: f32,
-    pub pressure_min: f32,
-    pub pressure_max: f32,
-    pub pressure_avg: f32,
-    /// Unbonded live atoms per canonical element index.
-    pub free_atoms: [u32; 10],
-    /// Molecule size distribution buckets: [0] size 1, [1] 2-5,
-    /// [2] 6-20, [3] 21+ (schema keys "1", "2_5", "6_20",
-    /// "21plus").
-    pub mol_size_dist: [u32; 4],
-}
-
-/// One output event (runtime spec 3.3), payloads carrying exactly
-/// the schema fields. `elem_*` fields are element indexes into the
-/// canonical table (phase 4 revisits if custom element tables
-/// arrive).
-#[derive(Debug, Clone, PartialEq)]
-pub enum Event {
-    /// First line of output, emitted once before tick 1.
-    Start {
-        khem_version: &'static str,
-        run_name: String,
-        world_name: String,
-        seed: u64,
-        atom_count: u32,
-        bond_count: u32,
-        world_width: f32,
-        world_height: f32,
-        world_depth: f32,
-    },
-    /// Every `tick_interval` ticks.
-    Tick {
-        tick: u64,
-        timing: Timing,
-        stats: WorldStats,
-    },
-    BondFormed {
-        tick: u64,
-        bond_id: u32,
-        atom_a: AtomId,
-        atom_b: AtomId,
-        elem_a: ElementId,
-        elem_b: ElementId,
-        order: u8,
-        energy: f32,
-        x: f32,
-        y: f32,
-        z: f32,
-    },
-    BondBroken {
-        tick: u64,
-        bond_id: u32,
-        elem_a: ElementId,
-        elem_b: ElementId,
-        energy_released: f32,
-        x: f32,
-        y: f32,
-        z: f32,
-    },
-    /// Last line of output, emitted once. Reason vocabulary per
-    /// spec 3.3: max_ticks_reached, user_interrupt, extinction,
-    /// runtime_error.
-    End {
-        tick: u64,
-        timing: Timing,
-        reason: &'static str,
-    },
-}
+use khem_world::{Event, Timing, WorldState, WorldStats};
 
 /// The observer system interface (runtime spec 10.4; tick order
 /// steps 8 and the bookends). Read-only over the world (G03). v0.1
@@ -140,39 +58,6 @@ impl Observer {
         Self { config }
     }
 
-    /// Molecule detection (spec 9.2): connected components of live
-    /// atoms over live bonds, union-find with path halving, bonds
-    /// visited in BondId order for determinism. Returns component
-    /// sizes, one per live atom. Public: the spec 9.2 diagnostic
-    /// behind `stats`'s buckets - the K1 harness reads the full
-    /// distribution (largest molecule, growth trend) that the four
-    /// buckets flatten away.
-    pub fn molecule_sizes(world: &WorldState) -> Vec<u32> {
-        let n = world.atoms.len();
-        let mut parent: Vec<u32> = (0..n as u32).collect();
-        for bond in &world.bonds {
-            if !bond.alive {
-                continue;
-            }
-            let mut ra = find(&mut parent, bond.atom_a.0);
-            let mut rb = find(&mut parent, bond.atom_b.0);
-            if ra != rb {
-                if ra > rb {
-                    std::mem::swap(&mut ra, &mut rb);
-                }
-                parent[rb as usize] = ra;
-            }
-        }
-        let mut sizes = vec![0u32; n];
-        for atom in &world.atoms {
-            if atom.alive {
-                let root = find(&mut parent, atom.id.0);
-                sizes[root as usize] += 1;
-            }
-        }
-        sizes
-    }
-
     /// World statistics for a TICK event: live counts, field
     /// min/max/avg, free atoms per element, molecule size buckets.
     fn stats(world: &WorldState) -> WorldStats {
@@ -187,12 +72,7 @@ impl Observer {
         let (temp_min, temp_max, temp_avg) = field_stats(&world.temp_field.data);
         let (pressure_min, pressure_max, pressure_avg) = field_stats(&world.pressure_field.data);
         let mut mol_size_dist = [0u32; 4];
-        for size in Self::molecule_sizes(world) {
-            if size == 0 {
-                // Non-root member slots carry 0; only roots hold
-                // component sizes.
-                continue;
-            }
+        for size in khem_analysis::molecule_sizes(world) {
             let bucket = match size {
                 1 => 0,
                 2..=5 => 1,
@@ -229,15 +109,6 @@ fn field_stats(data: &[f32]) -> (f32, f32, f32) {
         sum += *v;
     }
     (min, max, sum / data.len() as f32)
-}
-
-/// Union-find find with path halving, iterative.
-fn find(parent: &mut [u32], mut i: u32) -> u32 {
-    while parent[i as usize] != i {
-        parent[i as usize] = parent[parent[i as usize] as usize];
-        i = parent[i as usize];
-    }
-    i
 }
 
 impl ObserverSystem for Observer {
@@ -280,9 +151,10 @@ impl ObserverSystem for Observer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::PhysicsConfig;
-    use crate::elements::ELEMENTS;
-    use crate::world::{BoundaryType, ElementId};
+    use khem_forcefield::ELEMENTS;
+    use khem_forcefield::ForceField;
+    use khem_world::AtomId;
+    use khem_world::{BoundaryType, ElementId};
 
     fn world(seed: u64) -> WorldState {
         WorldState::new(
@@ -291,7 +163,7 @@ mod tests {
             100.0,
             BoundaryType::Wrap,
             seed,
-            PhysicsConfig::default(),
+            ForceField::default(),
         )
     }
 
@@ -322,7 +194,7 @@ mod tests {
         w.form_bond(ids[0], ids[1], 1, 346.0);
         w.form_bond(ids[1], ids[2], 1, 346.0);
         w.form_bond(ids[2], ids[3], 1, 346.0);
-        let sizes = Observer::molecule_sizes(&w);
+        let sizes = khem_analysis::molecule_sizes(&w);
         let mut nonzero: Vec<u32> = sizes.into_iter().filter(|s| *s > 0).collect();
         nonzero.sort_unstable();
         assert_eq!(nonzero, vec![1, 1, 4], "chain of 4 plus two lones");
@@ -339,7 +211,7 @@ mod tests {
         for i in 0..6 {
             w.form_bond(ring[i], ring[(i + 1) % 6], 1, 346.0);
         }
-        let sizes = Observer::molecule_sizes(&w);
+        let sizes = khem_analysis::molecule_sizes(&w);
         let nonzero: Vec<u32> = sizes.into_iter().filter(|s| *s > 0).collect();
         assert_eq!(nonzero, vec![6], "the ring is a single 6-molecule");
     }
@@ -351,7 +223,7 @@ mod tests {
         let b = w.spawn_atom(ElementId(1), 1.0, 0.0, 0.0);
         w.form_bond(a, b, 1, 346.0);
         w.atom_mut(b).alive = false;
-        let sizes = Observer::molecule_sizes(&w);
+        let sizes = khem_analysis::molecule_sizes(&w);
         let nonzero: Vec<u32> = sizes.into_iter().filter(|s| *s > 0).collect();
         assert_eq!(nonzero, vec![1], "dead atom not counted");
     }

@@ -1,0 +1,14 @@
+[package]
+name = "khem-analysis"
+description = "khem's observables: molecule census, radial distribution, coordination, order parameters"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+khem-forcefield.workspace = true
+khem-world.workspace = true

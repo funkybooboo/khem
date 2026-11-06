@@ -1,0 +1,13 @@
+[package]
+name = "khem-world"
+description = "khem's world model: atoms, bonds, fields, the spatial index, the deterministic RNG"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+khem-forcefield.workspace = true

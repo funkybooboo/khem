@@ -80,12 +80,12 @@
 //!   see the gate's doc comment), the substrate's seams are
 //!   symmetric, and the bars hold under both scan orders.
 
-use khem_core::config::PhysicsConfig;
-use khem_core::observer::Event;
-use khem_core::pond::{self, water_intact};
-use khem_core::{
-    AtomId, BondId, BoundaryType, ElementId, Observer, ObserverConfig, Sim, WorldState, bond_energy,
-};
+use khem_engine::{Observer, ObserverConfig, Sim};
+use khem_forcefield::ForceField;
+use khem_forcefield::bond_energy;
+use khem_world::Event;
+use khem_world::{AtomId, BondId, BoundaryType, ElementId, WorldState};
+use khem_worlds::pond::{self, water_intact};
 
 const WATERS: usize = pond::POND_WATERS;
 
@@ -102,7 +102,7 @@ fn observer(seed: u64, interval: u64) -> Observer {
 }
 
 fn run_ticks(seed: u64, ticks: u64) -> WorldState {
-    let config = PhysicsConfig::default();
+    let config = ForceField::default();
     let mut world = pond::primordial_pond(seed, config);
     let mut sim = Sim::new(config, observer(seed, 100));
     let _ = sim.start(&world);
@@ -157,7 +157,7 @@ fn phase1_loop_smoke() {
     // Invariants that must hold under any constants: the full loop
     // runs, is deterministic per seed, respects G04, and produces a
     // well-formed event stream.
-    let config = PhysicsConfig::default();
+    let config = ForceField::default();
 
     fn dump(world: &WorldState) -> Vec<(f32, f32, f32, u8)> {
         world
@@ -196,7 +196,7 @@ fn phase1_loop_smoke() {
     }
     // The emitted stream is single-line JSON objects.
     for event in &events_a {
-        let line = khem_core::ndjson::emit(event);
+        let line = khem_engine::ndjson::emit(event);
         assert!(line.starts_with("{\"v\":2,") && line.ends_with('}'));
         assert!(!line.contains('\n'));
     }
@@ -276,7 +276,7 @@ fn phase1_loop_smoke() {
 #[test]
 #[ignore] // explicit: cargo test --release -- --ignored --nocapture
 fn k1_1_thermostat_flatness() {
-    let config = PhysicsConfig::default();
+    let config = ForceField::default();
     let mut world = pond::primordial_pond(42, config);
     let mut sim = Sim::new(config, observer(42, 20_000));
     let _ = sim.start(&world);
@@ -313,8 +313,8 @@ fn k1_1_thermostat_flatness() {
             // The thermostat coupling law: atoms at their local
             // bath's thermal level (3/2 * kb * T - three Langevin
             // components since the 3D port), not above, not below.
-            let coupling =
-                ke_per_atom / (1.5 * f64::from(config.thermal_kick_scale) * f64::from(field_warm));
+            let coupling = ke_per_atom
+                / (1.5 * f64::from(config.thermostat.thermal_kick_scale) * f64::from(field_warm));
             ke_samples.push(ke_per_atom);
             len_samples.push(mean_len);
             eprintln!(
@@ -325,7 +325,7 @@ fn k1_1_thermostat_flatness() {
                 (0.8..=1.4).contains(&coupling),
                 "K1.1 FAIL: thermostat decoupled at tick {t}: KE/atom {ke_per_atom:.4} \
                  vs bath level {:.4} (ratio {coupling:.3})",
-                1.5 * config.thermal_kick_scale * field_warm
+                1.5 * config.thermostat.thermal_kick_scale * field_warm
             );
         }
     }
@@ -421,11 +421,11 @@ fn k1_1_thermostat_flatness() {
 #[test]
 #[ignore] // explicit: cargo test --release -- --ignored --nocapture
 fn k1_2_force_sanity() {
-    let config = PhysicsConfig::default();
+    let config = ForceField::default();
 
     // Part 1: the overlap probe.
     let o = ElementId(3);
-    let r_eq = 2.0 * khem_core::ELEMENTS[o.0 as usize].radius;
+    let r_eq = 2.0 * khem_forcefield::ELEMENTS[o.0 as usize].radius;
     let mut world = WorldState::new(50.0, 50.0, 50.0, BoundaryType::Wrap, 42, config);
     let a = world.spawn_atom(o, 25.0, 25.0, 25.0);
     let b = world.spawn_atom(o, 25.0 + 0.05 * r_eq, 25.0, 25.0);
@@ -441,8 +441,8 @@ fn k1_2_force_sanity() {
         world.bond(bond).alive,
         "K1.2 probe: the bond broke at overlap"
     );
-    let k = energy * config.spring_energy_scale;
-    let m = khem_core::ELEMENTS[o.0 as usize].mass;
+    let k = energy * config.bonds.spring_energy_scale;
+    let m = khem_forcefield::ELEMENTS[o.0 as usize].mass;
     let impulse_bound = 1.5 * k * r_eq / m;
     let mut max_speed = 0.0f32;
     for (id, atom) in [(a, world.atom(a)), (b, world.atom(b))] {
@@ -540,7 +540,7 @@ fn k1_2_force_sanity() {
 #[test]
 #[ignore] // explicit: cargo test --release -- --ignored --nocapture
 fn k1_3_water_persistence() {
-    let config = PhysicsConfig::default();
+    let config = ForceField::default();
     let mut world = pond::primordial_pond(42, config);
     let mut sim = Sim::new(config, observer(42, 10_000));
     let _ = sim.start(&world);
@@ -750,12 +750,12 @@ fn k1_3_water_persistence() {
 #[test]
 #[ignore] // explicit: cargo test --release -- --ignored --nocapture
 fn k1_4_reactive_balance() {
-    let config = PhysicsConfig::default();
+    let config = ForceField::default();
     let mut world = pond::primordial_pond(42, config);
     let mut sim = Sim::new(config, observer(42, 10_000));
     let _ = sim.start(&world);
 
-    let sym = |e: ElementId| khem_core::ELEMENTS[e.0 as usize].symbol;
+    let sym = |e: ElementId| khem_forcefield::ELEMENTS[e.0 as usize].symbol;
     let pair_key = |a: ElementId, b: ElementId, order: u8| {
         let (lo, hi) = if a.0 <= b.0 { (a, b) } else { (b, a) };
         format!(
@@ -771,7 +771,7 @@ fn k1_4_reactive_balance() {
     let vent_flux: f32 = world
         .energy_sources
         .iter()
-        .filter(|s| matches!(s.kind, khem_core::SourceKind::Hydrothermal))
+        .filter(|s| matches!(s.kind, khem_physics::SourceKind::Hydrothermal))
         .map(|s| {
             let field = &world.temp_field;
             let r2 = s.radius * s.radius;
@@ -786,7 +786,9 @@ fn k1_4_reactive_balance() {
                             + (cy - s.position.1).powi(2)
                             + (cz - s.position.2).powi(2);
                         if d2 <= r2 {
-                            sum += s.intensity * (1.0 / (1.0 + d2 / r2)) * config.vent_heat_rate;
+                            sum += s.intensity
+                                * (1.0 / (1.0 + d2 / r2))
+                                * config.fields.vent_heat_rate;
                         }
                     }
                 }
@@ -885,7 +887,7 @@ fn k1_4_reactive_balance() {
         let events = sim.tick(&mut world);
         let sum_after = field_sum(&world);
 
-        let relax = config.field_relax_rate * (setpoint_sum - sum_before);
+        let relax = config.thermostat.field_relax_rate * (setpoint_sum - sum_before);
         let mut absorb = 0.0f32;
         let mut release = 0.0f32;
         for event in &events {
@@ -904,7 +906,7 @@ fn k1_4_reactive_balance() {
                     let (dx, dy, dz) = world.delta(a.x, a.y, a.z, b.x, b.y, b.z);
                     let r = (dx * dx + dy * dy + dz * dz).sqrt();
                     let r_eq = world.element(a.element).radius + world.element(b.element).radius;
-                    let phantom = r > config.bond_break_factor * r_eq;
+                    let phantom = r > config.bonds.bond_break_factor * r_eq;
                     formed.insert(*bond_id, (t, r, phantom));
                     let key = pair_key(*elem_a, *elem_b, *order);
                     let c = forms.entry(key).or_default();
@@ -919,13 +921,13 @@ fn k1_4_reactive_balance() {
                         1
                     } else if ratio <= 2.0 {
                         2
-                    } else if ratio <= config.bond_break_factor {
+                    } else if ratio <= config.bonds.bond_break_factor {
                         3
                     } else {
                         4
                     };
                     c.buckets[bucket] += 1;
-                    let absorbed = energy * config.formation_fraction;
+                    let absorbed = energy * config.chemistry.formation_fraction;
                     c.absorbed += absorbed;
                     absorb += absorbed;
                 }
@@ -999,7 +1001,7 @@ fn k1_4_reactive_balance() {
         }
 
         if t.is_multiple_of(250) {
-            let sizes = Observer::molecule_sizes(&world);
+            let sizes = khem_analysis::molecule_sizes(&world);
             let mut nonzero: Vec<u32> = sizes.into_iter().filter(|s| *s > 0).collect();
             nonzero.sort_unstable();
             let mut buckets = [0usize; 4];
@@ -1453,8 +1455,8 @@ fn k1_4_reactive_balance() {
 #[test]
 #[ignore] // explicit: cargo test --release -- --ignored --nocapture
 fn k1_5_seam_symmetry() {
-    let config = PhysicsConfig::default();
-    let chem = khem_core::Chemistry::new(config);
+    let config = ForceField::default();
+    let chem = khem_chemistry::Chemistry::new(config);
 
     // One beaker run: returns the pooled classes plus the
     // per-axis seam census (a pair folding on two axes - a
@@ -1483,7 +1485,7 @@ fn k1_5_seam_symmetry() {
         world.setpoint_field.data.fill(55.0);
         let mix = [("H", 200u32), ("C", 160), ("N", 160), ("O", 240)];
         for (symbol, count) in mix {
-            let el = khem_core::elements::element_id(symbol).expect("element in table");
+            let el = khem_forcefield::element_id(symbol).expect("element in table");
             for _ in 0..count {
                 let x = world.rng.f01() as f32 * world.width;
                 let y = world.rng.f01() as f32 * world.height;
@@ -1494,7 +1496,7 @@ fn k1_5_seam_symmetry() {
         let mut sim = Sim::new(config, observer(seed, 100_000));
         let _ = sim.start(&world);
 
-        let radius = config.bond_search_radius;
+        let radius = config.chemistry.bond_search_radius;
         let radius2 = radius * radius;
         let mut elig_seam: u64 = 0;
         let mut elig_bulk: u64 = 0;
@@ -1577,11 +1579,11 @@ fn k1_5_seam_symmetry() {
                         continue;
                     }
                     let r_eq = world.element(a.element).radius + world.element(b.element).radius;
-                    let cap = config.bond_form_factor * r_eq;
+                    let cap = config.chemistry.bond_form_factor * r_eq;
                     let (rvx, rvy, rvz) = (b.vx - a.vx, b.vy - a.vy, b.vz - a.vz);
                     if d2 <= cap * cap
                         && rvx * rvx + rvy * rvy + rvz * rvz
-                            <= config.max_form_speed * config.max_form_speed
+                            <= config.chemistry.max_form_speed * config.chemistry.max_form_speed
                         && !world.is_bonded(a.id, b.id)
                     {
                         // The anchor (lower AtomId) is passed first:

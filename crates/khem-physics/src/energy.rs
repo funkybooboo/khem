@@ -22,53 +22,8 @@
 //!
 //! Spec: docs/build/specs/runtime-spec.md, section 8 (Energy System).
 
-use crate::config::PhysicsConfig;
-use crate::world::WorldState;
-
-/// The three source kinds the world vocabulary allows (language spec
-/// section 9).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SourceKind {
-    Hydrothermal,
-    SolarUv,
-    Radiation,
-}
-
-/// One energy source (runtime spec 8.1, 8.2).
-#[derive(Debug, Clone, Copy)]
-pub struct EnergySource {
-    pub kind: SourceKind,
-    /// Position, angstroms; meaningful for point sources.
-    pub position: (f32, f32, f32),
-    /// Normalized intensity, 0.0 - 1.0.
-    pub intensity: f32,
-    /// Radius, angstroms; point sources.
-    pub radius: f32,
-    /// Solar UV only; defaults to true (language spec V-WORLD-08).
-    pub surface_only: bool,
-}
-
-impl EnergySource {
-    pub fn hydrothermal(position: (f32, f32, f32), intensity: f32, radius: f32) -> Self {
-        Self {
-            kind: SourceKind::Hydrothermal,
-            position,
-            intensity,
-            radius,
-            surface_only: false,
-        }
-    }
-
-    pub fn solar_uv(intensity: f32, surface_only: bool) -> Self {
-        Self {
-            kind: SourceKind::SolarUv,
-            position: (0.0, 0.0, 0.0),
-            intensity,
-            radius: 0.0,
-            surface_only,
-        }
-    }
-}
+use khem_forcefield::ForceField;
+use khem_world::{EnergySource, SourceKind, WorldState};
 
 /// The energy system interface (runtime spec 10.4; tick order step
 /// 1). v0.1 compiles exactly one implementation.
@@ -78,11 +33,11 @@ pub trait EnergySystem {
 
 /// The v0.1 energy implementation (runtime spec 10.4: exactly one).
 pub struct Energy {
-    config: PhysicsConfig,
+    config: ForceField,
 }
 
 impl Energy {
-    pub fn new(config: PhysicsConfig) -> Self {
+    pub fn new(config: ForceField) -> Self {
         Self { config }
     }
 
@@ -114,7 +69,7 @@ impl Energy {
                     }
                     let falloff = 1.0 / (1.0 + d2 / r2);
                     field.data[col + row * cols + layer * cols * rows] +=
-                        source.intensity * falloff * self.config.vent_heat_rate;
+                        source.intensity * falloff * self.config.fields.vent_heat_rate;
                 }
             }
         }
@@ -131,7 +86,7 @@ impl Energy {
             let falloff = 1.0 / (1.0 + d2 / r2);
             // +z is toward the surface (the top cell layer), so
             // convection lifts.
-            atom.vz += self.config.convection_rate * falloff;
+            atom.vz += self.config.fields.convection_rate * falloff;
         }
     }
 
@@ -141,7 +96,7 @@ impl Energy {
     /// all other cells are zero. The field is per-tick state,
     /// rebuilt every update, so stale values cannot persist.
     fn apply_solar_uv(&self, world: &mut WorldState, source: EnergySource) {
-        let limit = self.config.surface_threshold * world.depth;
+        let limit = self.config.fields.surface_threshold * world.depth;
         let field = &mut world.uv_field;
         let (cols, rows, layers) = (
             field.cols as usize,
@@ -180,7 +135,7 @@ impl EnergySystem for Energy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::world::{BoundaryType, ElementId};
+    use khem_world::{BoundaryType, ElementId};
 
     fn world(seed: u64) -> WorldState {
         WorldState::new(
@@ -189,12 +144,12 @@ mod tests {
             100.0,
             BoundaryType::Wrap,
             seed,
-            PhysicsConfig::default(),
+            ForceField::default(),
         )
     }
 
     fn energy() -> Energy {
-        Energy::new(PhysicsConfig::default())
+        Energy::new(ForceField::default())
     }
 
     #[test]
