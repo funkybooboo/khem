@@ -17,6 +17,34 @@ density ~0.033 molecules/A^3 held uniform (no blobs), O-O
 first shell ~2.8 A, coordination ~4, measurable tetrahedral
 order, the gates still passing, tick cost within +10-20%.
 
+SITTING IN PROGRESS (2026-11-06, the evidence tool is
+khem-engine's water_likeness_probe.rs - THE SIX BARS, 12k-tick
+pond runs, tail 10k-12k):
+- The wall alone at margin 2.2 (the real-geometry wall) builds
+  the first shell at 2.90 A (g 2.77) with waters intact
+  (1012/1024), density 0.0302 molecules/A^3, measurable
+  tetrahedral order (q 0.370), coordination 5.04 - LJ-like
+  contact packing, the essence-fidelity prediction confirmed.
+- The hydrogen bond's mechanically-safe scale bracket is
+  [0.5, 1.0] (4.0 shatters every water - the channel's peak
+  force drags O-H bonds to the mechanical break; the
+  O-H spring's resistance k = 14.8/A is the ceiling).
+- The well's bracket must sit at the LIQUID's contact geometry:
+  [1.5, 2.6] puts the restoring zero at H...O 2.05 A, but the
+  adopted geometry is O...O 2.90 with the O-H bond at 1.19 -
+  collinear H...O 1.71, INSIDE the old midpoint, where the
+  inner slope repels the contact it should stabilize. The
+  re-bracketed well [1.3, 2.1] (midpoint 1.7 A) holds all
+  waters intact at scale 0.5 - but q does not move (0.370 at
+  every safe scale): the network is not building on this
+  horizon, or needs geometry levers beyond the scale.
+- The cost bar at margin 2.2: ~80-100 s/kilotick vs the old
+  wall's 19 s/kilotick (4-5x; the denser-wall pair count is
+  structural). Margin 2.0 halves it (~45 s/kilotick, 2.4x).
+Both the 6-bar table and the K1.4 re-derivation (see the gap
+register) ride the owner checkpoint before any substrate
+commit.
+
 The harness is the behavior-named gate files in
 crates/khem-engine/tests/ (excluded_volume.rs, liquid_structure.rs,
 cohesion_sweep.rs); the
