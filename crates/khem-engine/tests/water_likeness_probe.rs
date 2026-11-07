@@ -220,7 +220,6 @@ fn real_geometry_candidates() {
                     hbond_scale: scale,
                     hbond_contact: 1.3,
                     hbond_range: 2.1,
-                    ..ForceField::default().hbond
                 },
                 ..ForceField::default()
             },
